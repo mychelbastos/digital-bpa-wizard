@@ -2,25 +2,30 @@
 // Row tops/heights and column lefts were measured directly from the image
 // (horizontal grid lines and vertical tick marks).
 
-export const HEADER_HEIGHT_DIGIT = 1.79;
-export const UF_HEIGHT = 1.79;
+export const HEADER_HEIGHT_DIGIT = 2.57;
+export const UF_HEIGHT = 2.27;
 
 const CELL_W = 3.02;
 
 // ---------- Header ----------
+// Box rectangles measured from PNG vertical scan:
+//   CNES digit cells: y 13.51% → 16.08% (h=2.57%)
+//   UF/MES/ANO/FOLHA cells: y 17.87% → 20.14% (h=2.27%)
 export const CNES_BOXES = [6.77, 9.79, 12.82, 15.84, 18.86, 21.89, 24.91].map((left) => ({
   left,
   width: CELL_W,
 }));
-export const CNES_TOP = 16.08;
+export const CNES_TOP = 13.51;
 
-export const NAME_FIELD = { top: 16.08, left: 36.5, width: 57, height: HEADER_HEIGHT_DIGIT };
+export const NAME_FIELD = { top: 13.51, left: 36.5, width: 57, height: HEADER_HEIGHT_DIGIT };
 
-export const UF_TOP = 20.14;
+export const UF_TOP = 17.87;
 export const UF_BOXES = [6.77, 9.79].map((left) => ({ left, width: CELL_W }));
 export const MES_BOXES = [40.02, 43.05].map((left) => ({ left, width: CELL_W }));
 export const ANO_BOXES = [46.07, 49.09, 52.12, 55.14].map((left) => ({ left, width: CELL_W }));
 export const FOLHA_BOXES = [83.13, 86.15, 89.18].map((left) => ({ left, width: CELL_W }));
+
+
 
 
 // ---------- Grid: 20 rows ----------
