@@ -75,6 +75,6 @@ export function emptyRow(): RowData {
     procedimento: Array(10).fill(""),
     cbo: Array(6).fill(""),
     idade: Array(3).fill(""),
-    quantidade: Array(6).fill(""),
+    quantidade: Array(5).fill(""),
   };
 }
