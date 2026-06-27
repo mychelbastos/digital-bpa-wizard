@@ -49,8 +49,8 @@ export const IDADE_LEFTS = [65.60, 68.08, 70.38];
 export const IDADE_WIDTHS = [2.48, 2.30, 2.24];
 
 // QUANTIDADE — 5 cells in the main bracket + 1 isolated cell on the far right = 6 digits total.
-export const QTD_LEFTS = [78.72, 81.56, 84.34, 87.24, 89.96, 95.10];
-export const QTD_WIDTHS = [2.84, 2.78, 2.90, 2.72, 2.42, 1.64];
+export const QTD_LEFTS = [78.72, 81.56, 84.34, 87.24, 89.96];
+export const QTD_WIDTHS = [2.84, 2.78, 2.90, 2.72, 2.42];
 
 export const TOTAL_TOP = 84.48;
 export const TOTAL_HEIGHT = 2.31;
