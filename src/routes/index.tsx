@@ -1,29 +1,52 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import bpacBg from "@/assets/bpa-c.png.asset.json";
+import bpaiBg from "@/assets/bpa-i.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "Formulários BPA Digitais — Ministério da Saúde" },
+      { name: "description", content: "Preencha digitalmente os formulários oficiais BPA-C e BPA-I do SIA/SUS com layout pixel-perfect e exportação em PDF." },
     ],
   }),
-  component: Index,
+  component: Home,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Home() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="min-h-screen bg-muted/40">
+      <div className="mx-auto max-w-5xl px-6 py-16">
+        <header className="mb-12 text-center">
+          <p className="text-sm font-medium uppercase tracking-wider text-muted-foreground">SIA / SUS</p>
+          <h1 className="mt-2 text-4xl font-bold tracking-tight">Formulários BPA Digitais</h1>
+          <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
+            Digite diretamente sobre o formulário oficial do Ministério da Saúde, com auto-avanço entre caixinhas e exportação em PDF pronto para impressão.
+          </p>
+        </header>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          <Link
+            to="/bpa-c"
+            className="group rounded-xl border bg-card p-6 shadow-sm transition hover:shadow-md"
+          >
+            <div className="aspect-[553/786] overflow-hidden rounded-md border bg-white">
+              <img src={bpacBg.url} alt="BPA-C" className="h-full w-full object-cover object-top" />
+            </div>
+            <h2 className="mt-4 text-lg font-semibold">BPA-C</h2>
+            <p className="text-sm text-muted-foreground">Boletim de Produção Ambulatorial — Consolidado</p>
+            <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">Abrir formulário →</span>
+          </Link>
+
+          <div className="rounded-xl border bg-card p-6 opacity-70 shadow-sm">
+            <div className="aspect-[553/786] overflow-hidden rounded-md border bg-white">
+              <img src={bpaiBg.url} alt="BPA-I" className="h-full w-full object-cover object-top" />
+            </div>
+            <h2 className="mt-4 text-lg font-semibold">BPA-I</h2>
+            <p className="text-sm text-muted-foreground">Boletim Individualizado — em breve</p>
+            <span className="mt-3 inline-block text-sm text-muted-foreground">Coordenadas em extração</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
