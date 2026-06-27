@@ -159,9 +159,9 @@
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-weight: 600;
     color: #0a2540;
-    /* Nudge the glyph down so it sits inside the printed cell, not on its top edge. */
-    padding: 25% 0 0 0;
-    line-height: 1;
+    /* Keep the focus box locked to one printed cell; use em padding, not %, so it cannot stretch vertically. */
+    padding: 0.18em 0 0;
+    line-height: normal;
     box-sizing: border-box;
     /* Scale font with viewport so it fits the box at any zoom */
     font-size: clamp(8px, 1.1cqw, 18px);
