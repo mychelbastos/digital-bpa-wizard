@@ -89,12 +89,12 @@ function BpaC() {
           <img src={bpacBg.url} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
           {/* Header */}
-          <DigitBoxes id="cnes" top={12.12} height={HEADER_HEIGHT_DIGIT} boxes={CNES_BOXES} values={cnes} onChange={setCnes} />
+          <DigitBoxes id="cnes" top={CNES_TOP} height={HEADER_HEIGHT_DIGIT} boxes={CNES_BOXES} values={cnes} onChange={setCnes} />
           <TextField {...NAME_FIELD} value={nome} onChange={setNome} />
-          <DigitBoxes id="uf" top={16.71} height={UF_HEIGHT} boxes={UF_BOXES} values={uf} onChange={setUf} numeric={false} />
-          <DigitBoxes id="mes" top={16.71} height={UF_HEIGHT} boxes={MES_BOXES} values={mes} onChange={setMes} />
-          <DigitBoxes id="ano" top={16.71} height={UF_HEIGHT} boxes={ANO_BOXES} values={ano} onChange={setAno} />
-          <DigitBoxes id="folha" top={16.71} height={UF_HEIGHT} boxes={FOLHA_BOXES} values={folha} onChange={setFolha} />
+          <DigitBoxes id="uf" top={UF_TOP} height={UF_HEIGHT} boxes={UF_BOXES} values={uf} onChange={setUf} numeric={false} />
+          <DigitBoxes id="mes" top={UF_TOP} height={UF_HEIGHT} boxes={MES_BOXES} values={mes} onChange={setMes} />
+          <DigitBoxes id="ano" top={UF_TOP} height={UF_HEIGHT} boxes={ANO_BOXES} values={ano} onChange={setAno} />
+          <DigitBoxes id="folha" top={UF_TOP} height={UF_HEIGHT} boxes={FOLHA_BOXES} values={folha} onChange={setFolha} />
 
           {/* 20 rows */}
           {ROW_TOPS.map((top, i) => (
