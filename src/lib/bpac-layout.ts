@@ -8,6 +8,8 @@ export const UF_HEIGHT = 1.79;
 const CELL_W = 3.02;
 
 // ---------- Header ----------
+// Box edges measured from PNG: CNES top=16.08% bottom=17.87% (h=1.79%)
+//                              UF   top=20.14% bottom=21.93% (h=1.79%)
 export const CNES_BOXES = [6.77, 9.79, 12.82, 15.84, 18.86, 21.89, 24.91].map((left) => ({
   left,
   width: CELL_W,
@@ -21,6 +23,7 @@ export const UF_BOXES = [6.77, 9.79].map((left) => ({ left, width: CELL_W }));
 export const MES_BOXES = [40.02, 43.05].map((left) => ({ left, width: CELL_W }));
 export const ANO_BOXES = [46.07, 49.09, 52.12, 55.14].map((left) => ({ left, width: CELL_W }));
 export const FOLHA_BOXES = [83.13, 86.15, 89.18].map((left) => ({ left, width: CELL_W }));
+
 
 
 // ---------- Grid: 20 rows ----------
