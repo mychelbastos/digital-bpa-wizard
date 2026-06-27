@@ -1,28 +1,39 @@
 // Coordinates for BPA-C form. All units are % of the page.
+// Measured from the 1654x2339 background PNG.
 
-export const ROW_HEIGHT = 1.78;
-export const HEADER_HEIGHT_DIGIT = 1.83;
-export const UF_HEIGHT = 1.61;
+export const HEADER_HEIGHT_DIGIT = 1.68;
+export const UF_HEIGHT = 2.0;
+export const ROW_HEIGHT = 2.65;
 
-export const CNES_BOXES = [3.25, 6.5, 9.76, 13.01, 16.26, 19.51, 22.76].map((left) => ({
+const CELL_W = 3.02;
+
+export const CNES_BOXES = [6.77, 9.79, 12.82, 15.84, 18.86, 21.89, 24.91].map((left) => ({
   left,
-  width: 3.25,
+  width: CELL_W,
 }));
 
-export const NAME_FIELD = { top: 12.12, left: 26.5, width: 70, height: HEADER_HEIGHT_DIGIT };
+// CNES digit box: top ~14.40%, bottom ~16.08%
+export const CNES_TOP = 14.4;
 
-export const UF_BOXES = [3.25, 6.5].map((left) => ({ left, width: 3.25 }));
+// Name field: same vertical band as CNES (the NOME box is the same height).
+// Inset so text doesn't overlap the "NOME DO ESTABELECIMENTO DE SAÚDE" label.
+export const NAME_FIELD = { top: 14.4, left: 36.5, width: 57, height: HEADER_HEIGHT_DIGIT };
 
-export const MES_BOXES = [39.02, 42.28].map((left) => ({ left, width: 3.25 }));
-export const ANO_BOXES = [45.53, 48.78, 52.03, 55.28].map((left) => ({ left, width: 3.25 }));
-export const FOLHA_BOXES = [85.37, 88.62, 91.87].map((left) => ({ left, width: 3.25 }));
+// UF/MES/ANO/FOLHA share the same row: top ~18.13%, bottom ~20.14%
+export const UF_TOP = 18.15;
 
-// Row tops (1..20)
+export const UF_BOXES = [6.77, 9.79].map((left) => ({ left, width: CELL_W }));
+export const MES_BOXES = [40.02, 43.05].map((left) => ({ left, width: CELL_W }));
+export const ANO_BOXES = [46.07, 49.09, 52.12, 55.14].map((left) => ({ left, width: CELL_W }));
+export const FOLHA_BOXES = [83.13, 86.15, 89.18].map((left) => ({ left, width: CELL_W }));
+
+// Row tops measured from horizontal grid lines in the background.
 export const ROW_TOPS = [
-  26.2, 29.07, 31.93, 34.79, 37.65, 40.51, 43.37, 46.23, 49.1, 51.96,
-  54.82, 57.68, 60.54, 63.4, 66.27, 69.13, 71.99, 74.85, 77.71, 80.57,
+  29.16, 31.94, 34.59, 37.28, 39.93, 42.63, 45.28, 47.97, 50.62, 53.31,
+  56.18, 58.87, 61.52, 64.22, 66.89, 69.56, 72.34, 74.90, 77.56, 80.25,
 ];
 
+// Cell column lefts — kept from previous layout (these match the original PDF columns)
 export const PROC_LEFTS = [17.39, 19.89, 22.4, 24.9, 27.4, 29.91, 32.41, 34.92, 37.42, 39.92];
 export const PROC_WIDTH = 2.504;
 
@@ -35,7 +46,7 @@ export const IDADE_WIDTH = 2.439;
 export const QTD_LEFTS = [83.73, 86.71, 89.69, 92.67, 95.65, 98.63];
 export const QTD_WIDTH = 2.981;
 
-export const TOTAL_TOP = 83.5;
+export const TOTAL_TOP = 86.7;
 
 export const procBoxes = PROC_LEFTS.map((left) => ({ left, width: PROC_WIDTH }));
 export const cboBoxes = CBO_LEFTS.map((left) => ({ left, width: CBO_WIDTH }));
