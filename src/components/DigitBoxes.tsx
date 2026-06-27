@@ -61,7 +61,9 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
       {boxes.map((b, i) => (
         <input
           key={`${id}-${i}`}
-          ref={(el) => (refs.current[i] = el)}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
           value={values[i] || ""}
           onChange={(e) => handle(i, e.target.value)}
           onKeyDown={(e) => onKey(i, e)}
