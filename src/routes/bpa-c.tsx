@@ -6,8 +6,8 @@ import bpacBg from "@/assets/bpa-c.png.asset.json";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
-  HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_HEIGHT, ROW_TOPS,
-  procBoxes, cboBoxes, idadeBoxes, qtdBoxes, TOTAL_TOP,
+  HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS,
+  procBoxes, cboBoxes, idadeBoxes, qtdBoxes, TOTAL_TOP, TOTAL_HEIGHT,
   emptyRow, type RowData,
 } from "@/lib/bpac-layout";
 
@@ -97,21 +97,24 @@ function BpaC() {
           <DigitBoxes id="folha" top={UF_TOP} height={UF_HEIGHT} boxes={FOLHA_BOXES} values={folha} onChange={setFolha} />
 
           {/* 20 rows */}
-          {ROW_TOPS.map((top, i) => (
-            <div key={i}>
-              <DigitBoxes id={`p-${i}`} top={top} height={ROW_HEIGHT} boxes={procBoxes}
-                values={rows[i].procedimento} onChange={(v) => updateRow(i, "procedimento", v)} />
-              <DigitBoxes id={`c-${i}`} top={top} height={ROW_HEIGHT} boxes={cboBoxes}
-                values={rows[i].cbo} onChange={(v) => updateRow(i, "cbo", v)} />
-              <DigitBoxes id={`i-${i}`} top={top} height={ROW_HEIGHT} boxes={idadeBoxes}
-                values={rows[i].idade} onChange={(v) => updateRow(i, "idade", v)} />
-              <DigitBoxes id={`q-${i}`} top={top} height={ROW_HEIGHT} boxes={qtdBoxes}
-                values={rows[i].quantidade} onChange={(v) => updateRow(i, "quantidade", v)} />
-            </div>
-          ))}
+          {ROW_TOPS.map((top, i) => {
+            const h = ROW_HEIGHTS[i];
+            return (
+              <div key={i}>
+                <DigitBoxes id={`p-${i}`} top={top} height={h} boxes={procBoxes}
+                  values={rows[i].procedimento} onChange={(v) => updateRow(i, "procedimento", v)} />
+                <DigitBoxes id={`c-${i}`} top={top} height={h} boxes={cboBoxes}
+                  values={rows[i].cbo} onChange={(v) => updateRow(i, "cbo", v)} />
+                <DigitBoxes id={`i-${i}`} top={top} height={h} boxes={idadeBoxes}
+                  values={rows[i].idade} onChange={(v) => updateRow(i, "idade", v)} />
+                <DigitBoxes id={`q-${i}`} top={top} height={h} boxes={qtdBoxes}
+                  values={rows[i].quantidade} onChange={(v) => updateRow(i, "quantidade", v)} />
+              </div>
+            );
+          })}
 
           {/* Total */}
-          <DigitBoxes id="total" top={TOTAL_TOP} height={ROW_HEIGHT} boxes={qtdBoxes}
+          <DigitBoxes id="total" top={TOTAL_TOP} height={TOTAL_HEIGHT} boxes={qtdBoxes}
             values={total} onChange={setTotal} />
         </div>
 

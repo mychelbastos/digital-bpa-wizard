@@ -1,57 +1,67 @@
-// Coordinates for BPA-C form. All units are % of the page.
-// Measured from the 1654x2339 background PNG.
+// Coordinates for BPA-C form. All units are % of the 1654x2339 background PNG.
+// Row tops/heights and column lefts were measured directly from the image
+// (horizontal grid lines and vertical tick marks).
 
 export const HEADER_HEIGHT_DIGIT = 1.68;
 export const UF_HEIGHT = 2.0;
-export const ROW_HEIGHT = 2.65;
 
 const CELL_W = 3.02;
 
+// ---------- Header ----------
 export const CNES_BOXES = [6.77, 9.79, 12.82, 15.84, 18.86, 21.89, 24.91].map((left) => ({
   left,
   width: CELL_W,
 }));
-
-// CNES digit box: top ~14.40%, bottom ~16.08%
 export const CNES_TOP = 14.4;
 
-// Name field: same vertical band as CNES (the NOME box is the same height).
-// Inset so text doesn't overlap the "NOME DO ESTABELECIMENTO DE SAÚDE" label.
 export const NAME_FIELD = { top: 14.4, left: 36.5, width: 57, height: HEADER_HEIGHT_DIGIT };
 
-// UF/MES/ANO/FOLHA share the same row: top ~18.13%, bottom ~20.14%
 export const UF_TOP = 18.15;
-
 export const UF_BOXES = [6.77, 9.79].map((left) => ({ left, width: CELL_W }));
 export const MES_BOXES = [40.02, 43.05].map((left) => ({ left, width: CELL_W }));
 export const ANO_BOXES = [46.07, 49.09, 52.12, 55.14].map((left) => ({ left, width: CELL_W }));
 export const FOLHA_BOXES = [83.13, 86.15, 89.18].map((left) => ({ left, width: CELL_W }));
 
-// Row tops measured from horizontal grid lines in the background.
+// ---------- Grid: 20 rows ----------
+// Top of each row's input band (i.e. the top horizontal line of that row).
 export const ROW_TOPS = [
-  29.16, 31.94, 34.59, 37.28, 39.93, 42.63, 45.28, 47.97, 50.62, 53.31,
-  56.18, 58.87, 61.52, 64.22, 66.89, 69.56, 72.34, 74.90, 77.56, 80.25,
+  26.51, 29.16, 31.94, 34.59, 37.28, 39.93, 42.63, 45.28, 47.97, 50.62,
+  53.31, 56.18, 58.87, 61.52, 64.22, 66.65, 69.56, 72.34, 74.90, 77.56,
 ];
+// Height per row (bottom-of-row minus top), in %.
+export const ROW_HEIGHTS = [
+  2.65, 2.78, 2.65, 2.69, 2.65, 2.69, 2.65, 2.69, 2.65, 2.69,
+  2.86, 2.69, 2.65, 2.69, 2.44, 2.91, 2.78, 2.57, 2.65, 2.69,
+];
+export const ROW_HEIGHT = 2.65; // legacy fallback
 
-// Cell column lefts — kept from previous layout (these match the original PDF columns)
-export const PROC_LEFTS = [17.39, 19.89, 22.4, 24.9, 27.4, 29.91, 32.41, 34.92, 37.42, 39.92];
-export const PROC_WIDTH = 2.504;
+// ---------- Columns (measured from vertical tick marks) ----------
+// PROCEDIMENTO — 10 digits. Tick centers: 17.90, 19.89, 22.19, 24.55, 26.97, 29.32, 31.74, 34.10, 36.40, 38.63, 40.93
+export const PROC_LEFTS = [17.90, 19.89, 22.19, 24.55, 26.97, 29.32, 31.74, 34.10, 36.40, 38.63];
+export const PROC_WIDTHS = [1.99, 2.30, 2.36, 2.42, 2.35, 2.42, 2.36, 2.30, 2.23, 2.30];
 
-export const CBO_LEFTS = [47.29, 49.72, 52.16, 54.6, 57.04, 59.48, 61.92];
-export const CBO_WIDTH = 2.439;
+// CBO — 6 digits. Ticks: 45.41, 47.70, 49.94, 52.24, 54.47, 56.77, 59.01
+export const CBO_LEFTS = [45.41, 47.70, 49.94, 52.24, 54.47, 56.77];
+export const CBO_WIDTHS = [2.29, 2.24, 2.30, 2.23, 2.30, 2.24];
 
-export const IDADE_LEFTS = [69.23, 71.66, 74.1];
-export const IDADE_WIDTH = 2.439;
+// IDADE — 3 digits. Ticks: 65.60, 68.08, 70.38, 72.61
+export const IDADE_LEFTS = [65.60, 68.08, 70.38];
+export const IDADE_WIDTHS = [2.48, 2.30, 2.24];
 
-export const QTD_LEFTS = [83.73, 86.71, 89.69, 92.67, 95.65, 98.63];
-export const QTD_WIDTH = 2.981;
+// QUANTIDADE — 6 digits. Ticks: 78.72, 81.56, 84.34, 87.24, 89.96, 92.38, 95.10
+export const QTD_LEFTS = [78.72, 81.56, 84.34, 87.24, 89.96, 92.38];
+export const QTD_WIDTHS = [2.84, 2.78, 2.90, 2.72, 2.42, 2.72];
 
-export const TOTAL_TOP = 86.7;
+export const TOTAL_TOP = 84.48;
+export const TOTAL_HEIGHT = 2.31;
 
-export const procBoxes = PROC_LEFTS.map((left) => ({ left, width: PROC_WIDTH }));
-export const cboBoxes = CBO_LEFTS.map((left) => ({ left, width: CBO_WIDTH }));
-export const idadeBoxes = IDADE_LEFTS.map((left) => ({ left, width: IDADE_WIDTH }));
-export const qtdBoxes = QTD_LEFTS.map((left) => ({ left, width: QTD_WIDTH }));
+const zipBoxes = (lefts: number[], widths: number[]) =>
+  lefts.map((left, i) => ({ left, width: widths[i] }));
+
+export const procBoxes = zipBoxes(PROC_LEFTS, PROC_WIDTHS);
+export const cboBoxes = zipBoxes(CBO_LEFTS, CBO_WIDTHS);
+export const idadeBoxes = zipBoxes(IDADE_LEFTS, IDADE_WIDTHS);
+export const qtdBoxes = zipBoxes(QTD_LEFTS, QTD_WIDTHS);
 
 export interface RowData {
   procedimento: string[];
@@ -63,7 +73,7 @@ export interface RowData {
 export function emptyRow(): RowData {
   return {
     procedimento: Array(10).fill(""),
-    cbo: Array(7).fill(""),
+    cbo: Array(6).fill(""),
     idade: Array(3).fill(""),
     quantidade: Array(6).fill(""),
   };
