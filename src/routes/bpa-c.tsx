@@ -5,7 +5,7 @@ import html2canvas from "html2canvas";
 import bpacBg from "@/assets/bpa-c.png.asset.json";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import {
-  CNES_BOXES, NAME_FIELD, UF_BOXES, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
+  CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_HEIGHT, ROW_TOPS,
   procBoxes, cboBoxes, idadeBoxes, qtdBoxes, TOTAL_TOP,
   emptyRow, type RowData,
