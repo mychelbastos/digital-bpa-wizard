@@ -170,6 +170,11 @@
     border-radius: 2px;
   }
 
+  .form-digit--compact {
+    padding: 0;
+  }
+
+
   .form-digit:focus {
     background: oklch(0.95 0.05 220 / 0.5);
     border-color: oklch(0.55 0.18 250);
