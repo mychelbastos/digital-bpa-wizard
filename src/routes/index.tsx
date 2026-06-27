@@ -37,14 +37,17 @@ function Home() {
             <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">Abrir formulário →</span>
           </Link>
 
-          <div className="rounded-xl border bg-card p-6 opacity-70 shadow-sm">
+          <Link
+            to="/bpa-i"
+            className="group rounded-xl border bg-card p-6 shadow-sm transition hover:shadow-md"
+          >
             <div className="aspect-[553/786] overflow-hidden rounded-md border bg-white">
               <img src={bpaiBg.url} alt="BPA-I" className="h-full w-full object-cover object-top" />
             </div>
             <h2 className="mt-4 text-lg font-semibold">BPA-I</h2>
-            <p className="text-sm text-muted-foreground">Boletim Individualizado — em breve</p>
-            <span className="mt-3 inline-block text-sm text-muted-foreground">Coordenadas em extração</span>
-          </div>
+            <p className="text-sm text-muted-foreground">Boletim de Produção Ambulatorial — Individualizado</p>
+            <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">Abrir formulário →</span>
+          </Link>
         </div>
       </div>
     </div>

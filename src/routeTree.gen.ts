@@ -9,9 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as BpaIRouteImport } from './routes/bpa-i'
 import { Route as BpaCRouteImport } from './routes/bpa-c'
 import { Route as IndexRouteImport } from './routes/index'
 
+const BpaIRoute = BpaIRouteImport.update({
+  id: '/bpa-i',
+  path: '/bpa-i',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BpaCRoute = BpaCRouteImport.update({
   id: '/bpa-c',
   path: '/bpa-c',
@@ -26,31 +32,42 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
+  '/bpa-i': typeof BpaIRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
+  '/bpa-i': typeof BpaIRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
+  '/bpa-i': typeof BpaIRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/bpa-c'
+  fullPaths: '/' | '/bpa-c' | '/bpa-i'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bpa-c'
-  id: '__root__' | '/' | '/bpa-c'
+  to: '/' | '/bpa-c' | '/bpa-i'
+  id: '__root__' | '/' | '/bpa-c' | '/bpa-i'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BpaCRoute: typeof BpaCRoute
+  BpaIRoute: typeof BpaIRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/bpa-i': {
+      id: '/bpa-i'
+      path: '/bpa-i'
+      fullPath: '/bpa-i'
+      preLoaderRoute: typeof BpaIRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bpa-c': {
       id: '/bpa-c'
       path: '/bpa-c'
@@ -71,6 +88,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BpaCRoute: BpaCRoute,
+  BpaIRoute: BpaIRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
