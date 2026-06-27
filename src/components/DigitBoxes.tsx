@@ -73,7 +73,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           inputMode={numeric ? "numeric" : "text"}
           pattern={numeric ? "[0-9]" : undefined}
           maxLength={1}
-          className="form-digit"
+          className={`form-digit${compact ? " form-digit--compact" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
