@@ -13,10 +13,12 @@ interface Props {
   values: string[];
   onChange: (vals: string[]) => void;
   numeric?: boolean;
+  compact?: boolean;
   registerRefs?: (refs: HTMLInputElement[]) => void;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, registerRefs }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs }: Props) {
+
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
