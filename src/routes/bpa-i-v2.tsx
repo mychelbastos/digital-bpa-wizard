@@ -14,6 +14,7 @@ import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/
 import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAutocomplete";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
+import { cnsInvalido, dataFuturaOuInvalida } from "@/lib/bpa-i-v2/validacao";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -400,7 +401,7 @@ function BpaI() {
           <DigitBoxes id="cnes" top={L.CNES_TOP} height={L.HEADER_DIGIT_H} boxes={L.CNES_BOXES} values={state.cnes} onChange={(v) => set("cnes", v)} clearable compact />
 
           {/* Profissional */}
-          <DigitBoxes id="pcns" top={L.PROF_CNS_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CNS_BOXES} values={state.profCns} onChange={(v) => set("profCns", v)} clearable compact />
+          <DigitBoxes id="pcns" top={L.PROF_CNS_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CNS_BOXES} values={state.profCns} onChange={(v) => set("profCns", v)} invalid={hydrated && cnsInvalido(state.profCns.join(""))} clearable compact />
           <ProfissionalAutocomplete
             cnes={cnesEstab}
             top={L.PROF_NOME.top} left={L.PROF_NOME.left} width={L.PROF_NOME.width} height={L.PROF_NOME.height}
@@ -456,11 +457,13 @@ function BpaI() {
             const s = state.seqs[si];
             const R = L.REL;
             const u = <K extends keyof SeqData>(f: K, v: SeqData[K]) => updateSeq(si, f, v);
+            const dnInvalida = hydrated && dataFuturaOuInvalida(s.dataNasc);
+            const daInvalida = hydrated && dataFuturaOuInvalida(s.dataAtend);
             return (
               <div key={si}>
                 {/* Paciente row 1: CNS + Nome */}
                 <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-                  values={s.cnsPac} onChange={(v) => u("cnsPac", v)} clearable compact />
+                  values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={hydrated && cnsInvalido(s.cnsPac.join(""))} clearable compact />
                 <TextField top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
                   value={s.nomePac} onChange={(v) => u("nomePac", v)} />
 
@@ -470,11 +473,11 @@ function BpaI() {
                 <TextField top={seqTop + R.row2} left={R.sexoF.left} width={R.sexoF.width} height={L.DIGIT_H} align="center"
                   value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} />
                 <DigitBoxes id={`s${si}-dnd`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascDia}
-                  values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} compact />
+                  values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} invalid={dnInvalida} compact />
                 <DigitBoxes id={`s${si}-dnm`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascMes}
-                  values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} compact />
+                  values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} invalid={dnInvalida} compact />
                 <DigitBoxes id={`s${si}-dna`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascAno}
-                  values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} compact />
+                  values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} invalid={dnInvalida} compact />
                 <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
                   getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
                   onClear={() => u("dataNasc", Array(8).fill(""))} />
@@ -522,11 +525,11 @@ function BpaI() {
 
                 {/* Procedimento row 1: Data atend / Cód proc / Qtde / CNPJ */}
                 <DigitBoxes id={`s${si}-dad`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendDia}
-                  values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} compact />
+                  values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} compact />
                 <DigitBoxes id={`s${si}-dam`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendMes}
-                  values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} compact />
+                  values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} compact />
                 <DigitBoxes id={`s${si}-daa`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendAno}
-                  values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} compact />
+                  values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} compact />
                 <FieldClear top={seqTop + R.procRow1} left={endOf(R.dataAtendAno) + 0.5} height={L.DIGIT_H}
                   getInputs={() => inputsOf(`s${si}-dad`, `s${si}-dam`, `s${si}-daa`)}
                   onClear={() => u("dataAtend", Array(8).fill(""))} />

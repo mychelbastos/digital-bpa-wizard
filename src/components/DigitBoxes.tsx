@@ -29,9 +29,11 @@ interface Props {
   // Número justificado à direita: os dígitos acumulam da direita p/ a esquerda (ex.:
   // Quantidade). Digitar/apagar em qualquer caixinha trata o grupo como um número único.
   rightAlign?: boolean;
+  // Marca o grupo como inválido (borda sutil). Só visual/não-bloqueante.
+  invalid?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -130,7 +132,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           inputMode={numeric ? "numeric" : "text"}
           pattern={numeric ? "[0-9]" : undefined}
           maxLength={1}
-          className={`form-digit${compact ? " form-digit--compact" : ""}`}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${invalid ? " ring-2 ring-rose-400/80" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
