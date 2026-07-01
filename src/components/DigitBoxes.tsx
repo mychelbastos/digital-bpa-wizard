@@ -120,20 +120,20 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           data-html2canvas-ignore="true"
           onMouseDown={(e) => e.preventDefault()} // não rouba o foco antes do clique
           onClick={clearAll}
-          className="flex items-center justify-center text-muted-foreground/50 transition-colors hover:text-red-600"
+          className="flex items-center justify-center rounded-full bg-rose-500 text-white shadow-md ring-2 ring-white transition-transform duration-150 hover:bg-rose-600 hover:scale-110 active:scale-90"
           style={{
             position: "absolute",
             top: `${top}%`,
-            left: `${rightEdge + 0.4}%`,
+            left: `${rightEdge + 0.5}%`,
             height: `${height}%`,
+            aspectRatio: "1", // círculo (largura = altura da linha)
             zIndex: 50, // acima das caixinhas vizinhas (transitório: só enquanto focado)
-            background: "transparent",
             border: "none",
             padding: 0,
             cursor: "pointer",
           }}
         >
-          <Trash2 size={12} />
+          <Trash2 style={{ width: "60%", height: "60%" }} />
         </button>
       )}
     </>
