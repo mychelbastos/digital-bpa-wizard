@@ -14,12 +14,13 @@ interface Props {
   values: string[];
   onChange: (vals: string[]) => void;
   tabela: TabelaHistorico;
+  clearable?: boolean;
 }
 
 // Campo de dígitos (reusa o DigitBoxes do form) com autocomplete por histórico de uso:
 // ao digitar 2+ dígitos, mostra um dropdown com os códigos mais usados que começam com
 // o que foi digitado; selecionar preenche todas as caixinhas.
-export function HistoricoField({ id, top, height, boxes, values, onChange, tabela }: Props) {
+export function HistoricoField({ id, top, height, boxes, values, onChange, tabela, clearable }: Props) {
   const code = values.join("");
   const [sugs, setSugs] = useState<SugestaoHistorico[]>([]);
   const [focused, setFocused] = useState(false);
@@ -69,6 +70,7 @@ export function HistoricoField({ id, top, height, boxes, values, onChange, tabel
         registerRefs={(els) => {
           refsRef.current = els;
         }}
+        clearable={clearable}
         compact
       />
       {open && (

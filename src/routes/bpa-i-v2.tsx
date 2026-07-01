@@ -119,6 +119,9 @@ function BpaI() {
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
   const sheetRef = useRef<HTMLDivElement>(null);
   const cells = (s: string, n: number) => Array.from({ length: n }, (_, i) => s[i] ?? "");
+  // Guarda o CNES que gerou o Nome do Estabelecimento auto-preenchido. Serve p/ a
+  // validação cruzada CNES <-> Nome: se o CNES mudar, o nome auto vira inconsistente.
+  const estabAutoCnesRef = useRef("");
 
   useEffect(() => { setState(loadState()); setHydrated(true); }, []);
   useEffect(() => {
@@ -127,14 +130,24 @@ function BpaI() {
     setPdfPendente(true); // mudou algo -> PDF desta versão ainda não foi gerado
   }, [state, hydrated]);
 
-  // CNES (7 dígitos) completo -> preenche o Nome do Estabelecimento pela tabela.
-  // Se não achar, não mexe no nome (continua editável). O nome segue editável sempre.
+  // Validação cruzada CNES -> Nome do Estabelecimento (mantém os dois sincronizados):
+  //  - Se o CNES mudou e o nome atual havia sido auto-preenchido por OUTRO CNES, o nome
+  //    ficou inconsistente -> limpa na hora (silenciosamente).
+  //  - Com 7 dígitos, busca na tabela: achou -> preenche (e registra o CNES-fonte);
+  //    não achou -> deixa em branco. Nome digitado à mão (sem CNES-fonte) nunca é mexido aqui.
   const cnesEstab = state.cnes.join("");
   useEffect(() => {
-    if (!hydrated || cnesEstab.length !== 7) return;
+    if (!hydrated) return;
+    if (estabAutoCnesRef.current && estabAutoCnesRef.current !== cnesEstab) {
+      estabAutoCnesRef.current = "";
+      setState((p) => ({ ...p, nomeEstab: "" }));
+    }
+    if (cnesEstab.length !== 7) return;
     let cancelled = false;
     buscarEstabelecimento(cnesEstab).then((nome) => {
-      if (!cancelled && nome) setState((p) => ({ ...p, nomeEstab: nome }));
+      if (cancelled || !nome) return;
+      estabAutoCnesRef.current = cnesEstab;
+      setState((p) => ({ ...p, nomeEstab: nome }));
     });
     // Popula (uma vez) o cache de profissionais deste estabelecimento p/ o autocomplete.
     sincronizarProfissionais(cnesEstab);
@@ -349,13 +362,25 @@ function BpaI() {
           <EstabelecimentoAutocomplete
             {...L.NOME_ESTAB}
             nome={state.nomeEstab}
-            onChangeNome={(v) => set("nomeEstab", v)}
-            onPick={(e) => setState((prev) => ({ ...prev, nomeEstab: e.nome, cnes: cells(e.cnes, 7) }))}
+            onChangeNome={(v) =>
+              // Edição manual do Nome: se havia um CNES preenchido, os dois passam a
+              // divergir -> limpa o CNES (silenciosamente). Nome digitado deixa de ser "auto".
+              setState((prev) => {
+                const tinhaCnes = prev.cnes.some(Boolean);
+                if (tinhaCnes) estabAutoCnesRef.current = "";
+                return { ...prev, nomeEstab: v, cnes: tinhaCnes ? Array(7).fill("") : prev.cnes };
+              })
+            }
+            onPick={(e) => {
+              // Escolha na lista (nome -> CNES): preenche ambos de forma consistente.
+              estabAutoCnesRef.current = e.cnes;
+              setState((prev) => ({ ...prev, nomeEstab: e.nome, cnes: cells(e.cnes, 7) }));
+            }}
           />
-          <DigitBoxes id="cnes" top={L.CNES_TOP} height={L.HEADER_DIGIT_H} boxes={L.CNES_BOXES} values={state.cnes} onChange={(v) => set("cnes", v)} compact />
+          <DigitBoxes id="cnes" top={L.CNES_TOP} height={L.HEADER_DIGIT_H} boxes={L.CNES_BOXES} values={state.cnes} onChange={(v) => set("cnes", v)} clearable compact />
 
           {/* Profissional */}
-          <DigitBoxes id="pcns" top={L.PROF_CNS_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CNS_BOXES} values={state.profCns} onChange={(v) => set("profCns", v)} compact />
+          <DigitBoxes id="pcns" top={L.PROF_CNS_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CNS_BOXES} values={state.profCns} onChange={(v) => set("profCns", v)} clearable compact />
           <ProfissionalAutocomplete
             cnes={cnesEstab}
             top={L.PROF_NOME.top} left={L.PROF_NOME.left} width={L.PROF_NOME.width} height={L.PROF_NOME.height}
@@ -375,7 +400,7 @@ function BpaI() {
               });
             }}
           />
-          <HistoricoField id="pcbo" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CBO_BOXES} values={state.profCbo} onChange={(v) => set("profCbo", v)} tabela="cbo" />
+          <HistoricoField id="pcbo" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CBO_BOXES} values={state.profCbo} onChange={(v) => set("profCbo", v)} tabela="cbo" clearable />
           {cboOpcoes.length > 1 && (
             <div
               className="absolute z-[70]"
@@ -412,7 +437,7 @@ function BpaI() {
               <div key={si}>
                 {/* Paciente row 1: CNS + Nome */}
                 <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-                  values={s.cnsPac} onChange={(v) => u("cnsPac", v)} compact />
+                  values={s.cnsPac} onChange={(v) => u("cnsPac", v)} clearable compact />
                 <TextField top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
                   value={s.nomePac} onChange={(v) => u("nomePac", v)} />
 
@@ -440,9 +465,9 @@ function BpaI() {
                   options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
                   disabled={s.racaCor !== RACA_INDIGENA} />
                 <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
-                  values={s.cep} onChange={(v) => u("cep", v)} compact />
+                  values={s.cep} onChange={(v) => u("cep", v)} clearable compact />
                 <DigitBoxes id={`s${si}-ibge`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.ibge}
-                  values={s.ibge} onChange={(v) => u("ibge", v)} compact />
+                  values={s.ibge} onChange={(v) => u("ibge", v)} clearable compact />
 
                 {/* Row 3: Cod Logradouro / Endereço / Número / Complemento */}
                 <ComboField top={seqTop + R.row3} left={R.codLog[0].left}
@@ -462,7 +487,7 @@ function BpaI() {
                 <DigitBoxes id={`s${si}-ddd`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.ddd}
                   values={s.ddd} onChange={(v) => u("ddd", v)} compact />
                 <DigitBoxes id={`s${si}-tel`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.telefone}
-                  values={s.telefone} onChange={(v) => u("telefone", v)} compact />
+                  values={s.telefone} onChange={(v) => u("telefone", v)} clearable compact />
                 <TextField top={seqTop + R.row4} left={R.email.left} width={R.email.width} height={L.DIGIT_H}
                   value={s.email} onChange={(v) => u("email", v)} />
 
@@ -474,11 +499,11 @@ function BpaI() {
                 <DigitBoxes id={`s${si}-daa`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendAno}
                   values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} compact />
                 <HistoricoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
-                  values={s.codProc} onChange={(v) => u("codProc", v)} tabela="procedimento" />
+                  values={s.codProc} onChange={(v) => u("codProc", v)} tabela="procedimento" clearable />
                 <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
                   values={s.qtde} onChange={(v) => u("qtde", v)} compact />
                 <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
-                  values={s.cnpj} onChange={(v) => u("cnpj", v)} compact />
+                  values={s.cnpj} onChange={(v) => u("cnpj", v)} clearable compact />
 
                 {/* Procedimento row 2: Serviço / Class / CID / Caráter / Autorização */}
                 <DigitBoxes id={`s${si}-srv`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.servico}
@@ -492,7 +517,7 @@ function BpaI() {
                   height={L.DIGIT_H} options={CARATERES} display="code"
                   value={s.carater.join("")} onChange={(v) => u("carater", v.split(""))} />
                 <DigitBoxes id={`s${si}-aut`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.autorizacao}
-                  values={s.autorizacao} onChange={(v) => u("autorizacao", v)} compact />
+                  values={s.autorizacao} onChange={(v) => u("autorizacao", v)} clearable compact />
               </div>
             );
           })}

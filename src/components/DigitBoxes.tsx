@@ -1,4 +1,9 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState, useContext, createContext } from "react";
+import { Trash2 } from "lucide-react";
+
+// Habilita a lixeira de "limpar campo" em todos os DigitBoxes descendentes (usado só nas
+// versões v2). Fora de um Provider fica `false` -> os formulários originais não mudam.
+export const DigitBoxesClearableContext = createContext(false);
 
 interface Box {
   left: number; // %
@@ -15,15 +20,38 @@ interface Props {
   numeric?: boolean;
   compact?: boolean;
   registerRefs?: (refs: HTMLInputElement[]) => void;
+  // Mostra um ícone de lixeira (limpar tudo) à direita do grupo quando ele está focado.
+  // Se omitido, herda do DigitBoxesClearableContext. Só afeta a UI (ignorado no PDF).
+  clearable?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const ctxClearable = useContext(DigitBoxesClearableContext);
+  const showClear = clearable ?? ctxClearable;
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     if (registerRefs) registerRefs(refs.current.filter(Boolean) as HTMLInputElement[]);
   });
+
+  // A lixeira só aparece com uma caixinha DESTE grupo focada (evita poluição visual).
+  useEffect(() => {
+    if (!showClear) return;
+    const onFocusIn = (e: FocusEvent) => {
+      setFocused(refs.current.includes(e.target as HTMLInputElement));
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, [showClear]);
+
+  const clearAll = () => {
+    onChange(boxes.map(() => ""));
+    refs.current[0]?.focus();
+  };
+
+  const rightEdge = boxes.reduce((m, b) => Math.max(m, b.left + b.width), 0);
 
   const handle = (i: number, v: string) => {
     let val = v.slice(-1);
@@ -83,6 +111,31 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           }}
         />
       ))}
+      {showClear && focused && (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="Limpar campo"
+          title="Limpar campo"
+          data-html2canvas-ignore="true"
+          onMouseDown={(e) => e.preventDefault()} // não rouba o foco antes do clique
+          onClick={clearAll}
+          className="flex items-center justify-center text-muted-foreground/50 transition-colors hover:text-red-600"
+          style={{
+            position: "absolute",
+            top: `${top}%`,
+            left: `${rightEdge + 0.4}%`,
+            height: `${height}%`,
+            zIndex: 50, // acima das caixinhas vizinhas (transitório: só enquanto focado)
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+          }}
+        >
+          <Trash2 size={12} />
+        </button>
+      )}
     </>
   );
 }
