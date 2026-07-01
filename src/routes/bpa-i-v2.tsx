@@ -646,7 +646,7 @@ function BpaI() {
                 <HistoricoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
                   values={s.codProc} onChange={(v) => u("codProc", v)} tabela="procedimento" clearable />
                 <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
-                  values={s.qtde} onChange={(v) => u("qtde", v)} rightAlign clearable compact />
+                  values={s.qtde} onChange={(v) => u("qtde", v)} clearable compact />
                 <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
                   values={s.cnpj} onChange={(v) => u("cnpj", v)} clearable compact />
 
