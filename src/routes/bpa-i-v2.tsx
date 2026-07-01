@@ -15,6 +15,10 @@ import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAuto
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
 import { cnsInvalido, dataFuturaOuInvalida } from "@/lib/bpa-i-v2/validacao";
+import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
+import { loadConfig, configCompleta } from "@/lib/bpa-i-v2/config";
+import { gerarArquivoBpa, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
+import { baixarTxt } from "@/lib/export-txt";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -126,6 +130,9 @@ function BpaI() {
   // Snapshot do que havia antes de zerar, p/ desfazer (restaurar profissional ou tudo).
   const [snapshot, setSnapshot] = useState<State | null>(null);
   const [undoOpen, setUndoOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  // Guarda a intenção de gerar o .txt logo após salvar a config (quando estava incompleta).
+  const [gerarAposConfig, setGerarAposConfig] = useState(false);
   // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
   const [pdfPendente, setPdfPendente] = useState(false);
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
@@ -249,6 +256,29 @@ function BpaI() {
     } finally { setPrinting(false); }
   };
 
+  // Gera e baixa o arquivo magnético BPA (.txt). Exige config do estabelecimento
+  // completa (senão abre o painel) e ao menos uma sequência com procedimento.
+  const exportTxt = () => {
+    if (!state.seqs.some(seqPreenchida)) {
+      alert("Preencha ao menos um procedimento antes de gerar o arquivo magnético.");
+      return;
+    }
+    const cfg = loadConfig();
+    if (!configCompleta(cfg)) {
+      setGerarAposConfig(true);
+      setConfigOpen(true);
+      return;
+    }
+    try {
+      const arq = gerarArquivoBpa(state, cfg);
+      baixarTxt(arq.nome, arq.conteudo);
+      registrarUsoDaFicha();
+    } catch (err) {
+      console.error("Falha ao gerar arquivo magnético", err);
+      alert("Falha ao gerar o arquivo magnético. Veja o console.");
+    }
+  };
+
   // Ao exportar, registra no histórico o CBO do profissional e os procedimentos
   // preenchidos em cada sequência (alimenta o autocomplete).
   const registrarUsoDaFicha = () => {
@@ -368,12 +398,24 @@ function BpaI() {
             <button onClick={clearAll} className="rounded-md border border-destructive/30 bg-background px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10">
               Zerar tudo
             </button>
+            <button onClick={() => { setGerarAposConfig(false); setConfigOpen(true); }} title="Configuração do estabelecimento (arquivo magnético)" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+              ⚙ Config
+            </button>
+            <button onClick={exportTxt} title="Gerar arquivo magnético BPA (.txt) p/ importar no SIA/SUS" className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100">
+              Gerar .txt
+            </button>
             <button onClick={exportPdf} disabled={printing} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
               {printing ? "Gerando..." : "Gerar PDF"}
             </button>
           </div>
         </div>
       </header>
+
+      <ConfigModal
+        open={configOpen}
+        onClose={() => { setConfigOpen(false); setGerarAposConfig(false); }}
+        onSaved={() => { if (gerarAposConfig) { setGerarAposConfig(false); exportTxt(); } }}
+      />
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
         <div ref={sheetRef} className={`form-sheet ${printing ? "form-sheet--print" : ""}`} style={{ aspectRatio: "1653 / 2339" }}>
