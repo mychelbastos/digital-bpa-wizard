@@ -63,6 +63,8 @@
 
 :root {
   --radius: 0.625rem;
+  /* Cor da "cortina" do BoxReveal na tela de login animada. */
+  --skeleton: var(--primary);
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
@@ -206,5 +208,28 @@
     box-shadow: none !important;
     background: transparent !important;
   }
+}
+
+/* ===== Tela de login animada (componente 21st.dev) ===== */
+@keyframes orbit {
+  0% { transform: rotate(0deg) translateY(calc(var(--radius) * 1px)) rotate(0deg); }
+  100% { transform: rotate(360deg) translateY(calc(var(--radius) * 1px)) rotate(-360deg); }
+}
+@keyframes ripple {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(0.9); }
+}
+/* Longhands (não usar shorthand) p/ não sobrescrever o animation-delay aplicado inline/por utilitário. */
+.animate-orbit {
+  animation-name: orbit;
+  animation-duration: calc(var(--duration, 20) * 1s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.animate-ripple {
+  animation-name: ripple;
+  animation-duration: 2s;
+  animation-timing-function: ease;
+  animation-iteration-count: infinite;
 }
 

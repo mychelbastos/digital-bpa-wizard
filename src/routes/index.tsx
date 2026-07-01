@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import bpacBg from "@/assets/bpa-c.png";
 import bpaiBg from "@/assets/bpa-i.png";
+import { useAuthUser, signOut } from "@/lib/bpa-i-v2/auth";
+import { LogOut, User } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -13,9 +15,23 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const user = useAuthUser();
   return (
     <div className="min-h-screen bg-muted/40">
-      <div className="mx-auto max-w-5xl px-6 py-16">
+      <div className="mx-auto flex max-w-5xl items-center justify-end gap-2 px-6 pt-4 text-xs">
+        {user && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-800 ring-1 ring-emerald-200">
+            <User className="size-3.5" /> {user.nome || user.email}
+          </span>
+        )}
+        <button
+          onClick={() => signOut()}
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <LogOut className="size-3.5" /> Sair
+        </button>
+      </div>
+      <div className="mx-auto max-w-5xl px-6 pb-16 pt-6">
         <header className="mb-12 text-center">
           <p className="text-sm font-medium uppercase tracking-wider text-muted-foreground">SIA / SUS</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight">Formulários BPA Digitais</h1>

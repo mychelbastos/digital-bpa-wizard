@@ -11,6 +11,8 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { useAuthState } from "@/lib/bpa-i-v2/auth";
+import { LoginScreen } from "@/components/LoginScreen";
 
 function NotFoundComponent() {
   return (
@@ -113,13 +115,30 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// Guard de autenticação: enquanto a sessão carrega mostra spinner; sem usuário
+// mostra a tela de login; logado, libera o app inteiro (todos os formulários).
+function AuthGate({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuthState();
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
+      </div>
+    );
+  }
+  if (!user) return <LoginScreen />;
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AuthGate>
+        <Outlet />
+      </AuthGate>
     </QueryClientProvider>
   );
 }
