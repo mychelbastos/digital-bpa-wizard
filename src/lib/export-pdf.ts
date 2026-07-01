@@ -11,9 +11,8 @@ import html2canvas from "html2canvas-pro";
 // untouched) we REPLACE each <input> with a plain <div> carrying the same value and
 // position: a block element's single line of text is centered reliably by
 // `line-height = box height` in both the browser and the canvas renderer.
-// Captura um sheet em canvas (com o mesmo tratamento de inputs->div do onclone).
-async function capturarSheet(sheet: HTMLElement): Promise<HTMLCanvasElement> {
-  return html2canvas(sheet, {
+export async function exportSheetPdf(sheet: HTMLElement, filename: string) {
+  const canvas = await html2canvas(sheet, {
     scale: 2,
     backgroundColor: "#ffffff",
     useCORS: true,
@@ -55,25 +54,8 @@ async function capturarSheet(sheet: HTMLElement): Promise<HTMLCanvasElement> {
       clonedSheet.querySelectorAll('[data-html2canvas-ignore="true"]').forEach((el) => el.remove());
     },
   });
-}
-
-// Exporta um ou mais sheets como um PDF A4 (uma página por sheet/folha).
-export async function exportSheetsPdf(sheets: HTMLElement[], filename: string) {
-  const alvos = sheets.filter(Boolean);
-  if (!alvos.length) return;
+  const img = canvas.toDataURL("image/jpeg", 0.95);
   const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-  const w = pdf.internal.pageSize.getWidth();
-  const h = pdf.internal.pageSize.getHeight();
-  for (let i = 0; i < alvos.length; i++) {
-    const canvas = await capturarSheet(alvos[i]);
-    const img = canvas.toDataURL("image/jpeg", 0.95);
-    if (i > 0) pdf.addPage();
-    pdf.addImage(img, "JPEG", 0, 0, w, h);
-  }
+  pdf.addImage(img, "JPEG", 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
   pdf.save(filename);
-}
-
-// Compat: um único sheet.
-export async function exportSheetPdf(sheet: HTMLElement, filename: string) {
-  return exportSheetsPdf([sheet], filename);
 }

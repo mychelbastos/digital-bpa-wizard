@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { exportSheetsPdf } from "@/lib/export-pdf";
+import { exportSheetPdf } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import { ComboField } from "@/components/bpa-i-v2/ComboField";
@@ -142,8 +142,7 @@ function BpaI() {
   // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
   const [pdfPendente, setPdfPendente] = useState(false);
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
-  // Refs de todas as folhas (páginas de 3 pacientes) p/ exportar o PDF multipágina.
-  const sheetsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const cells = (s: string, n: number) => Array.from({ length: n }, (_, i) => s[i] ?? "");
   // Guarda o CNES que gerou o Nome do Estabelecimento auto-preenchido. Serve p/ a
   // validação cruzada CNES <-> Nome: se o CNES mudar, o nome auto vira inconsistente.
@@ -252,7 +251,7 @@ function BpaI() {
     setSnapshot(state); // guarda p/ desfazer
     setState((p) => ({
       ...p,
-      seqs: p.seqs.length ? p.seqs.map(() => emptySeq()) : [emptySeq()],
+      seqs: [emptySeq(), emptySeq(), emptySeq()],
       ...(manterProf ? {} : { profNome: "", profCns: Array(15).fill(""), profCbo: Array(6).fill("") }),
     }));
     if (!manterProf) setCboOpcoes([]);
@@ -284,13 +283,12 @@ function BpaI() {
   };
 
   const exportPdf = async () => {
-    const folhas = sheetsRef.current.filter(Boolean);
-    if (!folhas.length) return;
+    if (!sheetRef.current) return;
     setPrinting(true);
     await new Promise((r) => setTimeout(r, 80));
     try {
       await document.fonts?.ready; // garante a fonte cursiva carregada antes da captura
-      await exportSheetsPdf(folhas, "BPA-I.pdf");
+      await exportSheetPdf(sheetRef.current, "BPA-I.pdf");
       setPdfPendente(false); // PDF gerado p/ o estado atual
       registrarUsoDaFicha();
     } catch (err) {
@@ -474,11 +472,10 @@ function BpaI() {
       />
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
-        {Array.from({ length: Math.max(1, Math.ceil(state.seqs.length / 3)) }).map((_, pg) => (
-        <div key={pg} ref={(el) => { sheetsRef.current[pg] = el; }} className={`form-sheet ${pg > 0 ? "mt-6 " : ""}${printing ? "form-sheet--print" : ""}`} style={{ aspectRatio: "1653 / 2339" }}>
+        <div ref={sheetRef} className={`form-sheet ${printing ? "form-sheet--print" : ""}`} style={{ aspectRatio: "1653 / 2339" }}>
           <img src={bpaiBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
-          {/* Header (repetido por folha; ligado ao mesmo estado) */}
+          {/* Header */}
           <EstabelecimentoAutocomplete
             {...L.NOME_ESTAB}
             nome={state.nomeEstab}
@@ -543,19 +540,17 @@ function BpaI() {
               </ul>
             </div>
           )}
-          <DigitBoxes id={`p${pg}-pmes`} top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_MES_BOXES} values={state.profMes} onChange={(v) => set("profMes", v)} registerRefs={regBox(`p${pg}-pmes`)} onComplete={() => focusBox(`p${pg}-pano`)} compact />
-          <DigitBoxes id={`p${pg}-pano`} top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_ANO_BOXES} values={state.profAno} onChange={(v) => set("profAno", v)} registerRefs={regBox(`p${pg}-pano`)} compact />
+          <DigitBoxes id="pmes" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_MES_BOXES} values={state.profMes} onChange={(v) => set("profMes", v)} registerRefs={regBox("pmes")} onComplete={() => focusBox("pano")} compact />
+          <DigitBoxes id="pano" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_ANO_BOXES} values={state.profAno} onChange={(v) => set("profAno", v)} registerRefs={regBox("pano")} compact />
           <FieldClear top={L.PROF_ROW2_TOP} left={endOf(L.PROF_ANO_BOXES) + 0.5} height={L.HEADER_DIGIT_H}
-            getInputs={() => inputsOf(`p${pg}-pmes`, `p${pg}-pano`)}
+            getInputs={() => inputsOf("pmes", "pano")}
             onClear={() => setState((p) => ({ ...p, profMes: Array(2).fill(""), profAno: Array(4).fill("") }))} />
           <TextField {...L.PROF_EQUIPE} value={state.profEquipe} onChange={(v) => set("profEquipe", v)} />
           <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} compact />
 
-          {/* 3 Sequências desta folha (índice global si; slot vazio não renderiza) */}
-          {L.SEQ_TOPS.map((seqTop, localIdx) => {
-            const si = pg * 3 + localIdx;
+          {/* 3 Sequências */}
+          {L.SEQ_TOPS.map((seqTop, si) => {
             const s = state.seqs[si];
-            if (!s) return null;
             const R = L.REL;
             const u = <K extends keyof SeqData>(f: K, v: SeqData[K]) => updateSeq(si, f, v);
             const dnInvalida = hydrated && dataFuturaOuInvalida(s.dataNasc);
@@ -672,30 +667,9 @@ function BpaI() {
           <TextField {...L.GEST_RUBRICA} value={state.gestRubrica} onChange={(v) => set("gestRubrica", v)} />
           {renderData("gestData", L.GEST_DATA_DIA, L.GEST_DATA_MES, L.GEST_DATA_ANO)}
         </div>
-        ))}
 
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-          <span className="text-xs text-muted-foreground">{state.seqs.length} paciente(s) · {Math.max(1, Math.ceil(state.seqs.length / 3))} folha(s)</span>
-          <button
-            type="button"
-            onClick={() => setState((p) => ({ ...p, seqs: [...p.seqs, emptySeq()] }))}
-            className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
-          >
-            + Adicionar paciente
-          </button>
-          {state.seqs.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setState((p) => ({ ...p, seqs: p.seqs.slice(0, -1) }))}
-              className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted"
-            >
-              − Remover último paciente
-            </button>
-          )}
-        </div>
-
-        <p className="mt-3 text-center text-xs text-muted-foreground">
-          Dados salvos automaticamente{user ? " na sua conta e" : ""} neste navegador. Cada 3 pacientes = 1 folha (nova página no PDF e no arquivo magnético).
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Dados salvos automaticamente neste navegador. Posições do BPA-I são uma primeira aproximação — me diga quais campos precisam de ajuste.
         </p>
       </main>
     </div>
