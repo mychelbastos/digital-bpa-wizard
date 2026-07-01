@@ -23,9 +23,12 @@ interface Props {
   // Mostra um ícone de lixeira (limpar tudo) à direita do grupo quando ele está focado.
   // Se omitido, herda do DigitBoxesClearableContext. Só afeta a UI (ignorado no PDF).
   clearable?: boolean;
+  // Chamado quando a ÚLTIMA caixinha do grupo é preenchida — permite pular para o
+  // próximo campo (ex.: DDD -> Nº do telefone).
+  onComplete?: () => void;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -60,6 +63,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     next[i] = val;
     onChange(next);
     if (val && i < boxes.length - 1) refs.current[i + 1]?.focus();
+    else if (val && i === boxes.length - 1) onComplete?.(); // última caixinha -> próximo campo
   };
 
   const onKey = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
