@@ -12,6 +12,7 @@ import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAutocomplete";
+import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -345,7 +346,12 @@ function BpaI() {
           <img src={bpaiBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
           {/* Header */}
-          <TextField {...L.NOME_ESTAB} value={state.nomeEstab} onChange={(v) => set("nomeEstab", v)} />
+          <EstabelecimentoAutocomplete
+            {...L.NOME_ESTAB}
+            nome={state.nomeEstab}
+            onChangeNome={(v) => set("nomeEstab", v)}
+            onPick={(e) => setState((prev) => ({ ...prev, nomeEstab: e.nome, cnes: cells(e.cnes, 7) }))}
+          />
           <DigitBoxes id="cnes" top={L.CNES_TOP} height={L.HEADER_DIGIT_H} boxes={L.CNES_BOXES} values={state.cnes} onChange={(v) => set("cnes", v)} compact />
 
           {/* Profissional */}
