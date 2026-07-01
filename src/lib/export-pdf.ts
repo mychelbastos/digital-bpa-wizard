@@ -45,6 +45,13 @@ export async function exportSheetPdf(sheet: HTMLElement, filename: string) {
         s.overflow = "hidden";
         el.parentNode?.replaceChild(div, el);
       });
+
+      // Camada extra de segurança (depois do mapeamento de inputs, p/ não afetar índices):
+      // remove do clone todo overlay marcado p/ ignorar — botão-lixeira "limpar campo",
+      // controles do Responsável etc. Garante que NUNCA saiam no PDF, mesmo se estivessem
+      // visíveis/focados no momento da exportação. (html2canvas-pro já os ignora; isto é
+      // um cinto-e-suspensório determinístico.)
+      clonedSheet.querySelectorAll('[data-html2canvas-ignore="true"]').forEach((el) => el.remove());
     },
   });
   const img = canvas.toDataURL("image/jpeg", 0.95);
