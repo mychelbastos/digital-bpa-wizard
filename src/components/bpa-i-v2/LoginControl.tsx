@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, LogIn, LogOut, User, X, Loader2, AlertCircle } from "lucide-react";
 import { signIn, signOut, type AuthUser } from "@/lib/bpa-i-v2/auth";
 
@@ -47,15 +48,15 @@ export function LoginControl({ user }: { user: AuthUser | null }) {
       >
         <LogIn className="size-4" /> Entrar
       </button>
-      {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      {open && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true">
           <button
             aria-label="Fechar"
-            className="absolute inset-0 cursor-default bg-black/50 backdrop-blur-sm animate-in fade-in"
+            className="fixed inset-0 cursor-default bg-black/50 backdrop-blur-sm animate-in fade-in"
             onClick={() => setOpen(false)}
           />
           <form
-            className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-background shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+            className="relative my-auto max-h-[calc(100vh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-border bg-background shadow-2xl animate-in fade-in zoom-in-95 duration-150"
             onSubmit={async (e) => {
               e.preventDefault();
               setLoading(true); setErro("");
@@ -139,7 +140,8 @@ export function LoginControl({ user }: { user: AuthUser | null }) {
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
