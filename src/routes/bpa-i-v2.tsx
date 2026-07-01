@@ -90,12 +90,22 @@ const initialState = (): State => ({
   gestData: hojeDigits(),
 });
 
+// Ajusta um vetor de dígitos para exatamente n posições, justificado à direita
+// (mantém os dígitos preenchidos, alinhados à direita; descarta excedente à esquerda).
+function rjust(arr: string[] | undefined, n: number): string[] {
+  const digs = (arr ?? []).filter(Boolean).slice(-n);
+  return [...Array(Math.max(0, n - digs.length)).fill(""), ...digs];
+}
+
 function loadState(): State {
   if (typeof window === "undefined") return initialState();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState();
-    return { ...initialState(), ...(JSON.parse(raw) as Partial<State>) };
+    const merged = { ...initialState(), ...(JSON.parse(raw) as Partial<State>) };
+    // Migração: campo Quantidade passou de 6 -> 3 dígitos (justificado à direita).
+    merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3) }));
+    return merged;
   } catch {
     return initialState();
   }
@@ -523,7 +533,7 @@ function BpaI() {
                 <HistoricoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
                   values={s.codProc} onChange={(v) => u("codProc", v)} tabela="procedimento" clearable />
                 <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
-                  values={s.qtde} onChange={(v) => u("qtde", v)} compact />
+                  values={s.qtde} onChange={(v) => u("qtde", v)} rightAlign clearable compact />
                 <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
                   values={s.cnpj} onChange={(v) => u("cnpj", v)} clearable compact />
 

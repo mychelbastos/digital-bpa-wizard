@@ -26,9 +26,12 @@ interface Props {
   // Chamado quando a ÚLTIMA caixinha do grupo é preenchida — permite pular para o
   // próximo campo (ex.: DDD -> Nº do telefone).
   onComplete?: () => void;
+  // Número justificado à direita: os dígitos acumulam da direita p/ a esquerda (ex.:
+  // Quantidade). Digitar/apagar em qualquer caixinha trata o grupo como um número único.
+  rightAlign?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -56,9 +59,20 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
 
   const rightEdge = boxes.reduce((m, b) => Math.max(m, b.left + b.width), 0);
 
+  // Aplica um número justificado à direita nas caixinhas e foca a última.
+  const setRightAligned = (digits: string) => {
+    const d = digits.slice(-boxes.length);
+    onChange([...Array(boxes.length - d.length).fill(""), ...d.split("")]);
+    refs.current[boxes.length - 1]?.focus();
+  };
+
   const handle = (i: number, v: string) => {
     let val = v.slice(-1);
     if (numeric && val && !/[0-9]/.test(val)) return;
+    if (rightAlign) {
+      if (val) setRightAligned(values.filter(Boolean).join("") + val); // acumula à direita
+      return;
+    }
     const next = [...values];
     next[i] = val;
     onChange(next);
@@ -67,6 +81,13 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
   };
 
   const onKey = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (rightAlign) {
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        setRightAligned(values.filter(Boolean).join("").slice(0, -1)); // remove o último dígito
+      }
+      return;
+    }
     if (e.key === "Backspace" && !values[i] && i > 0) {
       refs.current[i - 1]?.focus();
     } else if (e.key === "ArrowLeft" && i > 0) {
@@ -81,6 +102,10 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     if (!text) return;
     e.preventDefault();
     const chars = numeric ? text.replace(/\D/g, "").split("") : text.split("");
+    if (rightAlign) {
+      setRightAligned(values.filter(Boolean).join("") + chars.join(""));
+      return;
+    }
     const next = [...values];
     for (let k = 0; k < chars.length && i + k < boxes.length; k++) {
       next[i + k] = chars[k];

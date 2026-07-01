@@ -64,7 +64,9 @@ export const REL = {
   dataAtendMes: digitBoxes([10.3, 11.9], 1.6),
   dataAtendAno: digitBoxes([14.1, 15.5, 16.9, 18.3], 1.4),
   codProc: digitBoxes([19.72, 22.58, 25.44, 28.31, 31.17, 34.03, 36.89, 39.75, 42.62, 45.48], 2.86),
-  qtde: digitBoxes([48.34, 49.4, 50.46, 51.52, 52.57, 53.63], 1.06),
+  // Quantidade: limitada a 3 dígitos, justificada à direita (usa as 3 células finais
+  // do campo impresso, alinhadas à borda direita ~54.69%).
+  qtde: digitBoxes([51.52, 52.57, 53.63], 1.06),
   cnpj: digitBoxes([54.69, 57.55, 60.4, 63.26, 66.12, 68.97, 71.83, 74.69, 77.54, 80.4, 83.25, 86.11, 88.97, 91.82], 2.86),
 
   procRow2: 16.9,
@@ -147,7 +149,7 @@ export const emptySeq = (): SeqData => ({
   email: "",
   dataAtend: Array(8).fill(""),
   codProc: Array(10).fill(""),
-  qtde: Array(6).fill(""),
+  qtde: Array(3).fill(""),
   cnpj: Array(14).fill(""),
   servico: Array(3).fill(""),
   classProc: Array(3).fill(""),
