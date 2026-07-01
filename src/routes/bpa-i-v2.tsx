@@ -13,6 +13,7 @@ import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAutocomplete";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
+import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -127,6 +128,10 @@ function BpaI() {
   const boxRefs = useRef<Record<string, HTMLInputElement[]>>({});
   const regBox = (key: string) => (els: HTMLInputElement[]) => { boxRefs.current[key] = els; };
   const focusBox = (key: string) => boxRefs.current[key]?.[0]?.focus();
+  // Junta os inputs de vários grupos (ex.: dia+mês+ano) p/ a lixeira do campo composto.
+  const inputsOf = (...keys: string[]) => keys.flatMap((k) => boxRefs.current[k] ?? []);
+  // Borda direita (%) do último grupo — onde a lixeira do campo composto é ancorada.
+  const endOf = (arr: { left: number; width: number }[]) => arr[arr.length - 1].left + arr[arr.length - 1].width;
 
   useEffect(() => { setState(loadState()); setHydrated(true); }, []);
   useEffect(() => {
@@ -428,8 +433,11 @@ function BpaI() {
               </ul>
             </div>
           )}
-          <DigitBoxes id="pmes" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_MES_BOXES} values={state.profMes} onChange={(v) => set("profMes", v)} onComplete={() => focusBox("pano")} clearable compact />
-          <DigitBoxes id="pano" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_ANO_BOXES} values={state.profAno} onChange={(v) => set("profAno", v)} registerRefs={regBox("pano")} clearable compact />
+          <DigitBoxes id="pmes" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_MES_BOXES} values={state.profMes} onChange={(v) => set("profMes", v)} registerRefs={regBox("pmes")} onComplete={() => focusBox("pano")} compact />
+          <DigitBoxes id="pano" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_ANO_BOXES} values={state.profAno} onChange={(v) => set("profAno", v)} registerRefs={regBox("pano")} compact />
+          <FieldClear top={L.PROF_ROW2_TOP} left={endOf(L.PROF_ANO_BOXES) + 0.5} height={L.HEADER_DIGIT_H}
+            getInputs={() => inputsOf("pmes", "pano")}
+            onClear={() => setState((p) => ({ ...p, profMes: Array(2).fill(""), profAno: Array(4).fill("") }))} />
           <TextField {...L.PROF_EQUIPE} value={state.profEquipe} onChange={(v) => set("profEquipe", v)} />
           <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} compact />
 
@@ -452,11 +460,14 @@ function BpaI() {
                 <TextField top={seqTop + R.row2} left={R.sexoF.left} width={R.sexoF.width} height={L.DIGIT_H} align="center"
                   value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} />
                 <DigitBoxes id={`s${si}-dnd`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascDia}
-                  values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} onComplete={() => focusBox(`s${si}-dnm`)} clearable compact />
+                  values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} compact />
                 <DigitBoxes id={`s${si}-dnm`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascMes}
-                  values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} clearable compact />
+                  values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} compact />
                 <DigitBoxes id={`s${si}-dna`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascAno}
-                  values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} clearable compact />
+                  values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} compact />
+                <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
+                  getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
+                  onClear={() => u("dataNasc", Array(8).fill(""))} />
                 <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
                   options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} />
                 <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
@@ -490,19 +501,25 @@ function BpaI() {
                 <TextField top={seqTop + R.row4} left={R.bairro.left} width={R.bairro.width} height={L.DIGIT_H}
                   value={s.bairro} onChange={(v) => u("bairro", v)} />
                 <DigitBoxes id={`s${si}-ddd`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.ddd}
-                  values={s.ddd} onChange={(v) => u("ddd", v)} onComplete={() => focusBox(`s${si}-tel`)} compact />
+                  values={s.ddd} onChange={(v) => u("ddd", v)} registerRefs={regBox(`s${si}-ddd`)} onComplete={() => focusBox(`s${si}-tel`)} compact />
                 <DigitBoxes id={`s${si}-tel`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.telefone}
-                  values={s.telefone} onChange={(v) => u("telefone", v)} registerRefs={regBox(`s${si}-tel`)} clearable compact />
+                  values={s.telefone} onChange={(v) => u("telefone", v)} registerRefs={regBox(`s${si}-tel`)} compact />
+                <FieldClear top={seqTop + R.row4} left={endOf(R.telefone) + 0.5} height={L.DIGIT_H}
+                  getInputs={() => inputsOf(`s${si}-ddd`, `s${si}-tel`)}
+                  onClear={() => { u("ddd", Array(2).fill("")); u("telefone", Array(8).fill("")); }} />
                 <TextField top={seqTop + R.row4} left={R.email.left} width={R.email.width} height={L.DIGIT_H}
                   value={s.email} onChange={(v) => u("email", v)} />
 
                 {/* Procedimento row 1: Data atend / Cód proc / Qtde / CNPJ */}
                 <DigitBoxes id={`s${si}-dad`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendDia}
-                  values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} onComplete={() => focusBox(`s${si}-dam`)} clearable compact />
+                  values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} compact />
                 <DigitBoxes id={`s${si}-dam`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendMes}
-                  values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} clearable compact />
+                  values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} compact />
                 <DigitBoxes id={`s${si}-daa`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendAno}
-                  values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} clearable compact />
+                  values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} compact />
+                <FieldClear top={seqTop + R.procRow1} left={endOf(R.dataAtendAno) + 0.5} height={L.DIGIT_H}
+                  getInputs={() => inputsOf(`s${si}-dad`, `s${si}-dam`, `s${si}-daa`)}
+                  onClear={() => u("dataAtend", Array(8).fill(""))} />
                 <HistoricoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
                   values={s.codProc} onChange={(v) => u("codProc", v)} tabela="procedimento" clearable />
                 <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
