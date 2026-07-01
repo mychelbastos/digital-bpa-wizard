@@ -19,6 +19,8 @@ import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
 import { loadConfig, configCompleta } from "@/lib/bpa-i-v2/config";
 import { gerarArquivoBpa, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { baixarTxt } from "@/lib/export-txt";
+import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
+import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -133,6 +135,10 @@ function BpaI() {
   const [configOpen, setConfigOpen] = useState(false);
   // Guarda a intenção de gerar o .txt logo após salvar a config (quando estava incompleta).
   const [gerarAposConfig, setGerarAposConfig] = useState(false);
+  const [fichasOpen, setFichasOpen] = useState(false);
+  // Id da ficha no Supabase à qual o autosave grava (persistido p/ continuar após reload).
+  const fichaIdRef = useRef<string | null>(null);
+  const FICHA_ID_KEY = "bpa-i-v2-ficha-id";
   // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
   const [pdfPendente, setPdfPendente] = useState(false);
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
@@ -151,7 +157,42 @@ function BpaI() {
   // Borda direita (%) do último grupo — onde a lixeira do campo composto é ancorada.
   const endOf = (arr: { left: number; width: number }[]) => arr[arr.length - 1].left + arr[arr.length - 1].width;
 
-  useEffect(() => { setState(loadState()); setHydrated(true); }, []);
+  useEffect(() => {
+    setState(loadState());
+    try { fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY); } catch { /* noop */ }
+    setHydrated(true);
+  }, []);
+
+  // Autosave no Supabase quando logado (debounce). Anônimo segue só no localStorage.
+  const autoKey = user?.cns ?? null;
+  useEffect(() => {
+    if (!hydrated || !autoKey) return;
+    const temConteudo = Boolean(state.nomeEstab || state.cnes.some(Boolean) || state.seqs.some(seqPreenchida));
+    if (!temConteudo) return;
+    const t = setTimeout(async () => {
+      const comp = state.profAno.join("") + state.profMes.join("");
+      const id = await salvarFicha(fichaIdRef.current, state.nomeEstab || "Ficha BPA-I", comp, state);
+      if (id) {
+        fichaIdRef.current = id;
+        try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [state, hydrated, autoKey]);
+
+  // Carrega uma ficha salva; começa uma nova (limpa e desvincula o autosave).
+  const carregarFichaSalva = async (id: string) => {
+    const dados = await carregarFicha(id);
+    if (!dados) return;
+    setState({ ...initialState(), ...(dados as Partial<State>) });
+    fichaIdRef.current = id;
+    try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+  };
+  const novaFicha = () => {
+    setState(initialState());
+    fichaIdRef.current = null;
+    try { localStorage.removeItem(FICHA_ID_KEY); } catch { /* noop */ }
+  };
   useEffect(() => {
     if (!hydrated) return;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* noop */ }
@@ -362,6 +403,11 @@ function BpaI() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <LoginControl user={user} />
+            {user && (
+              <button onClick={() => setFichasOpen(true)} title="Fichas salvas na sua conta" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+                📁 Minhas fichas
+              </button>
+            )}
             {state.respConfirmacao && (
               <button onClick={() => set("respConfirmacao", null)} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 hover:bg-amber-100">
                 Desfazer confirmação
@@ -415,6 +461,14 @@ function BpaI() {
         open={configOpen}
         onClose={() => { setConfigOpen(false); setGerarAposConfig(false); }}
         onSaved={() => { if (gerarAposConfig) { setGerarAposConfig(false); exportTxt(); } }}
+      />
+
+      <MinhasFichas
+        open={fichasOpen}
+        fichaAtualId={fichaIdRef.current}
+        onClose={() => setFichasOpen(false)}
+        onCarregar={carregarFichaSalva}
+        onNova={novaFicha}
       />
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
