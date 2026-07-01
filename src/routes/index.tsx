@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import bpacBg from "@/assets/bpa-c.png.asset.json";
-import bpaiBg from "@/assets/bpa-i.png.asset.json";
+import bpacBg from "@/assets/bpa-c.png";
+import bpaiBg from "@/assets/bpa-i.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -30,7 +30,7 @@ function Home() {
             className="group rounded-xl border bg-card p-6 shadow-sm transition hover:shadow-md"
           >
             <div className="aspect-[553/786] overflow-hidden rounded-md border bg-white">
-              <img src={bpacBg.url} alt="BPA-C" className="h-full w-full object-cover object-top" />
+              <img src={bpacBg} alt="BPA-C" className="h-full w-full object-cover object-top" />
             </div>
             <h2 className="mt-4 text-lg font-semibold">BPA-C</h2>
             <p className="text-sm text-muted-foreground">Boletim de Produção Ambulatorial — Consolidado</p>
@@ -42,11 +42,22 @@ function Home() {
             className="group rounded-xl border bg-card p-6 shadow-sm transition hover:shadow-md"
           >
             <div className="aspect-[553/786] overflow-hidden rounded-md border bg-white">
-              <img src={bpaiBg.url} alt="BPA-I" className="h-full w-full object-cover object-top" />
+              <img src={bpaiBg} alt="BPA-I" className="h-full w-full object-cover object-top" />
             </div>
             <h2 className="mt-4 text-lg font-semibold">BPA-I</h2>
             <p className="text-sm text-muted-foreground">Boletim de Produção Ambulatorial — Individualizado</p>
             <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">Abrir formulário →</span>
+          </Link>
+        </div>
+
+        <div className="mt-6 text-center">
+          <Link
+            to="/bpa-i-v2"
+            className="inline-flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">beta</span>
+            BPA-I v2 — campos inteligentes (em teste)
+            <span aria-hidden>→</span>
           </Link>
         </div>
       </div>

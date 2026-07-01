@@ -1,8 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas-pro";
-import bpacBg from "@/assets/bpa-c.png.asset.json";
+import { exportSheetPdf } from "@/lib/export-pdf";
+import bpacBg from "@/assets/bpa-c.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
@@ -107,17 +106,7 @@ function BpaC() {
     setPrinting(true);
     await new Promise((r) => setTimeout(r, 80));
     try {
-      const canvas = await html2canvas(sheetRef.current, {
-        scale: 2,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-      });
-      const img = canvas.toDataURL("image/jpeg", 0.95);
-      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
-      pdf.addImage(img, "JPEG", 0, 0, pw, ph);
-      pdf.save("BPA-C.pdf");
+      await exportSheetPdf(sheetRef.current, "BPA-C.pdf");
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Falha ao gerar PDF. Veja o console para detalhes.");
@@ -164,7 +153,7 @@ function BpaC() {
           className={`form-sheet ${printing ? "form-sheet--print" : ""}`}
           style={{ aspectRatio: "553.5 / 786.3" }}
         >
-          <img src={bpacBg.url} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
+          <img src={bpacBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
           {/* Header */}
           <DigitBoxes id="cnes" top={CNES_TOP} height={HEADER_HEIGHT_DIGIT} boxes={CNES_BOXES} values={state.cnes} onChange={(v) => set("cnes", v)} compact />

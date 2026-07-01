@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as BpaIV2RouteImport } from './routes/bpa-i-v2'
 import { Route as BpaIRouteImport } from './routes/bpa-i'
 import { Route as BpaCRouteImport } from './routes/bpa-c'
 import { Route as IndexRouteImport } from './routes/index'
 
+const BpaIV2Route = BpaIV2RouteImport.update({
+  id: '/bpa-i-v2',
+  path: '/bpa-i-v2',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BpaIRoute = BpaIRouteImport.update({
   id: '/bpa-i',
   path: '/bpa-i',
@@ -33,34 +39,45 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
   '/bpa-i': typeof BpaIRoute
+  '/bpa-i-v2': typeof BpaIV2Route
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
   '/bpa-i': typeof BpaIRoute
+  '/bpa-i-v2': typeof BpaIV2Route
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
   '/bpa-i': typeof BpaIRoute
+  '/bpa-i-v2': typeof BpaIV2Route
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/bpa-c' | '/bpa-i'
+  fullPaths: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bpa-c' | '/bpa-i'
-  id: '__root__' | '/' | '/bpa-c' | '/bpa-i'
+  to: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2'
+  id: '__root__' | '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BpaCRoute: typeof BpaCRoute
   BpaIRoute: typeof BpaIRoute
+  BpaIV2Route: typeof BpaIV2Route
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/bpa-i-v2': {
+      id: '/bpa-i-v2'
+      path: '/bpa-i-v2'
+      fullPath: '/bpa-i-v2'
+      preLoaderRoute: typeof BpaIV2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bpa-i': {
       id: '/bpa-i'
       path: '/bpa-i'
@@ -89,7 +106,18 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BpaCRoute: BpaCRoute,
   BpaIRoute: BpaIRoute,
+  BpaIV2Route: BpaIV2Route,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

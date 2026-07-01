@@ -79,12 +79,24 @@ export const DIGIT_H = 2.0;
 export const HEADER_DIGIT_H = 1.9;
 
 // ---------- Footer (responsável / gestor / data) ----------
-export const RESP_CARIMBO = { top: 93.4, left: 6.0, width: 20.0, height: 1.8 };
-export const RESP_RUBRICA = { top: 93.4, left: 30.0, width: 15.0, height: 1.8 };
-export const RESP_DATA = { top: 94.6, left: 10.0, width: 13.0, height: 1.6 };
+// Responsável: substituído pela CONFIRMAÇÃO ELETRÔNICA (login + botão + auditoria).
+// Ocupa a área de carimbo/rubrica (acima da linha DATA).
+// No ESPAÇO VAZIO abaixo dos rótulos CARIMBO/RUBRICA (~93.2%) e acima do DATA (~95%).
+export const RESP_CONFIRM = { top: 93.35, left: 6.0, width: 39.0, height: 1.6 };
 export const GEST_CARIMBO = { top: 93.4, left: 51.0, width: 20.0, height: 1.8 };
 export const GEST_RUBRICA = { top: 93.4, left: 79.5, width: 13.0, height: 1.8 };
-export const GEST_DATA = { top: 94.6, left: 55.0, width: 13.0, height: 1.6 };
+
+// Campo DATA do rodapé (Formalização) — DD/MM/AAAA entre as duas barras impressas,
+// calibrado por pixel (barras: RESP ~10.8%/14.5%, GEST ~56.5%/59.8%). Área compacta.
+export const DATA_TOP = 94.95;
+export const DATA_H = 1.25;
+// Barras impressas: RESP ~10.9%/14.4% ("DATA" termina ~8.3%); GEST ~56.5%/59.9% (~45.5% offset).
+export const RESP_DATA_DIA = digitBoxes([8.9, 9.9], 1.0);
+export const RESP_DATA_MES = digitBoxes([11.4, 12.6], 1.2);
+export const RESP_DATA_ANO = digitBoxes([14.8, 15.8, 16.8, 17.8], 1.0);
+export const GEST_DATA_DIA = digitBoxes([54.4, 55.4], 1.0);
+export const GEST_DATA_MES = digitBoxes([56.9, 58.1], 1.2);
+export const GEST_DATA_ANO = digitBoxes([60.3, 61.3, 62.3, 63.3], 1.0);
 
 export interface SeqData {
   cnsPac: string[];
@@ -120,9 +132,9 @@ export const emptySeq = (): SeqData => ({
   nomePac: "",
   sexo: "",
   dataNasc: Array(8).fill(""),
-  nacionalidade: "",
+  nacionalidade: "1", // v2: padrão Brasileiro (situação de nacionalidade, código CADSUS)
   racaCor: "",
-  etnia: "",
+  etnia: "", // v2: só preenchido quando Raça/Cor = Indígena (Portaria 508, Art. 2º)
   cep: Array(8).fill(""),
   ibge: Array(7).fill(""),
   codLog: Array(3).fill(""),

@@ -94,9 +94,10 @@ interface TextProps {
   height: number;
   value: string;
   onChange: (v: string) => void;
+  align?: "left" | "center";
 }
 
-export function TextField({ top, left, width, height, value, onChange }: TextProps) {
+export function TextField({ top, left, width, height, value, onChange, align = "left" }: TextProps) {
   return (
     <input
       value={value}
@@ -108,6 +109,7 @@ export function TextField({ top, left, width, height, value, onChange }: TextPro
         left: `${left}%`,
         width: `${width}%`,
         height: `${height}%`,
+        textAlign: align,
       }}
     />
   );

@@ -1,8 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas-pro";
-import bpaiBg from "@/assets/bpa-i.png.asset.json";
+import { exportSheetPdf } from "@/lib/export-pdf";
+import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import * as L from "@/lib/bpai-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-layout";
@@ -17,7 +16,7 @@ export const Route = createFileRoute("/bpa-i")({
   component: BpaI,
 });
 
-const STORAGE_KEY = "bpa-i-state-v1";
+const STORAGE_KEY = "bpa-i-state-v2";
 
 interface State {
   nomeEstab: string;
@@ -103,11 +102,7 @@ function BpaI() {
     setPrinting(true);
     await new Promise((r) => setTimeout(r, 80));
     try {
-      const canvas = await html2canvas(sheetRef.current, { scale: 2, backgroundColor: "#fff", useCORS: true });
-      const img = canvas.toDataURL("image/jpeg", 0.95);
-      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-      pdf.addImage(img, "JPEG", 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
-      pdf.save("BPA-I.pdf");
+      await exportSheetPdf(sheetRef.current, "BPA-I.pdf");
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Falha ao gerar PDF. Veja o console.");
@@ -138,7 +133,7 @@ function BpaI() {
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
         <div ref={sheetRef} className={`form-sheet ${printing ? "form-sheet--print" : ""}`} style={{ aspectRatio: "1653 / 2339" }}>
-          <img src={bpaiBg.url} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
+          <img src={bpaiBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
           {/* Header */}
           <TextField {...L.NOME_ESTAB} value={state.nomeEstab} onChange={(v) => set("nomeEstab", v)} />
@@ -167,9 +162,9 @@ function BpaI() {
                   value={s.nomePac} onChange={(v) => u("nomePac", v)} />
 
                 {/* Row 2: Sexo / Data Nasc / Nacion / RaçaCor / Etnia / CEP / IBGE */}
-                <TextField top={seqTop + R.row2} left={R.sexoM.left} width={R.sexoM.width} height={L.DIGIT_H}
+                <TextField top={seqTop + R.row2} left={R.sexoM.left} width={R.sexoM.width} height={L.DIGIT_H} align="center"
                   value={s.sexo === "M" ? "X" : ""} onChange={(v) => u("sexo", v ? "M" : "")} />
-                <TextField top={seqTop + R.row2} left={R.sexoF.left} width={R.sexoF.width} height={L.DIGIT_H}
+                <TextField top={seqTop + R.row2} left={R.sexoF.left} width={R.sexoF.width} height={L.DIGIT_H} align="center"
                   value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} />
                 <DigitBoxes id={`s${si}-dnd`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascDia}
                   values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} compact />
@@ -177,12 +172,12 @@ function BpaI() {
                   values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} compact />
                 <DigitBoxes id={`s${si}-dna`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascAno}
                   values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} compact />
-                <DigitBoxes id={`s${si}-nac`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.nacionalidade}
-                  values={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} compact />
-                <DigitBoxes id={`s${si}-raca`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.racaCor}
-                  values={s.racaCor} onChange={(v) => u("racaCor", v)} compact />
-                <DigitBoxes id={`s${si}-etn`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.etnia}
-                  values={s.etnia} onChange={(v) => u("etnia", v)} compact />
+                <TextField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
+                  value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} />
+                <TextField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
+                  value={s.racaCor} onChange={(v) => u("racaCor", v)} />
+                <TextField top={seqTop + R.row2} left={R.etnia.left} width={R.etnia.width} height={L.DIGIT_H}
+                  value={s.etnia} onChange={(v) => u("etnia", v)} />
                 <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
                   values={s.cep} onChange={(v) => u("cep", v)} compact />
                 <DigitBoxes id={`s${si}-ibge`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.ibge}
