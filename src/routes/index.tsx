@@ -72,7 +72,15 @@ function Home() {
           </Link>
         </div>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 flex flex-wrap justify-center gap-3 text-center">
+          <Link
+            to="/bpa-c-v2"
+            className="inline-flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800">v2</span>
+            BPA-C v2 — total automático
+            <span aria-hidden>→</span>
+          </Link>
           <Link
             to="/bpa-i-v2"
             className="inline-flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"

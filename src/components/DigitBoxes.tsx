@@ -31,9 +31,11 @@ interface Props {
   rightAlign?: boolean;
   // Marca o grupo como inválido (borda sutil). Só visual/não-bloqueante.
   invalid?: boolean;
+  // Somente leitura (ex.: campo Total calculado): não aceita digitação.
+  readOnly?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, readOnly = false }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -132,7 +134,9 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           inputMode={numeric ? "numeric" : "text"}
           pattern={numeric ? "[0-9]" : undefined}
           maxLength={1}
-          className={`form-digit${compact ? " form-digit--compact" : ""}${invalid ? " ring-2 ring-rose-400/80" : ""}`}
+          readOnly={readOnly}
+          tabIndex={readOnly ? -1 : undefined}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${invalid ? " ring-2 ring-rose-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,

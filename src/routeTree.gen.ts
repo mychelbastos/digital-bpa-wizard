@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as BpaIV2RouteImport } from './routes/bpa-i-v2'
 import { Route as BpaIRouteImport } from './routes/bpa-i'
+import { Route as BpaCV2RouteImport } from './routes/bpa-c-v2'
 import { Route as BpaCRouteImport } from './routes/bpa-c'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -30,6 +31,11 @@ const BpaIRoute = BpaIRouteImport.update({
   path: '/bpa-i',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BpaCV2Route = BpaCV2RouteImport.update({
+  id: '/bpa-c-v2',
+  path: '/bpa-c-v2',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BpaCRoute = BpaCRouteImport.update({
   id: '/bpa-c',
   path: '/bpa-c',
@@ -44,6 +50,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
+  '/bpa-c-v2': typeof BpaCV2Route
   '/bpa-i': typeof BpaIRoute
   '/bpa-i-v2': typeof BpaIV2Route
   '/perfil': typeof PerfilRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
+  '/bpa-c-v2': typeof BpaCV2Route
   '/bpa-i': typeof BpaIRoute
   '/bpa-i-v2': typeof BpaIV2Route
   '/perfil': typeof PerfilRoute
@@ -59,21 +67,30 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
+  '/bpa-c-v2': typeof BpaCV2Route
   '/bpa-i': typeof BpaIRoute
   '/bpa-i-v2': typeof BpaIV2Route
   '/perfil': typeof PerfilRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
+  fullPaths: '/' | '/bpa-c' | '/bpa-c-v2' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
-  id: '__root__' | '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
+  to: '/' | '/bpa-c' | '/bpa-c-v2' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
+  id:
+    | '__root__'
+    | '/'
+    | '/bpa-c'
+    | '/bpa-c-v2'
+    | '/bpa-i'
+    | '/bpa-i-v2'
+    | '/perfil'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BpaCRoute: typeof BpaCRoute
+  BpaCV2Route: typeof BpaCV2Route
   BpaIRoute: typeof BpaIRoute
   BpaIV2Route: typeof BpaIV2Route
   PerfilRoute: typeof PerfilRoute
@@ -102,6 +119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BpaIRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bpa-c-v2': {
+      id: '/bpa-c-v2'
+      path: '/bpa-c-v2'
+      fullPath: '/bpa-c-v2'
+      preLoaderRoute: typeof BpaCV2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bpa-c': {
       id: '/bpa-c'
       path: '/bpa-c'
@@ -122,6 +146,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BpaCRoute: BpaCRoute,
+  BpaCV2Route: BpaCV2Route,
   BpaIRoute: BpaIRoute,
   BpaIV2Route: BpaIV2Route,
   PerfilRoute: PerfilRoute,
