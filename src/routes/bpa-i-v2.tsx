@@ -413,9 +413,26 @@ function BpaI() {
                 Desfazer confirmação
               </button>
             )}
-            <button onClick={clearSeqs} className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
-              Zerar sequências
-            </button>
+            <div className="group relative">
+              <button
+                type="button"
+                title="Opções de limpeza"
+                className="flex items-center gap-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 group-focus-within:bg-destructive/10"
+              >
+                🗑 Zerar <span aria-hidden className="text-[10px]">▾</span>
+              </button>
+              {/* pt-1 faz "ponte" p/ o hover não cair no vão entre botão e menu */}
+              <div className="invisible absolute right-0 top-full z-50 pt-1 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="w-56 overflow-hidden rounded-md border border-border bg-background py-1 text-xs shadow-lg">
+                  <button type="button" onClick={clearSeqs} className="block w-full px-3 py-2 text-left hover:bg-muted">
+                    Zerar sequências <span className="text-muted-foreground">(mantém o cabeçalho)</span>
+                  </button>
+                  <button type="button" onClick={clearAll} className="block w-full px-3 py-2 text-left text-destructive hover:bg-destructive/10">
+                    Zerar tudo <span className="opacity-70">(apaga o formulário inteiro)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             {snapshot && (
               <div className="relative">
                 <button
@@ -441,9 +458,6 @@ function BpaI() {
                 )}
               </div>
             )}
-            <button onClick={clearAll} className="rounded-md border border-destructive/30 bg-background px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10">
-              Zerar tudo
-            </button>
             <button onClick={() => { setGerarAposConfig(false); setConfigOpen(true); }} title="Configuração do estabelecimento (arquivo magnético)" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
               ⚙ Config
             </button>
