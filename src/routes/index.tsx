@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import bpacBg from "@/assets/bpa-c.png";
 import bpaiBg from "@/assets/bpa-i.png";
 import { useAuthUser, signOut } from "@/lib/bpa-i-v2/auth";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Settings } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,6 +24,12 @@ function Home() {
             <User className="size-3.5" /> {user.nome || user.email}
           </span>
         )}
+        <Link
+          to="/perfil"
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Settings className="size-3.5" /> Perfil
+        </Link>
         <button
           onClick={() => signOut()}
           className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

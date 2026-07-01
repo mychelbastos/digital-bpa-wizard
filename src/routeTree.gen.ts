@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as BpaIV2RouteImport } from './routes/bpa-i-v2'
 import { Route as BpaIRouteImport } from './routes/bpa-i'
 import { Route as BpaCRouteImport } from './routes/bpa-c'
 import { Route as IndexRouteImport } from './routes/index'
 
+const PerfilRoute = PerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BpaIV2Route = BpaIV2RouteImport.update({
   id: '/bpa-i-v2',
   path: '/bpa-i-v2',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/bpa-c': typeof BpaCRoute
   '/bpa-i': typeof BpaIRoute
   '/bpa-i-v2': typeof BpaIV2Route
+  '/perfil': typeof PerfilRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/bpa-c': typeof BpaCRoute
   '/bpa-i': typeof BpaIRoute
   '/bpa-i-v2': typeof BpaIV2Route
+  '/perfil': typeof PerfilRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/bpa-c': typeof BpaCRoute
   '/bpa-i': typeof BpaIRoute
   '/bpa-i-v2': typeof BpaIV2Route
+  '/perfil': typeof PerfilRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2'
+  fullPaths: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2'
-  id: '__root__' | '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2'
+  to: '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
+  id: '__root__' | '/' | '/bpa-c' | '/bpa-i' | '/bpa-i-v2' | '/perfil'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,10 +76,18 @@ export interface RootRouteChildren {
   BpaCRoute: typeof BpaCRoute
   BpaIRoute: typeof BpaIRoute
   BpaIV2Route: typeof BpaIV2Route
+  PerfilRoute: typeof PerfilRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/perfil': {
+      id: '/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof PerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bpa-i-v2': {
       id: '/bpa-i-v2'
       path: '/bpa-i-v2'
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   BpaCRoute: BpaCRoute,
   BpaIRoute: BpaIRoute,
   BpaIV2Route: BpaIV2Route,
+  PerfilRoute: PerfilRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
