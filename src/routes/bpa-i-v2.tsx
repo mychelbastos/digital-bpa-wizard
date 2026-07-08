@@ -810,6 +810,8 @@ function BpaI() {
               si={si}
               seqTop={seqTop}
               s={state.seqs[si]}
+              profMes={state.profMes}
+              profAno={state.profAno}
               hydrated={hydrated}
               onUpdate={(field, value) => updateSeq(si, field, value)}
               regBox={regBox}

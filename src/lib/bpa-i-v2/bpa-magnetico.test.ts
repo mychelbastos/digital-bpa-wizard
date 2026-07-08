@@ -64,6 +64,15 @@ describe("linhaBpaI", () => {
   it("idade calculada (36 anos em 2026 p/ nasc 1990)", () => {
     expect(l.slice(85, 88)).toBe("036"); // idade pos 86-88
   });
+  it("município: IBGE de 6 díg. sai inalterado", () => {
+    expect(l.slice(75, 81)).toBe("292740"); // seqExemplo usa 292740
+  });
+  it("município: IBGE completo (7 díg.) vira os 6 PRIMEIROS, sem o dígito verificador", () => {
+    // 3550308 (São Paulo/SP) -> 355030, nunca 550308.
+    const seq7 = { ...seqExemplo(), ibge: cells("3550308", 7) };
+    const l7 = linhaBpaI(dados(), seq7, 1, 1);
+    expect(l7.slice(75, 81)).toBe("355030");
+  });
 });
 
 describe("header e arquivo", () => {

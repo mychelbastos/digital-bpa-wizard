@@ -106,3 +106,16 @@ export function atendimentoAntigo(d: string[]): boolean {
 export function cnsInvalido(cns: string): boolean {
   return cnsCompleto(cns) && !validarCns(cns);
 }
+
+// Data de atendimento fora do mês/ano da competência. Aviso NÃO-bloqueante: o BPA
+// Magnético critica quando a data do atendimento não cai na competência processada,
+// mas existe produção retroativa legítima, então só alertamos. Só acende com a data
+// completa, de calendário válida e não-futura (essas já têm o alerta próprio), e com
+// a competência (mês+ano) completa.
+export function atendimentoForaDaCompetencia(dataAtend: string[], mes: string[], ano: string[]): boolean {
+  if (!dataValida(dataAtend) || dataFuturaOuInvalida(dataAtend)) return false;
+  const mm = mes.join(""), aaaa = ano.join("");
+  if (mm.length !== 2 || aaaa.length !== 4) return false; // competência incompleta: não acende
+  const s = dataAtend.join("");
+  return s.slice(2, 4) !== mm || s.slice(4, 8) !== aaaa;
+}

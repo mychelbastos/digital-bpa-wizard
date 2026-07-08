@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validarCns, cnsInvalido, dataValida, dataFuturaOuInvalida, atendimentoAntigo, idadeEmMeses } from "./validacao";
+import { validarCns, cnsInvalido, dataValida, dataFuturaOuInvalida, atendimentoAntigo, atendimentoForaDaCompetencia, idadeEmMeses } from "./validacao";
 
 describe("validarCns", () => {
   it("aceita CNS provisório válido (início 7)", () => {
@@ -80,6 +80,43 @@ describe("atendimentoAntigo", () => {
   it("não acende para data futura ou inválida (já tem alerta próprio)", () => {
     expect(atendimentoAntigo(digs("01012099"))).toBe(false);
     expect(atendimentoAntigo(digs("31022020"))).toBe(false);
+  });
+});
+
+describe("atendimentoForaDaCompetencia", () => {
+  // Usa uma data passada (não-futura) recente p/ não colidir com dataFuturaOuInvalida.
+  const passada = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 3);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const aaaa = String(d.getFullYear());
+    return { data: digs(`${dd}${mm}${aaaa}`), mes: digs(mm), ano: digs(aaaa) };
+  };
+  it("não acende quando a data cai no mês/ano da competência", () => {
+    const p = passada();
+    expect(atendimentoForaDaCompetencia(p.data, p.mes, p.ano)).toBe(false);
+  });
+  it("acende quando o mês difere da competência", () => {
+    const p = passada();
+    const outroMes = p.mes.join("") === "12" ? "11" : String(Number(p.mes.join("")) + 1).padStart(2, "0");
+    expect(atendimentoForaDaCompetencia(p.data, digs(outroMes), p.ano)).toBe(true);
+  });
+  it("acende quando o ano difere da competência", () => {
+    const p = passada();
+    const outroAno = String(Number(p.ano.join("")) - 1);
+    expect(atendimentoForaDaCompetencia(p.data, p.mes, digs(outroAno))).toBe(true);
+  });
+  it("não acende com competência incompleta (evita falso alarme enquanto digita)", () => {
+    const p = passada();
+    expect(atendimentoForaDaCompetencia(p.data, digs("0"), p.ano)).toBe(false);
+    expect(atendimentoForaDaCompetencia(p.data, p.mes, digs("202"))).toBe(false);
+  });
+  it("não acende com data incompleta, inválida ou futura", () => {
+    const p = passada();
+    expect(atendimentoForaDaCompetencia(digs("1507"), p.mes, p.ano)).toBe(false);
+    expect(atendimentoForaDaCompetencia(digs("31022020"), digs("02"), digs("2020"))).toBe(false);
+    expect(atendimentoForaDaCompetencia(digs("01012099"), digs("01"), digs("2099"))).toBe(false);
   });
 });
 

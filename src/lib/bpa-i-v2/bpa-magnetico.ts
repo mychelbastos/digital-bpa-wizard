@@ -91,7 +91,11 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     [10, numF(s.codProc, 10)],
     [15, numF(s.cnsPac, 15, true)],
     [1, s.sexo === "M" || s.sexo === "F" ? s.sexo : " "],
-    [6, numF(s.ibge, 6, true)],
+    // Município: o formulário guarda o IBGE completo (7 díg.); o SIA/SUS usa o
+    // código de 6 díg. = IBGE SEM o dígito verificador (o último). Por isso os 6
+    // PRIMEIROS dígitos — nunca os últimos (numF cortaria pela direita e derrubaria
+    // o dígito do UF, gerando um município inexistente).
+    [6, numF(dig(s.ibge).slice(0, 6), 6, true)],
     [4, alfaF(s.cid.join(""), 4)],
     [3, numF(String(idadeAnos(s.dataNasc, s.dataAtend)), 3)],
     [6, numF(s.qtde, 6)],

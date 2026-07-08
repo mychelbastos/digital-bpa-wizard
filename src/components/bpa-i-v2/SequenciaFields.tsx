@@ -12,7 +12,8 @@ import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 import { buscarNomeServicoClasse, buscarNomeCid } from "@/lib/bpa-i-v2/nomes-sigtap";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
-import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo } from "@/lib/bpa-i-v2/validacao";
+import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo, atendimentoForaDaCompetencia } from "@/lib/bpa-i-v2/validacao";
+import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
 import * as L from "@/lib/bpai-v2-layout";
@@ -24,6 +25,10 @@ interface Props {
   si: number;
   seqTop: number;
   s: SeqData;
+  // Competência do cabeçalho (mês+ano), p/ avisar quando a data de atendimento cair
+  // fora dela (o BPA Magnético critica).
+  profMes: string[];
+  profAno: string[];
   hydrated: boolean;
   onUpdate: <K extends keyof SeqData>(field: K, value: SeqData[K]) => void;
   regBox: (key: string) => (els: HTMLInputElement[]) => void;
@@ -37,16 +42,21 @@ interface Props {
 
 const CNS_MOTIVO = "CNS inválido (dígito verificador não confere).";
 const DATA_INVALIDA_MOTIVO = "Data inválida ou no futuro.";
+const CARATER_MOTIVO = "Caráter de atendimento é obrigatório.";
+const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês da competência — o BPA Magnético costuma criticar. Confirme a data ou a competência.";
 
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
 // (não dá pra chamar hooks dentro do .map() do componente pai).
-export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange }: Props) {
+export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange }: Props) {
   const R = L.REL;
   const cnsPacInvalido = hydrated && cnsInvalido(s.cnsPac.join(""));
   const dnInvalidaData = hydrated && dataFuturaOuInvalida(s.dataNasc);
   const daInvalidaData = hydrated && dataFuturaOuInvalida(s.dataAtend);
   const daAntiga = hydrated && atendimentoAntigo(s.dataAtend) && !s.dataAtendConfirmada;
+  const daForaCompetencia = hydrated && atendimentoForaDaCompetencia(s.dataAtend, profMes, profAno);
+  // Caráter é obrigatório em toda sequência que tem procedimento (vira linha no arquivo).
+  const caraterFaltando = hydrated && seqPreenchida(s) && s.carater.join("").trim().length === 0;
 
   // Cruza procedimento × quantidade × idade × sexo × serviço/classe × CID contra o
   // SIGTAP oficial (uma única busca do procedimento, compartilhada entre as checagens).
@@ -54,7 +64,8 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
   const dnInvalida = dnInvalidaData || (hydrated && val.idadeInvalida);
   const daInvalida = daInvalidaData || (hydrated && val.idadeInvalida);
   const dnTitle = dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
-  const daTitle = daInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
+  const daTitle = daInvalidaData ? DATA_INVALIDA_MOTIVO : (daForaCompetencia ? DATA_COMPETENCIA_AVISO : val.idadeMotivo);
+  const daWarn = daAntiga || daForaCompetencia;
 
   // Cruza CEP × Cód. IBGE Município: busca o município real do CEP (ViaCEP, com
   // fallback por nome via BrasilAPI), compara com o município selecionado no campo ao
@@ -105,6 +116,7 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
   const motivos = [
     cnsPacInvalido && CNS_MOTIVO,
     (dnInvalidaData || daInvalidaData) && DATA_INVALIDA_MOTIVO,
+    caraterFaltando && CARATER_MOTIVO,
     cepMotivo,
     ...val.motivos,
   ].filter((m): m is string => Boolean(m));
@@ -184,11 +196,11 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
 
       {/* Procedimento row 1: Data atend / Cód proc / Qtde / CNPJ */}
       <DigitBoxes id={`s${si}-dad`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendDia}
-        values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} warn={daAntiga} title={daTitle} compact />
+        values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} warn={daWarn} title={daTitle} compact />
       <DigitBoxes id={`s${si}-dam`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendMes}
-        values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} title={daTitle} compact />
+        values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} warn={daWarn} title={daTitle} compact />
       <DigitBoxes id={`s${si}-daa`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendAno}
-        values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} title={daTitle} compact />
+        values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} warn={daWarn} title={daTitle} compact />
       <FieldClear top={seqTop + R.procRow1} left={endOf(R.dataAtendAno) + 0.5} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-dad`, `s${si}-dam`, `s${si}-daa`)}
         onClear={() => u("dataAtend", Array(8).fill(""))} />
@@ -216,7 +228,8 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
       <ComboField top={seqTop + R.procRow2} left={R.carater[0].left}
         width={R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width - R.carater[0].left}
         height={L.DIGIT_H} options={CARATERES} display="code"
-        value={s.carater.join("")} onChange={(v) => u("carater", v.split(""))} />
+        value={s.carater.join("")} onChange={(v) => u("carater", v.split(""))}
+        invalid={caraterFaltando} title={CARATER_MOTIVO} />
       {caraterNome && (
         <div
           data-html2canvas-ignore="true"
