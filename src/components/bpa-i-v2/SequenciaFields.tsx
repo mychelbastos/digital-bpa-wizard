@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import { ComboField } from "@/components/bpa-i-v2/ComboField";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
@@ -9,6 +9,7 @@ import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
 import { NACIONALIDADES } from "@/lib/bpa-i-v2/nacionalidades";
 import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
+import { buscarIbgePorCep } from "@/lib/bpa-i-v2/cep";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo } from "@/lib/bpa-i-v2/validacao";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
@@ -53,9 +54,28 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
   const dnTitle = dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
   const daTitle = daInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
 
+  // Cruza CEP × Cód. IBGE Município: busca o IBGE real do CEP (ViaCEP, com fallback
+  // por nome via BrasilAPI) e compara com o município selecionado no campo ao lado.
+  const cep = s.cep.join("");
+  const ibge = s.ibge.join("");
+  const [cepMotivo, setCepMotivo] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (cep.length !== 8 || ibge.length !== 7) { setCepMotivo(undefined); return; }
+    let cancel = false;
+    buscarIbgePorCep(cep).then((ibgeCep) => {
+      if (cancel || !ibgeCep || ibgeCep === ibge) { if (!cancel) setCepMotivo(undefined); return; }
+      const nomeCep = MUNICIPIOS_IBGE.find((m) => m.code === ibgeCep)?.label ?? ibgeCep;
+      const nomeSel = MUNICIPIOS_IBGE.find((m) => m.code === ibge)?.label ?? ibge;
+      setCepMotivo(`CEP pertence a ${nomeCep}, mas o município selecionado é ${nomeSel}.`);
+    });
+    return () => { cancel = true; };
+  }, [cep, ibge]);
+  const cepIbgeDivergente = hydrated && Boolean(cepMotivo);
+
   const motivos = [
     cnsPacInvalido && CNS_MOTIVO,
     (dnInvalidaData || daInvalidaData) && DATA_INVALIDA_MOTIVO,
+    cepMotivo,
     ...val.motivos,
   ].filter((m): m is string => Boolean(m));
 
@@ -99,11 +119,11 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
         options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
         disabled={s.racaCor !== RACA_INDIGENA} />
       <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
-        values={s.cep} onChange={(v) => u("cep", v)} clearable compact />
+        values={s.cep} onChange={(v) => u("cep", v)} invalid={cepIbgeDivergente} title={cepMotivo} clearable compact />
       <ComboField top={seqTop + R.row2} left={R.ibge[0].left}
         width={R.ibge[R.ibge.length - 1].left + R.ibge[R.ibge.length - 1].width - R.ibge[0].left}
         height={L.DIGIT_H} options={MUNICIPIOS_IBGE} display="code"
-        value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} />
+        value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} invalid={cepIbgeDivergente} title={cepMotivo} />
 
       {/* Row 3: Cod Logradouro / Endereço / Número / Complemento */}
       <ComboField top={seqTop + R.row3} left={R.codLog[0].left}

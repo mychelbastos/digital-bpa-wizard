@@ -12,6 +12,10 @@ interface Props {
   disabled?: boolean;
   /** O que exibir na caixa: o rótulo (padrão) ou o código (p/ caixas pequenas, ex.: Caráter). */
   display?: "label" | "code";
+  // Marca o campo como inválido (borda vermelha sutil). Só visual/não-bloqueante.
+  invalid?: boolean;
+  // Explica o motivo do `invalid` (tooltip nativo ao passar o mouse/tocar).
+  title?: string;
 }
 
 const norm = (s: string) =>
@@ -20,7 +24,7 @@ const norm = (s: string) =>
 // Combobox posicionado em % da form-sheet (igual aos demais campos, p/ o export do PDF
 // capturar o <input> e mostrar o NOME selecionado). Guarda o código, exibe o rótulo.
 // Sugestão por tecla (primeira letra filtra) + confirmar com Tab/Enter.
-export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label" }: Props) {
+export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label", invalid = false, title }: Props) {
   const labelOf = (code: string) => options.find((o) => o.code === code)?.label ?? "";
   // O que aparece na caixa para um código: o rótulo, ou o próprio código.
   const shown = (code: string) => (display === "code" ? (labelOf(code) ? code : "") : labelOf(code));
@@ -58,7 +62,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
   return (
     <>
       <input
-        className="form-text"
+        className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}`}
         style={{
           position: "absolute",
           top: `${top}%`,
@@ -72,6 +76,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
         value={text}
         disabled={disabled}
         readOnly={false}
+        title={invalid ? title : undefined}
         onFocus={(e) => {
           if (disabled) return;
           if (blurTimer.current) clearTimeout(blurTimer.current);
