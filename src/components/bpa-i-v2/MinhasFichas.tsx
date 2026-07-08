@@ -9,10 +9,12 @@ interface Props {
   onClose: () => void;
   onCarregar: (id: string, titulo: string) => void;
   onNova: () => void;
+  /** Chamado quando a ficha renomeada é a que está aberta no formulário agora. */
+  onRenomeada?: (id: string, titulo: string) => void;
 }
 
 // Lista de fichas salvas no Supabase (do usuário logado). Abrir / nova / excluir.
-export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova }: Props) {
+export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, onRenomeada }: Props) {
   const [fichas, setFichas] = useState<FichaResumo[]>([]);
   const [carregando, setCarregando] = useState(false);
   // Renomear inline: id em edição + valor do input.
@@ -49,7 +51,10 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova }
     setSalvandoNome(true);
     const ok = await renomearFicha(id, titulo);
     setSalvandoNome(false);
-    if (ok) setFichas((prev) => prev.map((f) => (f.id === id ? { ...f, titulo } : f)));
+    if (ok) {
+      setFichas((prev) => prev.map((f) => (f.id === id ? { ...f, titulo } : f)));
+      if (id === fichaAtualId) onRenomeada?.(id, titulo);
+    }
     setEditandoId(null);
   };
 

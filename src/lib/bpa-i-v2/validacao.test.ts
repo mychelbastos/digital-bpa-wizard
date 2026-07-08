@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validarCns, cnsInvalido, dataValida, dataFuturaOuInvalida } from "./validacao";
+import { validarCns, cnsInvalido, dataValida, dataFuturaOuInvalida, atendimentoAntigo } from "./validacao";
 
 describe("validarCns", () => {
   it("aceita CNS provisório válido (início 7)", () => {
@@ -58,5 +58,27 @@ describe("dataFuturaOuInvalida", () => {
   });
   it("não acende para data passada válida", () => {
     expect(dataFuturaOuInvalida(digs("15031990"))).toBe(false);
+  });
+});
+
+describe("atendimentoAntigo", () => {
+  const diasAtras = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return digs(`${String(d.getDate()).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${d.getFullYear()}`);
+  };
+  it("não acende para incompleto", () => {
+    expect(atendimentoAntigo(digs("1503"))).toBe(false);
+  });
+  it("não acende dentro de 120 dias", () => {
+    expect(atendimentoAntigo(diasAtras(119))).toBe(false);
+    expect(atendimentoAntigo(diasAtras(120))).toBe(false);
+  });
+  it("acende acima de 120 dias", () => {
+    expect(atendimentoAntigo(diasAtras(121))).toBe(true);
+  });
+  it("não acende para data futura ou inválida (já tem alerta próprio)", () => {
+    expect(atendimentoAntigo(digs("01012099"))).toBe(false);
+    expect(atendimentoAntigo(digs("31022020"))).toBe(false);
   });
 });

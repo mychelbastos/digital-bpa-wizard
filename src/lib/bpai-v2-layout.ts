@@ -119,6 +119,7 @@ export interface SeqData {
   telefone: string[];
   email: string;
   dataAtend: string[]; // 8 digits
+  dataAtendConfirmada: boolean; // true = pessoa confirmou o aviso de >120 dias p/ esta data
   codProc: string[];
   qtde: string[];
   cnpj: string[];
@@ -137,8 +138,8 @@ export const emptySeq = (): SeqData => ({
   nacionalidade: "1", // v2: padrão Brasileiro (situação de nacionalidade, código CADSUS)
   racaCor: "",
   etnia: "", // v2: só preenchido quando Raça/Cor = Indígena (Portaria 508, Art. 2º)
-  cep: Array(8).fill(""),
-  ibge: Array(7).fill(""),
+  cep: "46800000".split(""), // padrão da unidade (CEP)
+  ibge: "2927200".split(""), // padrão da unidade (Cód. IBGE do município)
   codLog: Array(3).fill(""),
   endereco: "",
   numero: "",
@@ -148,6 +149,7 @@ export const emptySeq = (): SeqData => ({
   telefone: Array(8).fill(""),
   email: "",
   dataAtend: Array(8).fill(""),
+  dataAtendConfirmada: false,
   codProc: Array(10).fill(""),
   qtde: Array(3).fill(""),
   cnpj: Array(14).fill(""),

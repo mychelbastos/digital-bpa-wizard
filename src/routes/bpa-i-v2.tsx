@@ -14,7 +14,8 @@ import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/
 import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAutocomplete";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
-import { cnsInvalido, dataFuturaOuInvalida } from "@/lib/bpa-i-v2/validacao";
+import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo } from "@/lib/bpa-i-v2/validacao";
+import { AtendimentoAntigoAviso } from "@/components/bpa-i-v2/AtendimentoAntigoAviso";
 import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
 import { loadConfig, configCompleta } from "@/lib/bpa-i-v2/config";
 import { gerarArquivoBpa, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
@@ -148,6 +149,7 @@ function BpaI() {
   // Título da ficha atual (quando já salva/carregada), p/ pré-preencher o "Salvar".
   const fichaTituloRef = useRef<string | null>(null);
   const FICHA_ID_KEY = "bpa-i-v2-ficha-id";
+  const FICHA_TITULO_KEY = "bpa-i-v2-ficha-titulo";
   // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
   const [pdfPendente, setPdfPendente] = useState(false);
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
@@ -168,7 +170,10 @@ function BpaI() {
 
   useEffect(() => {
     setState(loadState());
-    try { fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY); } catch { /* noop */ }
+    try {
+      fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
+      fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
+    } catch { /* noop */ }
     setHydrated(true);
   }, []);
 
@@ -184,6 +189,24 @@ function BpaI() {
     return partes.join(" · ") || "Ficha BPA-I";
   };
 
+  // Mantém os refs e o localStorage sincronizados (sobrevive a reload da página).
+  const persistFicha = (id: string, titulo: string) => {
+    fichaIdRef.current = id;
+    fichaTituloRef.current = titulo;
+    try {
+      localStorage.setItem(FICHA_ID_KEY, id);
+      localStorage.setItem(FICHA_TITULO_KEY, titulo);
+    } catch { /* noop */ }
+  };
+  const limparFichaPersistida = () => {
+    fichaIdRef.current = null;
+    fichaTituloRef.current = null;
+    try {
+      localStorage.removeItem(FICHA_ID_KEY);
+      localStorage.removeItem(FICHA_TITULO_KEY);
+    } catch { /* noop */ }
+  };
+
   // Salva (cria ou atualiza) a ficha na nuvem com o nome informado no diálogo.
   // Quando comoNovo=true, ignora a ficha atual e sempre cria uma cópia nova.
   const salvarNaNuvem = async (titulo: string) => {
@@ -195,9 +218,7 @@ function BpaI() {
       return;
     }
     const atualizou = Boolean(idAlvo);
-    fichaIdRef.current = id;
-    fichaTituloRef.current = titulo;
-    try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+    persistFicha(id, titulo);
     setSalvarOpen(false);
     setSalvarComoNovo(false);
     toast.success(atualizou ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
@@ -219,7 +240,7 @@ function BpaI() {
       toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
       return;
     }
-    try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+    persistFicha(id, fichaTituloRef.current);
     toast.success("Alterações salvas na nuvem.");
   };
 
@@ -235,15 +256,11 @@ function BpaI() {
     const dados = await carregarFicha(id);
     if (!dados) return;
     setState({ ...initialState(), ...(dados as Partial<State>) });
-    fichaIdRef.current = id;
-    fichaTituloRef.current = titulo ?? null;
-    try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+    persistFicha(id, titulo ?? "Ficha BPA-I");
   };
   const novaFicha = () => {
     setState(initialState());
-    fichaIdRef.current = null;
-    fichaTituloRef.current = null;
-    try { localStorage.removeItem(FICHA_ID_KEY); } catch { /* noop */ }
+    limparFichaPersistida();
   };
   useEffect(() => {
     if (!hydrated) return;
@@ -290,7 +307,11 @@ function BpaI() {
   const updateSeq = <K extends keyof SeqData>(i: number, field: K, value: SeqData[K]) => {
     setState((p) => {
       const seqs = [...p.seqs];
-      seqs[i] = { ...seqs[i], [field]: value };
+      // Editar a data de atendimento invalida uma confirmação de "aviso >120 dias"
+      // anterior (a pessoa precisa reconfirmar se a data mudou).
+      const desconfirmar = field === "dataAtend" && (value as string[]).join("") !== seqs[i].dataAtend.join("")
+        ? { dataAtendConfirmada: false } : {};
+      seqs[i] = { ...seqs[i], [field]: value, ...desconfirmar };
       return { ...p, seqs };
     });
   };
@@ -574,6 +595,7 @@ function BpaI() {
         onClose={() => setFichasOpen(false)}
         onCarregar={carregarFichaSalva}
         onNova={novaFicha}
+        onRenomeada={persistFicha}
       />
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
@@ -660,6 +682,7 @@ function BpaI() {
             const u = <K extends keyof SeqData>(f: K, v: SeqData[K]) => updateSeq(si, f, v);
             const dnInvalida = hydrated && dataFuturaOuInvalida(s.dataNasc);
             const daInvalida = hydrated && dataFuturaOuInvalida(s.dataAtend);
+            const daAntiga = hydrated && atendimentoAntigo(s.dataAtend) && !s.dataAtendConfirmada;
             return (
               <div key={si}>
                 {/* Paciente row 1: CNS + Nome */}
@@ -726,14 +749,16 @@ function BpaI() {
 
                 {/* Procedimento row 1: Data atend / Cód proc / Qtde / CNPJ */}
                 <DigitBoxes id={`s${si}-dad`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendDia}
-                  values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} compact />
+                  values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} warn={daAntiga} compact />
                 <DigitBoxes id={`s${si}-dam`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendMes}
-                  values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} compact />
+                  values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} compact />
                 <DigitBoxes id={`s${si}-daa`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendAno}
-                  values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} compact />
+                  values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} compact />
                 <FieldClear top={seqTop + R.procRow1} left={endOf(R.dataAtendAno) + 0.5} height={L.DIGIT_H}
                   getInputs={() => inputsOf(`s${si}-dad`, `s${si}-dam`, `s${si}-daa`)}
                   onClear={() => u("dataAtend", Array(8).fill(""))} />
+                <AtendimentoAntigoAviso top={seqTop + R.procRow1} left={96} height={L.DIGIT_H}
+                  ativo={daAntiga} onConfirmar={() => u("dataAtendConfirmada", true)} />
                 <HistoricoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
                   values={s.codProc} onChange={(v) => u("codProc", v)} tabela="procedimento" clearable />
                 <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}

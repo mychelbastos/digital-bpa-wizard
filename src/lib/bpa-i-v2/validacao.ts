@@ -75,6 +75,20 @@ export function dataFuturaOuInvalida(d: string[]): boolean {
   return dataParaNumero(d) > hojeNumero();
 }
 
+// Atendimento com mais de 120 dias — aviso não-bloqueante (a pessoa pode confirmar
+// e seguir mesmo assim). Só considera datas de calendário válidas e não-futuras
+// (essas já têm o alerta próprio de dataFuturaOuInvalida).
+export function atendimentoAntigo(d: string[]): boolean {
+  if (!dataCompleta(d) || !dataValida(d) || dataFuturaOuInvalida(d)) return false;
+  const s = d.join("");
+  const dd = Number(s.slice(0, 2));
+  const mm = Number(s.slice(2, 4));
+  const aaaa = Number(s.slice(4, 8));
+  const dataAtend = new Date(aaaa, mm - 1, dd);
+  const diffDias = Math.floor((Date.now() - dataAtend.getTime()) / 86_400_000);
+  return diffDias > 120;
+}
+
 // CNS completo mas inválido (incompleto nunca acende).
 export function cnsInvalido(cns: string): boolean {
   return cnsCompleto(cns) && !validarCns(cns);

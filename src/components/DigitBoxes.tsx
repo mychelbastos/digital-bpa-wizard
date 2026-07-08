@@ -31,11 +31,14 @@ interface Props {
   rightAlign?: boolean;
   // Marca o grupo como inválido (borda sutil). Só visual/não-bloqueante.
   invalid?: boolean;
+  // Marca o grupo com um aviso não-bloqueante (borda âmbar) — ex.: data antiga que
+  // ainda não foi confirmada pela pessoa. Diferente de `invalid` (que é erro).
+  warn?: boolean;
   // Somente leitura (ex.: campo Total calculado): não aceita digitação.
   readOnly?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, readOnly = false }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -136,7 +139,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           maxLength={1}
           readOnly={readOnly}
           tabIndex={readOnly ? -1 : undefined}
-          className={`form-digit${compact ? " form-digit--compact" : ""}${invalid ? " ring-2 ring-rose-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
