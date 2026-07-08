@@ -30,7 +30,9 @@ import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { HistoricoField } from "@/components/bpa-i-v2/HistoricoField";
+import { ProcedimentoField } from "@/components/bpa-i-v2/ProcedimentoField";
 import { registrarUso } from "@/lib/bpa-i-v2/historico";
+import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
 
@@ -394,13 +396,16 @@ function BpaI() {
   };
 
   // Ao exportar, registra no histórico o CBO do profissional e os procedimentos
-  // preenchidos em cada sequência (alimenta o autocomplete).
+  // preenchidos em cada sequência (alimenta o autocomplete). Só registra o código do
+  // procedimento se ele existir de verdade no SIGTAP — evita que um código digitado
+  // errado vire sugestão de autocomplete pra outras pessoas.
   const registrarUsoDaFicha = () => {
     const cbo = state.profCbo.join("");
     if (cbo.length === L.PROF_CBO_BOXES.length) registrarUso("cbo", cbo);
     for (const sq of state.seqs) {
       const proc = sq.codProc.join("");
-      if (proc.length === L.REL.codProc.length) registrarUso("procedimento", proc);
+      if (proc.length !== L.REL.codProc.length) continue;
+      buscarProcedimentoSigtap(proc).then((p) => { if (p) registrarUso("procedimento", proc); });
     }
   };
 
@@ -759,8 +764,8 @@ function BpaI() {
                   onClear={() => u("dataAtend", Array(8).fill(""))} />
                 <AtendimentoAntigoAviso top={seqTop + R.procRow1} left={96} height={L.DIGIT_H}
                   ativo={daAntiga} onConfirmar={() => u("dataAtendConfirmada", true)} />
-                <HistoricoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
-                  values={s.codProc} onChange={(v) => u("codProc", v)} tabela="procedimento" clearable />
+                <ProcedimentoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
+                  values={s.codProc} onChange={(v) => u("codProc", v)} clearable />
                 <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
                   values={s.qtde} onChange={(v) => u("qtde", v)} clearable compact />
                 <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
