@@ -37,6 +37,20 @@ export async function salvarFicha(
   }
 }
 
+// Renomeia uma ficha (só o título). Retorna true em sucesso.
+export async function renomearFicha(id: string, titulo: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase
+      .from("fichas")
+      .update({ titulo, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 export async function listarFichas(): Promise<FichaResumo[]> {
   if (!supabase) return [];
   try {

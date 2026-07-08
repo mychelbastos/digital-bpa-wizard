@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FolderOpen, X, Trash2, FilePlus2, Loader2 } from "lucide-react";
-import { listarFichas, excluirFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { FolderOpen, X, Trash2, FilePlus2, Loader2, Pencil, Check } from "lucide-react";
+import { listarFichas, excluirFicha, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
 
 interface Props {
   open: boolean;
   fichaAtualId: string | null;
   onClose: () => void;
-  onCarregar: (id: string) => void;
+  onCarregar: (id: string, titulo: string) => void;
   onNova: () => void;
 }
 
@@ -15,10 +15,16 @@ interface Props {
 export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova }: Props) {
   const [fichas, setFichas] = useState<FichaResumo[]>([]);
   const [carregando, setCarregando] = useState(false);
+  // Renomear inline: id em edição + valor do input.
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [novoNome, setNovoNome] = useState("");
+  const [salvandoNome, setSalvandoNome] = useState(false);
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setCarregando(true);
+    setEditandoId(null);
     listarFichas().then((f) => { setFichas(f); setCarregando(false); });
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -29,6 +35,22 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova }
 
   const excluir = async (id: string) => {
     if (await excluirFicha(id)) setFichas((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const iniciarRenomeio = (f: FichaResumo) => {
+    setEditandoId(f.id);
+    setNovoNome(f.titulo || "");
+    setTimeout(() => { editInputRef.current?.focus(); editInputRef.current?.select(); }, 30);
+  };
+
+  const confirmarRenomeio = async (id: string) => {
+    const titulo = novoNome.trim();
+    if (!titulo) { setEditandoId(null); return; }
+    setSalvandoNome(true);
+    const ok = await renomearFicha(id, titulo);
+    setSalvandoNome(false);
+    if (ok) setFichas((prev) => prev.map((f) => (f.id === id ? { ...f, titulo } : f)));
+    setEditandoId(null);
   };
 
   const fmt = (iso: string) => {
@@ -49,7 +71,7 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova }
             <FolderOpen className="size-6" />
           </div>
           <h2 className="mt-3 text-lg font-semibold text-foreground">Minhas fichas</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Salvas automaticamente na sua conta. Abra ou comece uma nova.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Abra, renomeie ou comece uma nova ficha.</p>
         </div>
 
         <div className="px-6 pt-4">
@@ -68,13 +90,36 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova }
           ) : (
             fichas.map((f) => (
               <div key={f.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${f.id === fichaAtualId ? "border-primary/40 bg-primary/5" : "border-border"}`}>
-                <button onClick={() => { onCarregar(f.id); onClose(); }} className="min-w-0 flex-1 text-left">
-                  <div className="truncate text-sm font-medium text-foreground">{f.titulo || "Ficha BPA-I"}</div>
-                  <div className="text-xs text-muted-foreground">{f.competencia ? `Comp. ${f.competencia} · ` : ""}{fmt(f.updated_at)}{f.id === fichaAtualId ? " · atual" : ""}</div>
-                </button>
-                <button aria-label="Excluir" onClick={() => excluir(f.id)} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
-                  <Trash2 className="size-4" />
-                </button>
+                {editandoId === f.id ? (
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <input
+                      ref={editInputRef}
+                      value={novoNome}
+                      onChange={(e) => setNovoNome(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !salvandoNome) confirmarRenomeio(f.id);
+                        if (e.key === "Escape") { e.stopPropagation(); setEditandoId(null); }
+                      }}
+                      className="min-w-0 flex-1 rounded-md border border-primary bg-background px-2 py-1 text-sm text-foreground outline-none ring-2 ring-primary/30"
+                    />
+                    <button aria-label="Confirmar novo nome" onClick={() => confirmarRenomeio(f.id)} disabled={salvandoNome} className="shrink-0 rounded-md p-1.5 text-primary transition-colors hover:bg-primary/10 disabled:opacity-60">
+                      {salvandoNome ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => { onCarregar(f.id, f.titulo || "Ficha BPA-I"); onClose(); }} className="min-w-0 flex-1 text-left">
+                      <div className="truncate text-sm font-medium text-foreground">{f.titulo || "Ficha BPA-I"}</div>
+                      <div className="text-xs text-muted-foreground">{f.competencia ? `Comp. ${f.competencia} · ` : ""}{fmt(f.updated_at)}{f.id === fichaAtualId ? " · atual" : ""}</div>
+                    </button>
+                    <button aria-label="Renomear" onClick={() => iniciarRenomeio(f)} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                      <Pencil className="size-4" />
+                    </button>
+                    <button aria-label="Excluir" onClick={() => excluir(f.id)} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
+                      <Trash2 className="size-4" />
+                    </button>
+                  </>
+                )}
               </div>
             ))
           )}

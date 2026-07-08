@@ -20,7 +20,9 @@ import { loadConfig, configCompleta } from "@/lib/bpa-i-v2/config";
 import { gerarArquivoBpa, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { baixarTxt } from "@/lib/export-txt";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
+import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -136,8 +138,11 @@ function BpaI() {
   // Guarda a intenção de gerar o .txt logo após salvar a config (quando estava incompleta).
   const [gerarAposConfig, setGerarAposConfig] = useState(false);
   const [fichasOpen, setFichasOpen] = useState(false);
-  // Id da ficha no Supabase à qual o autosave grava (persistido p/ continuar após reload).
+  const [salvarOpen, setSalvarOpen] = useState(false);
+  // Id da ficha no Supabase (persistido p/ continuar atualizando a mesma após reload).
   const fichaIdRef = useRef<string | null>(null);
+  // Título da ficha atual (quando já salva/carregada), p/ pré-preencher o "Salvar".
+  const fichaTituloRef = useRef<string | null>(null);
   const FICHA_ID_KEY = "bpa-i-v2-ficha-id";
   // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
   const [pdfPendente, setPdfPendente] = useState(false);
@@ -163,34 +168,46 @@ function BpaI() {
     setHydrated(true);
   }, []);
 
-  // Autosave no Supabase quando logado (debounce). Anônimo segue só no localStorage.
-  const autoKey = user?.cns ?? null;
-  useEffect(() => {
-    if (!hydrated || !autoKey) return;
-    const temConteudo = Boolean(state.nomeEstab || state.cnes.some(Boolean) || state.seqs.some(seqPreenchida));
-    if (!temConteudo) return;
-    const t = setTimeout(async () => {
-      const comp = state.profAno.join("") + state.profMes.join("");
-      const id = await salvarFicha(fichaIdRef.current, state.nomeEstab || "Ficha BPA-I", comp, state);
-      if (id) {
-        fichaIdRef.current = id;
-        try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
-      }
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [state, hydrated, autoKey]);
+  // Nome sugerido ao salvar: "primeiro nome do profissional · data de hoje · Folha nnn".
+  // Se a ficha já foi salva antes, sugere o título atual (para não trocar sem querer).
+  const nomeSugerido = (): string => {
+    if (fichaTituloRef.current) return fichaTituloRef.current;
+    const primeiroNome = state.profNome.trim().split(/\s+/)[0] ?? "";
+    const hoje = new Date().toLocaleDateString("pt-BR");
+    const folha = state.profFolha.join("").replace(/^0+(?=\d)/, "");
+    const partes = [primeiroNome, hoje, folha ? `Folha ${folha}` : ""].filter(Boolean);
+    return partes.join(" · ") || "Ficha BPA-I";
+  };
 
-  // Carrega uma ficha salva; começa uma nova (limpa e desvincula o autosave).
-  const carregarFichaSalva = async (id: string) => {
+  // Salva (cria ou atualiza) a ficha na nuvem com o nome informado no diálogo.
+  const salvarNaNuvem = async (titulo: string) => {
+    const comp = state.profAno.join("") + state.profMes.join("");
+    const id = await salvarFicha(fichaIdRef.current, titulo, comp, state);
+    if (!id) {
+      toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
+      return;
+    }
+    const atualizou = Boolean(fichaIdRef.current);
+    fichaIdRef.current = id;
+    fichaTituloRef.current = titulo;
+    try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+    setSalvarOpen(false);
+    toast.success(atualizou ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
+  };
+
+  // Carrega uma ficha salva; começa uma nova (limpa e desvincula da ficha atual).
+  const carregarFichaSalva = async (id: string, titulo?: string) => {
     const dados = await carregarFicha(id);
     if (!dados) return;
     setState({ ...initialState(), ...(dados as Partial<State>) });
     fichaIdRef.current = id;
+    fichaTituloRef.current = titulo ?? null;
     try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
   };
   const novaFicha = () => {
     setState(initialState());
     fichaIdRef.current = null;
+    fichaTituloRef.current = null;
     try { localStorage.removeItem(FICHA_ID_KEY); } catch { /* noop */ }
   };
   useEffect(() => {
@@ -404,6 +421,11 @@ function BpaI() {
           <div className="flex flex-wrap items-center gap-2">
             <LoginControl user={user} />
             {user && (
+              <button onClick={() => setSalvarOpen(true)} title="Salvar esta ficha na sua conta (nuvem)" className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10">
+                💾 Salvar{fichaTituloRef.current ? "" : " ficha"}
+              </button>
+            )}
+            {user && (
               <button onClick={() => setFichasOpen(true)} title="Fichas salvas na sua conta" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
                 📁 Minhas fichas
               </button>
@@ -475,6 +497,14 @@ function BpaI() {
         open={configOpen}
         onClose={() => { setConfigOpen(false); setGerarAposConfig(false); }}
         onSaved={() => { if (gerarAposConfig) { setGerarAposConfig(false); exportTxt(); } }}
+      />
+
+      <SalvarFichaModal
+        open={salvarOpen}
+        defaultNome={nomeSugerido()}
+        atualizando={Boolean(fichaIdRef.current)}
+        onSalvar={salvarNaNuvem}
+        onClose={() => setSalvarOpen(false)}
       />
 
       <MinhasFichas
