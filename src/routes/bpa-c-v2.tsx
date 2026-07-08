@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpacBg from "@/assets/bpa-c.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
+import { salvarFicha } from "@/lib/bpa-i-v2/fichas";
+import { hashProducao, registrarProducaoBpa } from "@/lib/dashboard-producao";
+import { toast } from "sonner";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS,
@@ -69,9 +72,12 @@ function BpaCV2() {
   const [hydrated, setHydrated] = useState(false);
   const [printing, setPrinting] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const fichaIdRef = useRef<string | null>(null);
+  const FICHA_ID_KEY = "bpa-c-v2-ficha-id";
 
   useEffect(() => {
     setState(loadState());
+    try { fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY); } catch { /* noop */ }
     setHydrated(true);
   }, []);
 
@@ -111,12 +117,60 @@ function BpaCV2() {
     await new Promise((r) => setTimeout(r, 80));
     try {
       await exportSheetPdf(sheetRef.current, "BPA-C.pdf");
+      await registrarExportacaoPdf();
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Falha ao gerar PDF. Veja o console para detalhes.");
     } finally {
       setPrinting(false);
     }
+  };
+
+  const competencia = () => {
+    const comp = state.ano.join("") + state.mes.join("");
+    if (/^[0-9]{6}$/.test(comp)) return comp;
+    const hoje = new Date();
+    return `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const registrarExportacaoPdf = async () => {
+    const comp = competencia();
+    const cnes = state.cnes.join("");
+    const titulo = `BPA-C ${state.nome || cnes || "ficha"} ${comp}`.trim();
+    const id = await salvarFicha(fichaIdRef.current, titulo, comp, state, {
+      tipo: "BPA-C",
+      cnes,
+    });
+
+    if (!id) {
+      toast.warning("PDF gerado, mas não consegui salvar a ficha/produção na nuvem.");
+      return;
+    }
+    fichaIdRef.current = id;
+    try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+
+    const linhas = await Promise.all(state.rows.map(async (r, index) => {
+      const procedimento = r.procedimento.join("");
+      const quantidade = Number(r.quantidade.join("")) || 0;
+      if (!procedimento || quantidade <= 0) return null;
+      const cbo = r.cbo.join("");
+      const sourceKey = await hashProducao(["BPA-C", comp, cnes, state.folha.join(""), index, procedimento, cbo, r.idade.join(""), quantidade]);
+      return {
+        sourceKey,
+        fichaId: id,
+        tipo: "BPA-C" as const,
+        competencia: comp,
+        cnes,
+        estabelecimentoNome: state.nome,
+        cbo,
+        procedimento,
+        quantidade,
+        idade: Number(r.idade.join("")) || null,
+      };
+    }));
+
+    const ok = await registrarProducaoBpa(linhas.filter((l): l is NonNullable<typeof l> => Boolean(l)), "pdf");
+    if (!ok) toast.warning("PDF gerado, mas a produção não foi registrada na dashboard.");
   };
 
   // Total calculado em tempo real a partir das quantidades das 20 linhas.

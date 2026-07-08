@@ -10,25 +10,42 @@ export interface FichaResumo {
   updated_at: string;
 }
 
+export interface FichaMetadados {
+  tipo?: "BPA-C" | "BPA-I";
+  cnes?: string | null;
+  profissionalCns?: string | null;
+  profissionalNome?: string | null;
+}
+
 // Cria (id null) ou atualiza uma ficha. Retorna o id (ou null em falha).
 export async function salvarFicha(
   id: string | null,
   titulo: string,
   competencia: string,
   dados: unknown,
+  meta: FichaMetadados = {},
 ): Promise<string | null> {
   if (!supabase) return null;
+  const payload = {
+    titulo,
+    competencia,
+    dados,
+    tipo: meta.tipo ?? "BPA-I",
+    cnes: meta.cnes || null,
+    profissional_cns: meta.profissionalCns || null,
+    profissional_nome: meta.profissionalNome || null,
+  };
   try {
     if (id) {
       const { error } = await supabase
         .from("fichas")
-        .update({ titulo, competencia, dados, updated_at: new Date().toISOString() })
+        .update({ ...payload, updated_at: new Date().toISOString() })
         .eq("id", id);
       return error ? null : id;
     }
     const { data, error } = await supabase
       .from("fichas")
-      .insert({ titulo, competencia, dados })
+      .insert(payload)
       .select("id")
       .single();
     return error || !data ? null : (data as { id: string }).id;

@@ -11,12 +11,13 @@ import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
 import { cnsInvalido } from "@/lib/bpa-i-v2/validacao";
 import { SequenciaFields } from "@/components/bpa-i-v2/SequenciaFields";
 import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
-import { loadConfig, configCompleta } from "@/lib/bpa-i-v2/config";
-import { gerarArquivoBpa, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
+import { loadConfig } from "@/lib/bpa-i-v2/config";
+import { gerarArquivoBpa, idadeAnos, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { baixarTxt } from "@/lib/export-txt";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { hashProducao, registrarProducaoBpa, type FormatoGerado } from "@/lib/dashboard-producao";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
@@ -182,6 +183,12 @@ function BpaI() {
   const inputsOf = (...keys: string[]) => keys.flatMap((k) => boxRefs.current[k] ?? []);
   // Borda direita (%) do último grupo — onde a lixeira do campo composto é ancorada.
   const endOf = (arr: { left: number; width: number }[]) => arr[arr.length - 1].left + arr[arr.length - 1].width;
+  const competencia = () => state.profAno.join("") + state.profMes.join("");
+  const dataIso = (d: string[]) => {
+    const s = d.join("");
+    if (s.length !== 8) return null;
+    return `${s.slice(4, 8)}-${s.slice(2, 4)}-${s.slice(0, 2)}`;
+  };
 
   useEffect(() => {
     setState(loadState());
@@ -225,9 +232,14 @@ function BpaI() {
   // Salva (cria ou atualiza) a ficha na nuvem com o nome informado no diálogo.
   // Quando comoNovo=true, ignora a ficha atual e sempre cria uma cópia nova.
   const salvarNaNuvem = async (titulo: string) => {
-    const comp = state.profAno.join("") + state.profMes.join("");
+    const comp = competencia();
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
-    const id = await salvarFicha(idAlvo, titulo, comp, state);
+    const id = await salvarFicha(idAlvo, titulo, comp, state, {
+      tipo: "BPA-I",
+      cnes: state.cnes.join(""),
+      profissionalCns: state.profCns.join(""),
+      profissionalNome: state.profNome,
+    });
     if (!id) {
       toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
       return;
@@ -252,8 +264,13 @@ function BpaI() {
       return;
     }
     setSalvandoDireto(true);
-    const comp = state.profAno.join("") + state.profMes.join("");
-    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current, comp, state);
+    const comp = competencia();
+    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current, comp, state, {
+      tipo: "BPA-I",
+      cnes: state.cnes.join(""),
+      profissionalCns: state.profCns.join(""),
+      profissionalNome: state.profNome,
+    });
     setSalvandoDireto(false);
     if (!id) {
       toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
@@ -392,16 +409,19 @@ function BpaI() {
       await document.fonts?.ready; // garante a fonte cursiva carregada antes da captura
       await exportSheetPdf(sheetRef.current, "BPA-I.pdf");
       setPdfPendente(false); // PDF gerado p/ o estado atual
-      registrarUsoDaFicha();
+      await registrarExportacao("pdf");
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Falha ao gerar PDF. Veja o console.");
     } finally { setPrinting(false); }
   };
 
-  // Gera e baixa o arquivo magnético BPA (.txt). Exige config do estabelecimento
-  // completa (senão abre o painel) e ao menos uma sequência com procedimento.
-  const exportTxt = () => {
+  // Gera e baixa o arquivo magnético BPA (.txt). Precisa apenas de ao menos uma
+  // sequência com procedimento. A "Configuração do estabelecimento" é OPCIONAL: o
+  // cabeçalho do arquivo continua válido com esses campos em branco, e o BPA
+  // Magnético já tem os dados do órgão cadastrados na hora de importar. Quem quiser
+  // preencher usa o botão ⚙ manualmente.
+  const exportTxt = async () => {
     if (temCamposInvalidos) {
       toast.error("Corrija os campos em vermelho antes de gerar o arquivo .txt.");
       return;
@@ -411,15 +431,10 @@ function BpaI() {
       return;
     }
     const cfg = loadConfig();
-    if (!configCompleta(cfg)) {
-      setGerarAposConfig(true);
-      setConfigOpen(true);
-      return;
-    }
     try {
       const arq = gerarArquivoBpa(state, cfg);
       baixarTxt(arq.nome, arq.conteudo);
-      registrarUsoDaFicha();
+      await registrarExportacao("txt");
     } catch (err) {
       console.error("Falha ao gerar arquivo magnético", err);
       alert("Falha ao gerar o arquivo magnético. Veja o console.");
@@ -438,6 +453,71 @@ function BpaI() {
       if (proc.length !== L.REL.codProc.length) continue;
       buscarProcedimentoSigtap(proc).then((p) => { if (p) registrarUso("procedimento", proc); });
     }
+  };
+
+  const garantirFichaExportada = async () => {
+    const titulo = fichaTituloRef.current ?? nomeSugerido();
+    const id = await salvarFicha(fichaIdRef.current, titulo, competencia(), state, {
+      tipo: "BPA-I",
+      cnes: state.cnes.join(""),
+      profissionalCns: state.profCns.join(""),
+      profissionalNome: state.profNome,
+    });
+    if (id) persistFicha(id, titulo);
+    return id;
+  };
+
+  const registrarExportacao = async (formato: FormatoGerado) => {
+    registrarUsoDaFicha();
+    const fichaId = await garantirFichaExportada();
+    if (!fichaId) {
+      toast.warning("Arquivo gerado, mas não consegui salvar a ficha/produção na nuvem.");
+      return;
+    }
+
+    const cnes = state.cnes.join("");
+    const comp = competencia();
+    const profCns = state.profCns.join("");
+    const cbo = state.profCbo.join("");
+    const linhas = await Promise.all(state.seqs.map(async (s, index) => {
+      if (!seqPreenchida(s)) return null;
+      const procedimento = s.codProc.join("");
+      const sourceKey = await hashProducao([
+        "BPA-I",
+        comp,
+        cnes,
+        profCns,
+        state.profFolha.join(""),
+        index,
+        procedimento,
+        s.dataAtend.join(""),
+        s.cnsPac.join(""),
+        s.qtde.join(""),
+      ]);
+      return {
+        sourceKey,
+        fichaId,
+        tipo: "BPA-I" as const,
+        competencia: comp,
+        dataAtendimento: dataIso(s.dataAtend),
+        cnes,
+        estabelecimentoNome: state.nomeEstab,
+        municipioIbge: s.ibge.join(""),
+        profissionalCns: profCns,
+        profissionalNome: state.profNome,
+        cbo,
+        procedimento,
+        quantidade: Number(s.qtde.join("")) || 1,
+        servico: s.servico.join(""),
+        classificacao: s.classProc.join(""),
+        cid: s.cid.join("").trim(),
+        carater: s.carater.join(""),
+        idade: idadeAnos(s.dataNasc, s.dataAtend) || null,
+      };
+    }));
+
+    const ok = await registrarProducaoBpa(linhas.filter((l): l is NonNullable<typeof l> => Boolean(l)), formato);
+    if (!ok) toast.warning("Arquivo gerado, mas a produção não foi registrada na dashboard.");
   };
 
   // Tem conteúdo preenchido que valha avisar antes de zerar?
