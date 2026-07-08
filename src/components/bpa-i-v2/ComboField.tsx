@@ -16,6 +16,10 @@ interface Props {
   invalid?: boolean;
   // Explica o motivo do `invalid` (tooltip nativo ao passar o mouse/tocar).
   title?: string;
+  // Ao focar (antes de digitar), mostra TODAS as opções (padrão — bom p/ listas
+  // pequenas, ex.: Raça/Cor). Em listas grandes (ex.: Município, 5mil+ linhas), passe
+  // `false`: em vez da lista inteira, mostra um popover só com o nome já selecionado.
+  mostrarTodosAoFocar?: boolean;
 }
 
 const norm = (s: string) =>
@@ -24,7 +28,7 @@ const norm = (s: string) =>
 // Combobox posicionado em % da form-sheet (igual aos demais campos, p/ o export do PDF
 // capturar o <input> e mostrar o NOME selecionado). Guarda o código, exibe o rótulo.
 // Sugestão por tecla (primeira letra filtra) + confirmar com Tab/Enter.
-export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label", invalid = false, title }: Props) {
+export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label", invalid = false, title, mostrarTodosAoFocar = true }: Props) {
   const labelOf = (code: string) => options.find((o) => o.code === code)?.label ?? "";
   // O que aparece na caixa para um código: o rótulo, ou o próprio código.
   const shown = (code: string) => (display === "code" ? (labelOf(code) ? code : "") : labelOf(code));
@@ -46,8 +50,11 @@ export function ComboField({ value, onChange, options, top, left, width, height,
     const tokens = norm(o.search ?? o.label).split(/\s+/).filter(Boolean);
     return o.code.startsWith(q) || tokens.some((t) => t.startsWith(q));
   });
-  // Ao focar (ainda sem digitar), mostra todas as opções; depois, filtra pelo que foi digitado.
-  const list = !open ? [] : typed && q ? matches : options;
+  // Ao focar (ainda sem digitar): listas pequenas mostram todas as opções; listas
+  // grandes (mostrarTodosAoFocar=false) não mostram nada ainda (só o popover do nome
+  // já selecionado, abaixo). Depois de digitar, sempre filtra pelo que foi digitado.
+  const list = !open ? [] : typed && q ? matches : mostrarTodosAoFocar ? options : [];
+  const mostrarNomeSelecionado = open && !typed && !mostrarTodosAoFocar && Boolean(labelOf(value));
 
   const pick = (o: ComboOption) => {
     onChange(o.code);
@@ -118,6 +125,15 @@ export function ComboField({ value, onChange, options, top, left, width, height,
           }
         }}
       />
+      {mostrarNomeSelecionado && !disabled && (
+        <div
+          data-html2canvas-ignore="true"
+          className="absolute z-[60] max-w-[280px] rounded-md border border-border bg-white px-3 py-1.5 text-xs text-foreground shadow-lg"
+          style={{ top: `calc(${top + height}% + 2px)`, left: `${left}%` }}
+        >
+          {labelOf(value)}
+        </div>
+      )}
       {open && !disabled && list.length > 0 && (
         <ul
           className="absolute z-[60] max-h-52 min-w-[160px] overflow-auto rounded-md border border-border bg-white py-1 text-sm shadow-lg"

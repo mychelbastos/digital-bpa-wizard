@@ -7,6 +7,9 @@ export interface ComboOption {
   label: string;
   /** Texto extra para busca (ex.: sinônimos da etnia), normalizado em tokens. */
   search?: string;
+  /** Versão abreviada do rótulo, p/ exibir ao lado de campos de código estreitos
+   * (ex.: Caráter de Atendimento) onde o nome completo não cabe. */
+  curto?: string;
 }
 
 export const RACAS: ComboOption[] = [

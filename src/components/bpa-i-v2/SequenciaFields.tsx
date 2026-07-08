@@ -9,10 +9,12 @@ import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
 import { NACIONALIDADES } from "@/lib/bpa-i-v2/nacionalidades";
 import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
-import { buscarIbgePorCep } from "@/lib/bpa-i-v2/cep";
+import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
+import { buscarNomeServicoClasse, buscarNomeCid } from "@/lib/bpa-i-v2/nomes-sigtap";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo } from "@/lib/bpa-i-v2/validacao";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
+import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
 import * as L from "@/lib/bpai-v2-layout";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 
@@ -54,16 +56,20 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
   const dnTitle = dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
   const daTitle = daInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
 
-  // Cruza CEP × Cód. IBGE Município: busca o IBGE real do CEP (ViaCEP, com fallback
-  // por nome via BrasilAPI) e compara com o município selecionado no campo ao lado.
+  // Cruza CEP × Cód. IBGE Município: busca o município real do CEP (ViaCEP, com
+  // fallback por nome via BrasilAPI), compara com o município selecionado no campo ao
+  // lado, e guarda o nome pro popover informativo (mesmo quando bate certinho).
   const cep = s.cep.join("");
   const ibge = s.ibge.join("");
+  const [cepCidadeUf, setCepCidadeUf] = useState<string | null>(null);
   const [cepMotivo, setCepMotivo] = useState<string | undefined>(undefined);
   useEffect(() => {
-    if (cep.length !== 8 || ibge.length !== 7) { setCepMotivo(undefined); return; }
+    if (cep.length !== 8) { setCepCidadeUf(null); setCepMotivo(undefined); return; }
     let cancel = false;
-    buscarIbgePorCep(cep).then((ibgeCep) => {
-      if (cancel || !ibgeCep || ibgeCep === ibge) { if (!cancel) setCepMotivo(undefined); return; }
+    buscarInfoCep(cep).then(({ ibge: ibgeCep, cidadeUf }) => {
+      if (cancel) return;
+      setCepCidadeUf(cidadeUf);
+      if (!ibgeCep || ibge.length !== 7 || ibgeCep === ibge) { setCepMotivo(undefined); return; }
       const nomeCep = MUNICIPIOS_IBGE.find((m) => m.code === ibgeCep)?.label ?? ibgeCep;
       const nomeSel = MUNICIPIOS_IBGE.find((m) => m.code === ibge)?.label ?? ibge;
       setCepMotivo(`CEP pertence a ${nomeCep}, mas o município selecionado é ${nomeSel}.`);
@@ -71,6 +77,30 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
     return () => { cancel = true; };
   }, [cep, ibge]);
   const cepIbgeDivergente = hydrated && Boolean(cepMotivo);
+
+  // Nome do Serviço + Classificação (popover informativo, mesma tabela do SIGTAP).
+  const servico = s.servico.join("");
+  const classProc = s.classProc.join("");
+  const [nomeServicoClasse, setNomeServicoClasse] = useState<string | null>(null);
+  useEffect(() => {
+    if (servico.length !== 3 || classProc.length !== 3) { setNomeServicoClasse(null); return; }
+    let cancel = false;
+    buscarNomeServicoClasse(servico, classProc).then((nome) => { if (!cancel) setNomeServicoClasse(nome); });
+    return () => { cancel = true; };
+  }, [servico, classProc]);
+
+  // Nome/descrição do CID — só existe se o código estiver na tabela do SIGTAP importada.
+  const cidTxt = s.cid.join("").trim();
+  const [nomeCid, setNomeCid] = useState<string | null>(null);
+  useEffect(() => {
+    if (cidTxt.length < 3) { setNomeCid(null); return; }
+    let cancel = false;
+    buscarNomeCid(cidTxt).then((nome) => { if (!cancel) setNomeCid(nome); });
+    return () => { cancel = true; };
+  }, [cidTxt]);
+
+  // Nome abreviado do Caráter de Atendimento selecionado, mostrado ao lado do código.
+  const caraterNome = CARATERES.find((c) => c.code === s.carater.join(""))?.curto;
 
   const motivos = [
     cnsPacInvalido && CNS_MOTIVO,
@@ -119,10 +149,12 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
         options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
         disabled={s.racaCor !== RACA_INDIGENA} />
       <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
-        values={s.cep} onChange={(v) => u("cep", v)} invalid={cepIbgeDivergente} title={cepMotivo} clearable compact />
+        values={s.cep} onChange={(v) => u("cep", v)} registerRefs={regBox(`s${si}-cep`)} invalid={cepIbgeDivergente} title={cepMotivo} clearable compact />
+      <NomeAoFocarPopover top={seqTop + R.row2} left={R.cep[0].left} height={L.DIGIT_H}
+        getInputs={() => inputsOf(`s${si}-cep`)} texto={cepMotivo ?? cepCidadeUf} />
       <ComboField top={seqTop + R.row2} left={R.ibge[0].left}
         width={R.ibge[R.ibge.length - 1].left + R.ibge[R.ibge.length - 1].width - R.ibge[0].left}
-        height={L.DIGIT_H} options={MUNICIPIOS_IBGE} display="code"
+        height={L.DIGIT_H} options={MUNICIPIOS_IBGE} display="code" mostrarTodosAoFocar={false}
         value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} invalid={cepIbgeDivergente} title={cepMotivo} />
 
       {/* Row 3: Cod Logradouro / Endereço / Número / Complemento */}
@@ -172,15 +204,33 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
 
       {/* Procedimento row 2: Serviço / Class / CID / Caráter / Autorização */}
       <DigitBoxes id={`s${si}-srv`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.servico}
-        values={s.servico} onChange={(v) => u("servico", v)} invalid={hydrated && val.servicoInvalido} title={val.servicoMotivo} compact />
+        values={s.servico} onChange={(v) => u("servico", v)} registerRefs={regBox(`s${si}-srv`)} invalid={hydrated && val.servicoInvalido} title={val.servicoMotivo} compact />
       <DigitBoxes id={`s${si}-cls`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.classProc}
-        values={s.classProc} onChange={(v) => u("classProc", v)} invalid={hydrated && val.servicoInvalido} title={val.servicoMotivo} compact />
+        values={s.classProc} onChange={(v) => u("classProc", v)} registerRefs={regBox(`s${si}-cls`)} invalid={hydrated && val.servicoInvalido} title={val.servicoMotivo} compact />
+      <NomeAoFocarPopover top={seqTop + R.procRow2} left={R.servico[0].left} height={L.DIGIT_H}
+        getInputs={() => inputsOf(`s${si}-srv`, `s${si}-cls`)} texto={val.servicoMotivo ?? nomeServicoClasse} />
       <DigitBoxes id={`s${si}-cid`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.cid}
-        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} invalid={hydrated && val.cidInvalido} title={val.cidMotivo} compact />
+        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} registerRefs={regBox(`s${si}-cid`)} invalid={hydrated && val.cidInvalido} title={val.cidMotivo} compact />
+      <NomeAoFocarPopover top={seqTop + R.procRow2} left={R.cid[0].left} height={L.DIGIT_H}
+        getInputs={() => inputsOf(`s${si}-cid`)} texto={val.cidMotivo ?? nomeCid} />
       <ComboField top={seqTop + R.procRow2} left={R.carater[0].left}
         width={R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width - R.carater[0].left}
         height={L.DIGIT_H} options={CARATERES} display="code"
         value={s.carater.join("")} onChange={(v) => u("carater", v.split(""))} />
+      {caraterNome && (
+        <div
+          data-html2canvas-ignore="true"
+          className="absolute flex items-center overflow-hidden whitespace-nowrap text-[10px] font-medium text-muted-foreground"
+          style={{
+            top: `${seqTop + R.procRow2}%`,
+            left: `${R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width + 1}%`,
+            width: `${R.autorizacao[0].left - (R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width) - 1.5}%`,
+            height: `${L.DIGIT_H}%`,
+          }}
+        >
+          {caraterNome}
+        </div>
+      )}
       <DigitBoxes id={`s${si}-aut`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.autorizacao}
         values={s.autorizacao} onChange={(v) => u("autorizacao", v)} clearable compact />
     </div>

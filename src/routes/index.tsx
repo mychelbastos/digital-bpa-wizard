@@ -48,7 +48,7 @@ function Home() {
 
         <div className="grid gap-6 sm:grid-cols-2">
           <Link
-            to="/bpa-c"
+            to="/bpa-c-v2"
             className="group rounded-xl border bg-card p-6 shadow-sm transition hover:shadow-md"
           >
             <div className="aspect-[553/786] overflow-hidden rounded-md border bg-white">
@@ -60,7 +60,7 @@ function Home() {
           </Link>
 
           <Link
-            to="/bpa-i"
+            to="/bpa-i-v2"
             className="group rounded-xl border bg-card p-6 shadow-sm transition hover:shadow-md"
           >
             <div className="aspect-[553/786] overflow-hidden rounded-md border bg-white">
@@ -69,25 +69,6 @@ function Home() {
             <h2 className="mt-4 text-lg font-semibold">BPA-I</h2>
             <p className="text-sm text-muted-foreground">Boletim de Produção Ambulatorial — Individualizado</p>
             <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">Abrir formulário →</span>
-          </Link>
-        </div>
-
-        <div className="mt-6 flex flex-wrap justify-center gap-3 text-center">
-          <Link
-            to="/bpa-c-v2"
-            className="inline-flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800">v2</span>
-            BPA-C v2 — total automático
-            <span aria-hidden>→</span>
-          </Link>
-          <Link
-            to="/bpa-i-v2"
-            className="inline-flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">beta</span>
-            BPA-I v2 — campos inteligentes (em teste)
-            <span aria-hidden>→</span>
           </Link>
         </div>
       </div>
