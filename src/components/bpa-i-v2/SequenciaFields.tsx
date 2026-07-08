@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import { ComboField } from "@/components/bpa-i-v2/ComboField";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
@@ -25,13 +26,20 @@ interface Props {
   focusBox: (key: string) => void;
   inputsOf: (...keys: string[]) => HTMLInputElement[];
   endOf: (arr: Box[]) => number;
+  // Reporta ao componente pai a lista de motivos de erro desta sequência (undefined/[]
+  // = tudo ok). O pai agrega as 3 sequências p/ bloquear Salvar/Gerar enquanto houver erro.
+  onValidacaoChange?: (si: number, motivos: string[]) => void;
 }
+
+const CNS_MOTIVO = "CNS inválido (dígito verificador não confere).";
+const DATA_INVALIDA_MOTIVO = "Data inválida ou no futuro.";
 
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
 // (não dá pra chamar hooks dentro do .map() do componente pai).
-export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf }: Props) {
+export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange }: Props) {
   const R = L.REL;
+  const cnsPacInvalido = hydrated && cnsInvalido(s.cnsPac.join(""));
   const dnInvalidaData = hydrated && dataFuturaOuInvalida(s.dataNasc);
   const daInvalidaData = hydrated && dataFuturaOuInvalida(s.dataAtend);
   const daAntiga = hydrated && atendimentoAntigo(s.dataAtend) && !s.dataAtendConfirmada;
@@ -41,26 +49,39 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
   const val = useValidacaoProcedimento(s);
   const dnInvalida = dnInvalidaData || (hydrated && val.idadeInvalida);
   const daInvalida = daInvalidaData || (hydrated && val.idadeInvalida);
+  const dnTitle = dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
+  const daTitle = daInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
+
+  const motivos = [
+    cnsPacInvalido && CNS_MOTIVO,
+    (dnInvalidaData || daInvalidaData) && DATA_INVALIDA_MOTIVO,
+    ...val.motivos,
+  ].filter((m): m is string => Boolean(m));
+
+  useEffect(() => {
+    onValidacaoChange?.(si, motivos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motivos.join("|")]);
 
   return (
     <div>
       {/* Paciente row 1: CNS + Nome */}
       <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-        values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={hydrated && cnsInvalido(s.cnsPac.join(""))} clearable compact />
+        values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={cnsPacInvalido} title={CNS_MOTIVO} clearable compact />
       <TextField top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
         value={s.nomePac} onChange={(v) => u("nomePac", v)} />
 
       {/* Row 2: Sexo / Data Nasc / Nacion / RaçaCor / Etnia / CEP / IBGE */}
       <TextField top={seqTop + R.row2} left={R.sexoM.left} width={R.sexoM.width} height={L.DIGIT_H} align="center"
-        value={s.sexo === "M" ? "X" : ""} onChange={(v) => u("sexo", v ? "M" : "")} invalid={hydrated && s.sexo === "M" && val.sexoInvalido} />
+        value={s.sexo === "M" ? "X" : ""} onChange={(v) => u("sexo", v ? "M" : "")} invalid={hydrated && s.sexo === "M" && val.sexoInvalido} title={val.sexoMotivo} />
       <TextField top={seqTop + R.row2} left={R.sexoF.left} width={R.sexoF.width} height={L.DIGIT_H} align="center"
-        value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} invalid={hydrated && s.sexo === "F" && val.sexoInvalido} />
+        value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} invalid={hydrated && s.sexo === "F" && val.sexoInvalido} title={val.sexoMotivo} />
       <DigitBoxes id={`s${si}-dnd`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascDia}
-        values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} invalid={dnInvalida} compact />
+        values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} invalid={dnInvalida} title={dnTitle} compact />
       <DigitBoxes id={`s${si}-dnm`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascMes}
-        values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} invalid={dnInvalida} compact />
+        values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} invalid={dnInvalida} title={dnTitle} compact />
       <DigitBoxes id={`s${si}-dna`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascAno}
-        values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} invalid={dnInvalida} compact />
+        values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} invalid={dnInvalida} title={dnTitle} compact />
       <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
         onClear={() => u("dataNasc", Array(8).fill(""))} />
@@ -108,11 +129,11 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
 
       {/* Procedimento row 1: Data atend / Cód proc / Qtde / CNPJ */}
       <DigitBoxes id={`s${si}-dad`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendDia}
-        values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} warn={daAntiga} compact />
+        values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} warn={daAntiga} title={daTitle} compact />
       <DigitBoxes id={`s${si}-dam`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendMes}
-        values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} compact />
+        values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} title={daTitle} compact />
       <DigitBoxes id={`s${si}-daa`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendAno}
-        values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} compact />
+        values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} title={daTitle} compact />
       <FieldClear top={seqTop + R.procRow1} left={endOf(R.dataAtendAno) + 0.5} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-dad`, `s${si}-dam`, `s${si}-daa`)}
         onClear={() => u("dataAtend", Array(8).fill(""))} />
@@ -122,17 +143,17 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
         values={s.codProc} onChange={(v) => u("codProc", v)} clearable
         naoEncontrado={hydrated && val.procNaoEncontrado} nomeEncontrado={val.proc?.nome ?? null} />
       <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
-        values={s.qtde} onChange={(v) => u("qtde", v)} invalid={hydrated && val.qtdeInvalida} clearable compact separated />
+        values={s.qtde} onChange={(v) => u("qtde", v)} invalid={hydrated && val.qtdeInvalida} title={val.qtdeMotivo} clearable compact separated />
       <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
         values={s.cnpj} onChange={(v) => u("cnpj", v)} clearable compact />
 
       {/* Procedimento row 2: Serviço / Class / CID / Caráter / Autorização */}
       <DigitBoxes id={`s${si}-srv`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.servico}
-        values={s.servico} onChange={(v) => u("servico", v)} invalid={hydrated && val.servicoInvalido} compact />
+        values={s.servico} onChange={(v) => u("servico", v)} invalid={hydrated && val.servicoInvalido} title={val.servicoMotivo} compact />
       <DigitBoxes id={`s${si}-cls`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.classProc}
-        values={s.classProc} onChange={(v) => u("classProc", v)} invalid={hydrated && val.servicoInvalido} compact />
+        values={s.classProc} onChange={(v) => u("classProc", v)} invalid={hydrated && val.servicoInvalido} title={val.servicoMotivo} compact />
       <DigitBoxes id={`s${si}-cid`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.cid}
-        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} invalid={hydrated && val.cidInvalido} compact />
+        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} invalid={hydrated && val.cidInvalido} title={val.cidMotivo} compact />
       <ComboField top={seqTop + R.procRow2} left={R.carater[0].left}
         width={R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width - R.carater[0].left}
         height={L.DIGIT_H} options={CARATERES} display="code"

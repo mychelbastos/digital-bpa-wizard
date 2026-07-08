@@ -40,9 +40,11 @@ interface Props {
   // campos muito estreitos onde os dígitos ficam "colados". Some do PDF (mesma regra
   // que já zera bordas no .form-sheet--print).
   separated?: boolean;
+  // Explica o motivo de um `invalid`/`warn` (tooltip nativo ao passar o mouse/tocar).
+  title?: string;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -154,6 +156,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           maxLength={1}
           readOnly={readOnly}
           tabIndex={readOnly ? -1 : undefined}
+          title={invalid || warn ? title : undefined}
           className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
           style={{
             position: "absolute",
@@ -203,13 +206,16 @@ interface TextProps {
   align?: "left" | "center";
   // Marca o campo como inválido (borda vermelha sutil). Só visual/não-bloqueante.
   invalid?: boolean;
+  // Explica o motivo do `invalid` (tooltip nativo ao passar o mouse/tocar).
+  title?: string;
 }
 
-export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false }: TextProps) {
+export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false, title }: TextProps) {
   return (
     <input
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      title={invalid ? title : undefined}
       className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}`}
       style={{
         position: "absolute",

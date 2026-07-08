@@ -20,6 +20,25 @@ export interface ValidacaoProcedimento {
   qtdeInvalida: boolean;
   servicoInvalido: boolean; // combinação Serviço+Classe não existe p/ este procedimento
   cidInvalido: boolean;
+  // Motivo legível de cada checagem (undefined quando ela está ok) — vira tooltip do
+  // campo em vermelho. `motivos` junta tudo p/ o resumo/bloqueio de exportar-salvar.
+  procNaoEncontradoMotivo?: string;
+  sexoMotivo?: string;
+  idadeMotivo?: string;
+  qtdeMotivo?: string;
+  servicoMotivo?: string;
+  cidMotivo?: string;
+  motivos: string[];
+  temErro: boolean;
+}
+
+// "84 meses" -> "7 anos". Usado só p/ deixar as mensagens legíveis.
+function formatarMeses(meses: number): string {
+  const anos = Math.floor(meses / 12);
+  const resto = meses % 12;
+  if (anos === 0) return `${resto} ${resto === 1 ? "mês" : "meses"}`;
+  if (resto === 0) return `${anos} ${anos === 1 ? "ano" : "anos"}`;
+  return `${anos}a ${resto}m`;
 }
 
 // Cruza TUDO que a sequência preenche (procedimento, quantidade, idade, sexo, serviço,
@@ -68,5 +87,31 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
   }, [procCompleto, codProc, cid]);
   const cidInvalido = cidValido === false;
 
-  return { proc, procCompleto, procNaoEncontrado, sexoInvalido, idadeInvalida, qtdeInvalida, servicoInvalido, cidInvalido };
+  const procNaoEncontradoMotivo = procNaoEncontrado ? "Código não encontrado na tabela oficial do SIGTAP." : undefined;
+  const sexoMotivo = sexoInvalido
+    ? `Este procedimento é exclusivo para pacientes do sexo ${proc!.sexo === "M" ? "Masculino" : "Feminino"}.`
+    : undefined;
+  const idadeMotivo = idadeInvalida
+    ? `Idade do paciente na data do atendimento (${formatarMeses(idadeMeses!)}) fora da faixa permitida para este procedimento` +
+      (proc!.idadeMinimaMeses !== 9999 || proc!.idadeMaximaMeses !== 9999
+        ? ` (${proc!.idadeMinimaMeses === 9999 ? "sem mínimo" : formatarMeses(proc!.idadeMinimaMeses!)} a ${proc!.idadeMaximaMeses === 9999 ? "sem máximo" : formatarMeses(proc!.idadeMaximaMeses!)}).`
+        : ".")
+    : undefined;
+  const qtdeMotivo = qtdeInvalida
+    ? `Quantidade digitada (${qtde}) maior que o máximo permitido para este procedimento (${proc!.qtMaximaExecucao}).`
+    : undefined;
+  const servicoMotivo = servicoInvalido
+    ? `Combinação Serviço ${servico} + Classificação ${classProc} não é válida para este procedimento.`
+    : undefined;
+  const cidMotivo = cidInvalido ? `CID ${cid} não é aceito para este procedimento.` : undefined;
+
+  const motivos = [procNaoEncontradoMotivo, sexoMotivo, idadeMotivo, qtdeMotivo, servicoMotivo, cidMotivo].filter(
+    (m): m is string => Boolean(m),
+  );
+
+  return {
+    proc, procCompleto, procNaoEncontrado, sexoInvalido, idadeInvalida, qtdeInvalida, servicoInvalido, cidInvalido,
+    procNaoEncontradoMotivo, sexoMotivo, idadeMotivo, qtdeMotivo, servicoMotivo, cidMotivo,
+    motivos, temErro: motivos.length > 0,
+  };
 }

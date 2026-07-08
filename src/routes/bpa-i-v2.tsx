@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
@@ -155,6 +155,18 @@ function BpaI() {
   const FICHA_TITULO_KEY = "bpa-i-v2-ficha-titulo";
   // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
   const [pdfPendente, setPdfPendente] = useState(false);
+  // Motivos de erro reportados por cada sequência (SequenciaFields) — agregados aqui
+  // p/ bloquear Salvar/Gerar .txt/Gerar PDF enquanto houver qualquer campo em vermelho.
+  const [errosSeq, setErrosSeq] = useState<Record<number, string[]>>({});
+  const onValidacaoChangeSeq = useCallback((si: number, motivos: string[]) => {
+    setErrosSeq((prev) => (prev[si]?.join("|") === motivos.join("|") ? prev : { ...prev, [si]: motivos }));
+  }, []);
+  const cnsProfInvalido = hydrated && cnsInvalido(state.profCns.join(""));
+  const motivosInvalidos = [
+    ...(cnsProfInvalido ? ["Profissional: CNS inválido (dígito verificador não confere)."] : []),
+    ...Object.entries(errosSeq).flatMap(([si, motivos]) => motivos.map((m) => `Sequência ${Number(si) + 1}: ${m}`)),
+  ];
+  const temCamposInvalidos = motivosInvalidos.length > 0;
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
   const sheetRef = useRef<HTMLDivElement>(null);
   const cells = (s: string, n: number) => Array.from({ length: n }, (_, i) => s[i] ?? "");
@@ -230,6 +242,10 @@ function BpaI() {
   // Clique direto no botão "Salvar": se a ficha já existe, grava sem pedir nome de
   // novo. Se ainda não foi salva, abre o diálogo (primeira vez precisa de nome).
   const salvarClique = async () => {
+    if (temCamposInvalidos) {
+      toast.error("Corrija os campos em vermelho antes de salvar a ficha.");
+      return;
+    }
     if (!fichaIdRef.current || !fichaTituloRef.current) {
       setSalvarComoNovo(false);
       setSalvarOpen(true);
@@ -249,6 +265,10 @@ function BpaI() {
 
   // "Salvar como…": sempre abre o diálogo pedindo um nome novo p/ criar uma cópia.
   const salvarComoClique = () => {
+    if (temCamposInvalidos) {
+      toast.error("Corrija os campos em vermelho antes de salvar a ficha.");
+      return;
+    }
     setSalvarComoNovo(true);
     setSalvarOpen(true);
     setSalvarMenuOpen(false);
@@ -361,6 +381,10 @@ function BpaI() {
   };
 
   const exportPdf = async () => {
+    if (temCamposInvalidos) {
+      toast.error("Corrija os campos em vermelho antes de gerar o PDF.");
+      return;
+    }
     if (!sheetRef.current) return;
     setPrinting(true);
     await new Promise((r) => setTimeout(r, 80));
@@ -378,6 +402,10 @@ function BpaI() {
   // Gera e baixa o arquivo magnético BPA (.txt). Exige config do estabelecimento
   // completa (senão abre o painel) e ao menos uma sequência com procedimento.
   const exportTxt = () => {
+    if (temCamposInvalidos) {
+      toast.error("Corrija os campos em vermelho antes de gerar o arquivo .txt.");
+      return;
+    }
     if (!state.seqs.some(seqPreenchida)) {
       alert("Preencha ao menos um procedimento antes de gerar o arquivo magnético.");
       return;
@@ -489,8 +517,8 @@ function BpaI() {
                 <button
                   onClick={salvarClique}
                   disabled={salvandoDireto}
-                  title={fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
-                  className="rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
+                  title={temCamposInvalidos ? "Corrija os campos em vermelho antes de salvar" : fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
+                  className={`rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60${temCamposInvalidos ? " opacity-50" : ""}`}
                 >
                   {salvandoDireto ? "Salvando…" : `💾 Salvar${fichaTituloRef.current ? "" : " ficha"}`}
                 </button>
@@ -572,14 +600,26 @@ function BpaI() {
             <button onClick={() => { setGerarAposConfig(false); setConfigOpen(true); }} title="Configuração do estabelecimento (arquivo magnético)" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
               ⚙ Config
             </button>
-            <button onClick={exportTxt} title="Gerar arquivo magnético BPA (.txt) p/ importar no SIA/SUS" className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100">
+            <button onClick={exportTxt} title={temCamposInvalidos ? "Corrija os campos em vermelho antes de gerar" : "Gerar arquivo magnético BPA (.txt) p/ importar no SIA/SUS"} className={`rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100${temCamposInvalidos ? " opacity-50" : ""}`}>
               Gerar .txt
             </button>
-            <button onClick={exportPdf} disabled={printing} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+            <button onClick={exportPdf} disabled={printing} title={temCamposInvalidos ? "Corrija os campos em vermelho antes de gerar" : undefined} className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos ? " opacity-50" : ""}`}>
               {printing ? "Gerando..." : "Gerar PDF"}
             </button>
           </div>
         </div>
+        {temCamposInvalidos && (
+          <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-800">
+            <div className="mx-auto max-w-[1100px]">
+              <p className="font-semibold">
+                {motivosInvalidos.length === 1 ? "1 campo em vermelho" : `${motivosInvalidos.length} campos em vermelho`} — corrija antes de salvar a ficha ou gerar o .txt/PDF:
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {motivosInvalidos.map((m, i) => <li key={i}>{m}</li>)}
+              </ul>
+            </div>
+          </div>
+        )}
       </header>
 
       <ConfigModal
@@ -632,7 +672,7 @@ function BpaI() {
           <DigitBoxes id="cnes" top={L.CNES_TOP} height={L.HEADER_DIGIT_H} boxes={L.CNES_BOXES} values={state.cnes} onChange={(v) => set("cnes", v)} clearable compact />
 
           {/* Profissional */}
-          <DigitBoxes id="pcns" top={L.PROF_CNS_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CNS_BOXES} values={state.profCns} onChange={(v) => set("profCns", v)} invalid={hydrated && cnsInvalido(state.profCns.join(""))} clearable compact />
+          <DigitBoxes id="pcns" top={L.PROF_CNS_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CNS_BOXES} values={state.profCns} onChange={(v) => set("profCns", v)} invalid={cnsProfInvalido} title="CNS inválido (dígito verificador não confere)." clearable compact />
           <ProfissionalAutocomplete
             cnes={cnesEstab}
             top={L.PROF_NOME.top} left={L.PROF_NOME.left} width={L.PROF_NOME.width} height={L.PROF_NOME.height}
@@ -696,6 +736,7 @@ function BpaI() {
               focusBox={focusBox}
               inputsOf={inputsOf}
               endOf={endOf}
+              onValidacaoChange={onValidacaoChangeSeq}
             />
           ))}
 
