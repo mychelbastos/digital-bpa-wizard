@@ -112,7 +112,7 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     [3, numF(s.codLog, 3, true)],
     [30, alfaF(s.endereco, 30)],
     [10, alfaF(s.complemento, 10)],
-    [5, alfaF(s.numero, 5)],
+    [5, alfaF(s.numero.join(""), 5)],
     [30, alfaF(s.bairro, 30)],
     [11, ((dig(s.ddd) + dig(s.telefone)) || "").padEnd(11, " ").slice(0, 11)],
     [40, alfaF(s.email, 40)],

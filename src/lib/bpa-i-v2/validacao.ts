@@ -62,6 +62,19 @@ export function dataParaNumero(d: string[]): number {
   return Number(s.slice(4, 8) + s.slice(2, 4) + s.slice(0, 2));
 }
 
+// Idade (em meses completos) do paciente na data do atendimento. null se alguma das
+// datas não é válida, ou se o atendimento é anterior ao nascimento (não faz sentido).
+export function idadeEmMeses(dataNasc: string[], dataAtend: string[]): number | null {
+  if (!dataValida(dataNasc) || !dataValida(dataAtend)) return null;
+  const sn = dataNasc.join("");
+  const sa = dataAtend.join("");
+  const dn = Number(sn.slice(0, 2)), mn = Number(sn.slice(2, 4)), an = Number(sn.slice(4, 8));
+  const da = Number(sa.slice(0, 2)), ma = Number(sa.slice(2, 4)), aa = Number(sa.slice(4, 8));
+  let meses = (aa - an) * 12 + (ma - mn);
+  if (da < dn) meses -= 1; // ainda não completou o mês corrente
+  return meses < 0 ? null : meses;
+}
+
 function hojeNumero(): number {
   const n = new Date();
   return n.getFullYear() * 10000 + (n.getMonth() + 1) * 100 + n.getDate();

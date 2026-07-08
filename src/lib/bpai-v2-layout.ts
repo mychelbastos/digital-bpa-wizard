@@ -48,7 +48,7 @@ export const REL = {
   row3: 5.95,
   codLog: digitBoxes([5.38, 9.37, 13.37], 3.99),
   endereco: { left: 18.09, width: 38.5 },
-  numero: { left: 57.41, width: 6.2 },
+  numero: digitBoxes([57.41, 58.96, 60.51, 62.06], 1.55),
   complemento: { left: 63.7, width: 30.7 },
 
   row4: 8.65,
@@ -65,8 +65,10 @@ export const REL = {
   dataAtendAno: digitBoxes([14.1, 15.5, 16.9, 18.3], 1.4),
   codProc: digitBoxes([19.72, 22.58, 25.44, 28.31, 31.17, 34.03, 36.89, 39.75, 42.62, 45.48], 2.86),
   // Quantidade: limitada a 3 dígitos, justificada à direita (usa as 3 células finais
-  // do campo impresso, alinhadas à borda direita ~54.69%).
-  qtde: digitBoxes([51.52, 52.57, 53.63], 1.06),
+  // do campo impresso, alinhadas à borda direita ~54.69%). Mesmo span total do campo
+  // impresso (51.52 a 54.69), só redistribuído com pequenas folgas entre os dígitos
+  // p/ não ficarem colados — não muda onde o campo termina (não invade o CNPJ).
+  qtde: digitBoxes([51.52, 52.62, 53.72], 0.97),
   cnpj: digitBoxes([54.69, 57.55, 60.4, 63.26, 66.12, 68.97, 71.83, 74.69, 77.54, 80.4, 83.25, 86.11, 88.97, 91.82], 2.86),
 
   procRow2: 16.9,
@@ -112,7 +114,7 @@ export interface SeqData {
   ibge: string[];
   codLog: string[];
   endereco: string;
-  numero: string;
+  numero: string[]; // 4 dígitos
   complemento: string;
   bairro: string;
   ddd: string[];
@@ -142,7 +144,7 @@ export const emptySeq = (): SeqData => ({
   ibge: "2927200".split(""), // padrão da unidade (Cód. IBGE do município)
   codLog: Array(3).fill(""),
   endereco: "",
-  numero: "",
+  numero: Array(4).fill(""),
   complemento: "",
   bairro: "",
   ddd: Array(2).fill(""),

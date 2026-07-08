@@ -176,6 +176,12 @@
     padding: 0;
   }
 
+  /* Borda sutil sempre visível, separando caixinhas muito estreitas (ex.: Qtde) —
+     some do PDF automaticamente via a regra .form-sheet--print abaixo. */
+  .form-digit--separated {
+    border-color: oklch(0.7 0.03 250 / 0.5);
+  }
+
 
   .form-digit:focus {
     background: oklch(0.95 0.05 220 / 0.5);

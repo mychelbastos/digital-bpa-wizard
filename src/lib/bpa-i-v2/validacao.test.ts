@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validarCns, cnsInvalido, dataValida, dataFuturaOuInvalida, atendimentoAntigo } from "./validacao";
+import { validarCns, cnsInvalido, dataValida, dataFuturaOuInvalida, atendimentoAntigo, idadeEmMeses } from "./validacao";
 
 describe("validarCns", () => {
   it("aceita CNS provisório válido (início 7)", () => {
@@ -80,5 +80,20 @@ describe("atendimentoAntigo", () => {
   it("não acende para data futura ou inválida (já tem alerta próprio)", () => {
     expect(atendimentoAntigo(digs("01012099"))).toBe(false);
     expect(atendimentoAntigo(digs("31022020"))).toBe(false);
+  });
+});
+
+describe("idadeEmMeses", () => {
+  it("calcula meses completos entre nascimento e atendimento", () => {
+    expect(idadeEmMeses(digs("15031990"), digs("15032020"))).toBe(360); // 30 anos exatos
+    expect(idadeEmMeses(digs("15031990"), digs("14032020"))).toBe(359); // 1 dia antes de completar
+    expect(idadeEmMeses(digs("01012020"), digs("01022020"))).toBe(1);
+  });
+  it("null se alguma data é inválida ou incompleta", () => {
+    expect(idadeEmMeses(digs("1503"), digs("15032020"))).toBe(null);
+    expect(idadeEmMeses(digs("31022020"), digs("15032020"))).toBe(null);
+  });
+  it("null se atendimento é antes do nascimento", () => {
+    expect(idadeEmMeses(digs("15032020"), digs("15031990"))).toBe(null);
   });
 });

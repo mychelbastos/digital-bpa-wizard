@@ -36,9 +36,13 @@ interface Props {
   warn?: boolean;
   // Somente leitura (ex.: campo Total calculado): não aceita digitação.
   readOnly?: boolean;
+  // Borda sutil sempre visível (não só no foco) separando as caixinhas — ajuda a ler
+  // campos muito estreitos onde os dígitos ficam "colados". Some do PDF (mesma regra
+  // que já zera bordas no .form-sheet--print).
+  separated?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -59,6 +63,15 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     return () => document.removeEventListener("focusin", onFocusIn);
   }, [showClear]);
 
+  // Foca uma caixinha com o cursor no FINAL do dígito (não no início) — assim, ao
+  // navegar com as setas em qualquer direção, o Backspace sempre apaga o que está ali,
+  // sem precisar de mais um passo para "entrar" no caractere.
+  const focusEnd = (el: HTMLInputElement | null | undefined) => {
+    el?.focus();
+    const len = el?.value.length ?? 0;
+    el?.setSelectionRange(len, len);
+  };
+
   const clearAll = () => {
     onChange(boxes.map(() => ""));
     refs.current[0]?.focus();
@@ -70,7 +83,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
   const setRightAligned = (digits: string) => {
     const d = digits.slice(-boxes.length);
     onChange([...Array(boxes.length - d.length).fill(""), ...d.split("")]);
-    refs.current[boxes.length - 1]?.focus();
+    focusEnd(refs.current[boxes.length - 1]);
   };
 
   const handle = (i: number, v: string) => {
@@ -83,7 +96,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     const next = [...values];
     next[i] = val;
     onChange(next);
-    if (val && i < boxes.length - 1) refs.current[i + 1]?.focus();
+    if (val && i < boxes.length - 1) focusEnd(refs.current[i + 1]);
     else if (val && i === boxes.length - 1) onComplete?.(); // última caixinha -> próximo campo
   };
 
@@ -96,11 +109,13 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
       return;
     }
     if (e.key === "Backspace" && !values[i] && i > 0) {
-      refs.current[i - 1]?.focus();
+      focusEnd(refs.current[i - 1]);
     } else if (e.key === "ArrowLeft" && i > 0) {
-      refs.current[i - 1]?.focus();
+      e.preventDefault();
+      focusEnd(refs.current[i - 1]);
     } else if (e.key === "ArrowRight" && i < boxes.length - 1) {
-      refs.current[i + 1]?.focus();
+      e.preventDefault();
+      focusEnd(refs.current[i + 1]);
     }
   };
 
@@ -119,7 +134,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     }
     onChange(next);
     const focusIdx = Math.min(i + chars.length, boxes.length - 1);
-    refs.current[focusIdx]?.focus();
+    focusEnd(refs.current[focusIdx]);
   };
 
   return (
@@ -139,7 +154,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           maxLength={1}
           readOnly={readOnly}
           tabIndex={readOnly ? -1 : undefined}
-          className={`form-digit${compact ? " form-digit--compact" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
@@ -186,14 +201,16 @@ interface TextProps {
   value: string;
   onChange: (v: string) => void;
   align?: "left" | "center";
+  // Marca o campo como inválido (borda vermelha sutil). Só visual/não-bloqueante.
+  invalid?: boolean;
 }
 
-export function TextField({ top, left, width, height, value, onChange, align = "left" }: TextProps) {
+export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false }: TextProps) {
   return (
     <input
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="form-text"
+      className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}`}
       style={{
         position: "absolute",
         top: `${top}%`,

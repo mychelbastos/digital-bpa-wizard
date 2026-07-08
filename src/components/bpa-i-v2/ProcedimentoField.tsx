@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DigitBoxes } from "@/components/DigitBoxes";
 import { buscarHistorico, type SugestaoHistorico } from "@/lib/bpa-i-v2/historico";
-import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 
 interface Box {
   left: number;
@@ -15,17 +14,20 @@ interface Props {
   values: string[];
   onChange: (vals: string[]) => void;
   clearable?: boolean;
+  // Resultado da busca no SIGTAP (calculado 1x por sequência em useValidacaoProcedimento
+  // e compartilhado com as demais checagens — evita repetir a mesma consulta aqui).
+  naoEncontrado: boolean;
+  nomeEncontrado: string | null;
 }
 
 // Código do Procedimento: autocomplete por histórico de uso (< 10 dígitos, igual ao
-// HistoricoField) + validação contra a tabela OFICIAL do SIGTAP quando completo (10
-// dígitos). Código completo mas inexistente no SIGTAP acende borda vermelha (mesmo
-// padrão visual do CNS inválido) — não bloqueia, mas é impossível de não notar.
-export function ProcedimentoField({ id, top, height, boxes, values, onChange, clearable }: Props) {
+// HistoricoField) + indicador visual de validade contra o SIGTAP (borda vermelha
+// quando completo mas não encontrado — mesmo padrão do CNS inválido — e balão com o
+// nome oficial quando encontrado, como confirmação de que é o código certo).
+export function ProcedimentoField({ id, top, height, boxes, values, onChange, clearable, naoEncontrado, nomeEncontrado }: Props) {
   const code = values.join("");
   const completo = code.length === boxes.length;
   const [sugs, setSugs] = useState<SugestaoHistorico[]>([]);
-  const [sigtap, setSigtap] = useState<{ nome: string } | "nao-encontrado" | null>(null);
   const [focused, setFocused] = useState(false);
   const refsRef = useRef<HTMLInputElement[]>([]);
 
@@ -42,20 +44,6 @@ export function ProcedimentoField({ id, top, height, boxes, values, onChange, cl
     return () => { cancel = true; };
   }, [code, completo]);
 
-  // Validação contra o SIGTAP quando o código está completo.
-  useEffect(() => {
-    if (!completo) {
-      setSigtap(null);
-      return;
-    }
-    let cancel = false;
-    buscarProcedimentoSigtap(code).then((p) => {
-      if (cancel) return;
-      setSigtap(p ? { nome: p.nome } : "nao-encontrado");
-    });
-    return () => { cancel = true; };
-  }, [code, completo]);
-
   useEffect(() => {
     const onFocusIn = (e: FocusEvent) => {
       setFocused(refsRef.current.includes(e.target as HTMLInputElement));
@@ -64,9 +52,8 @@ export function ProcedimentoField({ id, top, height, boxes, values, onChange, cl
     return () => document.removeEventListener("focusin", onFocusIn);
   }, []);
 
-  const naoEncontrado = sigtap === "nao-encontrado";
   const openSugs = focused && sugs.length > 0 && code.length >= 2 && !completo;
-  const openSigtap = focused && completo && sigtap !== null;
+  const openSigtap = focused && completo && (naoEncontrado || nomeEncontrado);
 
   const select = (codigo: string) => {
     const arr = codigo.split("").slice(0, boxes.length);
@@ -114,7 +101,7 @@ export function ProcedimentoField({ id, top, height, boxes, values, onChange, cl
           }`}
           style={{ top: `calc(${top + height}% + 2px)`, left: `${boxes[0].left}%` }}
         >
-          {naoEncontrado ? "⚠️ Código não encontrado no SIGTAP" : (sigtap as { nome: string }).nome}
+          {naoEncontrado ? "⚠️ Código não encontrado no SIGTAP" : nomeEncontrado}
         </div>
       )}
     </>

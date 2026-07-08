@@ -3,19 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
-import { ComboField } from "@/components/bpa-i-v2/ComboField";
-import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
-import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
-import { CARATERES } from "@/lib/bpa-i-v2/carateres";
-import { NACIONALIDADES } from "@/lib/bpa-i-v2/nacionalidades";
-import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAutocomplete";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
-import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo } from "@/lib/bpa-i-v2/validacao";
-import { AtendimentoAntigoAviso } from "@/components/bpa-i-v2/AtendimentoAntigoAviso";
+import { cnsInvalido } from "@/lib/bpa-i-v2/validacao";
+import { SequenciaFields } from "@/components/bpa-i-v2/SequenciaFields";
 import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
 import { loadConfig, configCompleta } from "@/lib/bpa-i-v2/config";
 import { gerarArquivoBpa, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
@@ -30,7 +24,6 @@ import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { HistoricoField } from "@/components/bpa-i-v2/HistoricoField";
-import { ProcedimentoField } from "@/components/bpa-i-v2/ProcedimentoField";
 import { registrarUso } from "@/lib/bpa-i-v2/historico";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
@@ -109,6 +102,14 @@ function rjust(arr: string[] | undefined, n: number): string[] {
   return [...Array(Math.max(0, n - digs.length)).fill(""), ...digs];
 }
 
+// Migração: campo Número (endereço) passou de texto livre para 4 caixinhas — aceita
+// letras também (ex.: "SN" de "sem número"), então preserva tudo, só corta p/ 4.
+function migrarNumero(v: unknown): string[] {
+  if (Array.isArray(v)) return v as string[];
+  const chars = String(v ?? "").trim().slice(0, 4);
+  return [...chars.split(""), ...Array(4 - chars.length).fill("")];
+}
+
 function loadState(): State {
   if (typeof window === "undefined") return initialState();
   try {
@@ -116,7 +117,7 @@ function loadState(): State {
     if (!raw) return initialState();
     const merged = { ...initialState(), ...(JSON.parse(raw) as Partial<State>) };
     // Migração: campo Quantidade passou de 6 -> 3 dígitos (justificado à direita).
-    merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3) }));
+    merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3), numero: migrarNumero(s.numero) }));
     return merged;
   } catch {
     return initialState();
@@ -257,7 +258,9 @@ function BpaI() {
   const carregarFichaSalva = async (id: string, titulo?: string) => {
     const dados = await carregarFicha(id);
     if (!dados) return;
-    setState({ ...initialState(), ...(dados as Partial<State>) });
+    const merged = { ...initialState(), ...(dados as Partial<State>) };
+    merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3), numero: migrarNumero(s.numero) }));
+    setState(merged);
     persistFicha(id, titulo ?? "Ficha BPA-I");
   };
   const novaFicha = () => {
@@ -681,112 +684,20 @@ function BpaI() {
           <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} compact />
 
           {/* 3 Sequências */}
-          {L.SEQ_TOPS.map((seqTop, si) => {
-            const s = state.seqs[si];
-            const R = L.REL;
-            const u = <K extends keyof SeqData>(f: K, v: SeqData[K]) => updateSeq(si, f, v);
-            const dnInvalida = hydrated && dataFuturaOuInvalida(s.dataNasc);
-            const daInvalida = hydrated && dataFuturaOuInvalida(s.dataAtend);
-            const daAntiga = hydrated && atendimentoAntigo(s.dataAtend) && !s.dataAtendConfirmada;
-            return (
-              <div key={si}>
-                {/* Paciente row 1: CNS + Nome */}
-                <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-                  values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={hydrated && cnsInvalido(s.cnsPac.join(""))} clearable compact />
-                <TextField top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
-                  value={s.nomePac} onChange={(v) => u("nomePac", v)} />
-
-                {/* Row 2: Sexo / Data Nasc / Nacion / RaçaCor / Etnia / CEP / IBGE */}
-                <TextField top={seqTop + R.row2} left={R.sexoM.left} width={R.sexoM.width} height={L.DIGIT_H} align="center"
-                  value={s.sexo === "M" ? "X" : ""} onChange={(v) => u("sexo", v ? "M" : "")} />
-                <TextField top={seqTop + R.row2} left={R.sexoF.left} width={R.sexoF.width} height={L.DIGIT_H} align="center"
-                  value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} />
-                <DigitBoxes id={`s${si}-dnd`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascDia}
-                  values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} invalid={dnInvalida} compact />
-                <DigitBoxes id={`s${si}-dnm`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascMes}
-                  values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} invalid={dnInvalida} compact />
-                <DigitBoxes id={`s${si}-dna`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascAno}
-                  values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} invalid={dnInvalida} compact />
-                <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
-                  getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
-                  onClear={() => u("dataNasc", Array(8).fill(""))} />
-                <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
-                  options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} />
-                <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
-                  options={RACAS} value={s.racaCor}
-                  onChange={(v) => {
-                    updateSeq(si, "racaCor", v);
-                    // Etnia só vale para Indígena; em qualquer mudança de Raça/Cor, limpa.
-                    updateSeq(si, "etnia", "");
-                  }} />
-                <ComboField top={seqTop + R.row2} left={R.etnia.left} width={R.etnia.width} height={L.DIGIT_H}
-                  options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
-                  disabled={s.racaCor !== RACA_INDIGENA} />
-                <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
-                  values={s.cep} onChange={(v) => u("cep", v)} clearable compact />
-                <DigitBoxes id={`s${si}-ibge`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.ibge}
-                  values={s.ibge} onChange={(v) => u("ibge", v)} clearable compact />
-
-                {/* Row 3: Cod Logradouro / Endereço / Número / Complemento */}
-                <ComboField top={seqTop + R.row3} left={R.codLog[0].left}
-                  width={R.codLog[R.codLog.length - 1].left + R.codLog[R.codLog.length - 1].width - R.codLog[0].left}
-                  height={L.DIGIT_H} options={TIPOS_LOGRADOURO}
-                  value={s.codLog.join("")} onChange={(v) => u("codLog", v.split(""))} />
-                <TextField top={seqTop + R.row3} left={R.endereco.left} width={R.endereco.width} height={L.DIGIT_H}
-                  value={s.endereco} onChange={(v) => u("endereco", v)} />
-                <TextField top={seqTop + R.row3} left={R.numero.left} width={R.numero.width} height={L.DIGIT_H}
-                  value={s.numero} onChange={(v) => u("numero", v)} />
-                <TextField top={seqTop + R.row3} left={R.complemento.left} width={R.complemento.width} height={L.DIGIT_H}
-                  value={s.complemento} onChange={(v) => u("complemento", v)} />
-
-                {/* Row 4: Bairro / DDD / Telefone / Email */}
-                <TextField top={seqTop + R.row4} left={R.bairro.left} width={R.bairro.width} height={L.DIGIT_H}
-                  value={s.bairro} onChange={(v) => u("bairro", v)} />
-                <DigitBoxes id={`s${si}-ddd`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.ddd}
-                  values={s.ddd} onChange={(v) => u("ddd", v)} registerRefs={regBox(`s${si}-ddd`)} onComplete={() => focusBox(`s${si}-tel`)} compact />
-                <DigitBoxes id={`s${si}-tel`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.telefone}
-                  values={s.telefone} onChange={(v) => u("telefone", v)} registerRefs={regBox(`s${si}-tel`)} compact />
-                <FieldClear top={seqTop + R.row4} left={endOf(R.telefone) + 0.5} height={L.DIGIT_H}
-                  getInputs={() => inputsOf(`s${si}-ddd`, `s${si}-tel`)}
-                  onClear={() => { u("ddd", Array(2).fill("")); u("telefone", Array(8).fill("")); }} />
-                <TextField top={seqTop + R.row4} left={R.email.left} width={R.email.width} height={L.DIGIT_H}
-                  value={s.email} onChange={(v) => u("email", v)} />
-
-                {/* Procedimento row 1: Data atend / Cód proc / Qtde / CNPJ */}
-                <DigitBoxes id={`s${si}-dad`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendDia}
-                  values={s.dataAtend.slice(0, 2)} onChange={(v) => u("dataAtend", [...v, ...s.dataAtend.slice(2)])} registerRefs={regBox(`s${si}-dad`)} onComplete={() => focusBox(`s${si}-dam`)} invalid={daInvalida} warn={daAntiga} compact />
-                <DigitBoxes id={`s${si}-dam`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendMes}
-                  values={s.dataAtend.slice(2, 4)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 2), ...v, ...s.dataAtend.slice(4)])} registerRefs={regBox(`s${si}-dam`)} onComplete={() => focusBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} compact />
-                <DigitBoxes id={`s${si}-daa`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendAno}
-                  values={s.dataAtend.slice(4, 8)} onChange={(v) => u("dataAtend", [...s.dataAtend.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-daa`)} invalid={daInvalida} warn={daAntiga} compact />
-                <FieldClear top={seqTop + R.procRow1} left={endOf(R.dataAtendAno) + 0.5} height={L.DIGIT_H}
-                  getInputs={() => inputsOf(`s${si}-dad`, `s${si}-dam`, `s${si}-daa`)}
-                  onClear={() => u("dataAtend", Array(8).fill(""))} />
-                <AtendimentoAntigoAviso top={seqTop + R.procRow1} left={96} height={L.DIGIT_H}
-                  ativo={daAntiga} onConfirmar={() => u("dataAtendConfirmada", true)} />
-                <ProcedimentoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
-                  values={s.codProc} onChange={(v) => u("codProc", v)} clearable />
-                <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
-                  values={s.qtde} onChange={(v) => u("qtde", v)} clearable compact />
-                <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
-                  values={s.cnpj} onChange={(v) => u("cnpj", v)} clearable compact />
-
-                {/* Procedimento row 2: Serviço / Class / CID / Caráter / Autorização */}
-                <DigitBoxes id={`s${si}-srv`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.servico}
-                  values={s.servico} onChange={(v) => u("servico", v)} compact />
-                <DigitBoxes id={`s${si}-cls`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.classProc}
-                  values={s.classProc} onChange={(v) => u("classProc", v)} compact />
-                <DigitBoxes id={`s${si}-cid`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.cid}
-                  values={s.cid} onChange={(v) => u("cid", v)} numeric={false} compact />
-                <ComboField top={seqTop + R.procRow2} left={R.carater[0].left}
-                  width={R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width - R.carater[0].left}
-                  height={L.DIGIT_H} options={CARATERES} display="code"
-                  value={s.carater.join("")} onChange={(v) => u("carater", v.split(""))} />
-                <DigitBoxes id={`s${si}-aut`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.autorizacao}
-                  values={s.autorizacao} onChange={(v) => u("autorizacao", v)} clearable compact />
-              </div>
-            );
-          })}
+          {L.SEQ_TOPS.map((seqTop, si) => (
+            <SequenciaFields
+              key={si}
+              si={si}
+              seqTop={seqTop}
+              s={state.seqs[si]}
+              hydrated={hydrated}
+              onUpdate={(field, value) => updateSeq(si, field, value)}
+              regBox={regBox}
+              focusBox={focusBox}
+              inputsOf={inputsOf}
+              endOf={endOf}
+            />
+          ))}
 
           {/* Footer — responsável + gestor */}
           <ConfirmarResponsavel
