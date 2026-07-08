@@ -8,12 +8,14 @@ interface Props {
   defaultNome: string;
   /** true quando é uma ficha já existente sendo re-salva (muda o texto do título). */
   atualizando: boolean;
+  /** true quando é "Salvar como…" — sempre cria uma cópia nova, nunca sobrescreve. */
+  comoNovo?: boolean;
   onSalvar: (nome: string) => void | Promise<void>;
   onClose: () => void;
 }
 
 // Diálogo de "Salvar na nuvem": pede o nome da ficha (pré-preenchido) antes de gravar.
-export function SalvarFichaModal({ open, defaultNome, atualizando, onSalvar, onClose }: Props) {
+export function SalvarFichaModal({ open, defaultNome, atualizando, comoNovo, onSalvar, onClose }: Props) {
   const [nome, setNome] = useState(defaultNome);
   const [salvando, setSalvando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,9 +54,13 @@ export function SalvarFichaModal({ open, defaultNome, atualizando, onSalvar, onC
             <Save className="size-6" />
           </div>
           <h2 className="mt-3 text-lg font-semibold text-foreground">
-            {atualizando ? "Salvar alterações" : "Salvar ficha na nuvem"}
+            {comoNovo ? "Salvar como nova ficha" : atualizando ? "Salvar alterações" : "Salvar ficha na nuvem"}
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">Dê um nome para localizar esta ficha depois em “Minhas fichas”.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {comoNovo
+              ? "Cria uma cópia independente — a ficha original não é alterada."
+              : "Dê um nome para localizar esta ficha depois em “Minhas fichas”."}
+          </p>
         </div>
 
         <div className="px-6 pb-2 pt-5">

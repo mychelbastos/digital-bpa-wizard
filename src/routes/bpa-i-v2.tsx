@@ -139,6 +139,10 @@ function BpaI() {
   const [gerarAposConfig, setGerarAposConfig] = useState(false);
   const [fichasOpen, setFichasOpen] = useState(false);
   const [salvarOpen, setSalvarOpen] = useState(false);
+  // true = diálogo está em modo "Salvar como" (força criar uma cópia nova).
+  const [salvarComoNovo, setSalvarComoNovo] = useState(false);
+  const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
+  const [salvandoDireto, setSalvandoDireto] = useState(false);
   // Id da ficha no Supabase (persistido p/ continuar atualizando a mesma após reload).
   const fichaIdRef = useRef<string | null>(null);
   // Título da ficha atual (quando já salva/carregada), p/ pré-preencher o "Salvar".
@@ -171,6 +175,7 @@ function BpaI() {
   // Nome sugerido ao salvar: "primeiro nome do profissional · data de hoje · Folha nnn".
   // Se a ficha já foi salva antes, sugere o título atual (para não trocar sem querer).
   const nomeSugerido = (): string => {
+    if (salvarComoNovo && fichaTituloRef.current) return `${fichaTituloRef.current} (cópia)`;
     if (fichaTituloRef.current) return fichaTituloRef.current;
     const primeiroNome = state.profNome.trim().split(/\s+/)[0] ?? "";
     const hoje = new Date().toLocaleDateString("pt-BR");
@@ -180,19 +185,49 @@ function BpaI() {
   };
 
   // Salva (cria ou atualiza) a ficha na nuvem com o nome informado no diálogo.
+  // Quando comoNovo=true, ignora a ficha atual e sempre cria uma cópia nova.
   const salvarNaNuvem = async (titulo: string) => {
     const comp = state.profAno.join("") + state.profMes.join("");
-    const id = await salvarFicha(fichaIdRef.current, titulo, comp, state);
+    const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
+    const id = await salvarFicha(idAlvo, titulo, comp, state);
     if (!id) {
       toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
       return;
     }
-    const atualizou = Boolean(fichaIdRef.current);
+    const atualizou = Boolean(idAlvo);
     fichaIdRef.current = id;
     fichaTituloRef.current = titulo;
     try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
     setSalvarOpen(false);
+    setSalvarComoNovo(false);
     toast.success(atualizou ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
+  };
+
+  // Clique direto no botão "Salvar": se a ficha já existe, grava sem pedir nome de
+  // novo. Se ainda não foi salva, abre o diálogo (primeira vez precisa de nome).
+  const salvarClique = async () => {
+    if (!fichaIdRef.current || !fichaTituloRef.current) {
+      setSalvarComoNovo(false);
+      setSalvarOpen(true);
+      return;
+    }
+    setSalvandoDireto(true);
+    const comp = state.profAno.join("") + state.profMes.join("");
+    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current, comp, state);
+    setSalvandoDireto(false);
+    if (!id) {
+      toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
+      return;
+    }
+    try { localStorage.setItem(FICHA_ID_KEY, id); } catch { /* noop */ }
+    toast.success("Alterações salvas na nuvem.");
+  };
+
+  // "Salvar como…": sempre abre o diálogo pedindo um nome novo p/ criar uma cópia.
+  const salvarComoClique = () => {
+    setSalvarComoNovo(true);
+    setSalvarOpen(true);
+    setSalvarMenuOpen(false);
   };
 
   // Carrega uma ficha salva; começa uma nova (limpa e desvincula da ficha atual).
@@ -421,9 +456,34 @@ function BpaI() {
           <div className="flex flex-wrap items-center gap-2">
             <LoginControl user={user} />
             {user && (
-              <button onClick={() => setSalvarOpen(true)} title="Salvar esta ficha na sua conta (nuvem)" className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10">
-                💾 Salvar{fichaTituloRef.current ? "" : " ficha"}
-              </button>
+              <div className="group relative flex">
+                <button
+                  onClick={salvarClique}
+                  disabled={salvandoDireto}
+                  title={fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
+                  className="rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
+                >
+                  {salvandoDireto ? "Salvando…" : `💾 Salvar${fichaTituloRef.current ? "" : " ficha"}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSalvarMenuOpen((o) => !o)}
+                  title="Mais opções de salvar"
+                  className="rounded-r-md border border-primary/40 bg-primary/5 px-1.5 py-2 text-xs font-medium text-primary hover:bg-primary/10"
+                >
+                  ▾
+                </button>
+                {salvarMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setSalvarMenuOpen(false)} />
+                    <div className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-md border border-border bg-background py-1 text-xs shadow-lg">
+                      <button type="button" onClick={salvarComoClique} className="block w-full px-3 py-2 text-left hover:bg-muted">
+                        Salvar como… <span className="text-muted-foreground">(nova cópia)</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
             {user && (
               <button onClick={() => setFichasOpen(true)} title="Fichas salvas na sua conta" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
@@ -502,9 +562,10 @@ function BpaI() {
       <SalvarFichaModal
         open={salvarOpen}
         defaultNome={nomeSugerido()}
-        atualizando={Boolean(fichaIdRef.current)}
+        atualizando={!salvarComoNovo && Boolean(fichaIdRef.current)}
+        comoNovo={salvarComoNovo}
         onSalvar={salvarNaNuvem}
-        onClose={() => setSalvarOpen(false)}
+        onClose={() => { setSalvarOpen(false); setSalvarComoNovo(false); }}
       />
 
       <MinhasFichas
