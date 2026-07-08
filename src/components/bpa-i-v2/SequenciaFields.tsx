@@ -8,6 +8,7 @@ import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
 import { NACIONALIDADES } from "@/lib/bpa-i-v2/nacionalidades";
 import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
+import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo } from "@/lib/bpa-i-v2/validacao";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
@@ -99,8 +100,10 @@ export function SequenciaFields({ si, seqTop, s, hydrated, onUpdate: u, regBox, 
         disabled={s.racaCor !== RACA_INDIGENA} />
       <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
         values={s.cep} onChange={(v) => u("cep", v)} clearable compact />
-      <DigitBoxes id={`s${si}-ibge`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.ibge}
-        values={s.ibge} onChange={(v) => u("ibge", v)} clearable compact />
+      <ComboField top={seqTop + R.row2} left={R.ibge[0].left}
+        width={R.ibge[R.ibge.length - 1].left + R.ibge[R.ibge.length - 1].width - R.ibge[0].left}
+        height={L.DIGIT_H} options={MUNICIPIOS_IBGE} display="code"
+        value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} />
 
       {/* Row 3: Cod Logradouro / Endereço / Número / Complemento */}
       <ComboField top={seqTop + R.row3} left={R.codLog[0].left}
