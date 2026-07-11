@@ -205,14 +205,14 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
         onClear={() => u("dataNasc", Array(8).fill(""))} />
       <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
-        options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} uppercase />
+        options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} uppercase center />
       <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
         options={RACAS} value={s.racaCor}
         onChange={(v) => {
           u("racaCor", v);
           // Etnia só vale para Indígena; em qualquer mudança de Raça/Cor, limpa.
           u("etnia", "");
-        }} uppercase />
+        }} uppercase center />
       <ComboField top={seqTop + R.row2} left={R.etnia.left} width={R.etnia.width} height={L.DIGIT_H}
         options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
         disabled={s.racaCor !== RACA_INDIGENA} uppercase />

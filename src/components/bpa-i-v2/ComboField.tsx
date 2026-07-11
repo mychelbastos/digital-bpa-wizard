@@ -23,6 +23,8 @@ interface Props {
   // Exibe o rótulo em MAIÚSCULAS (na caixa e na lista). Só afeta a exibição — o código
   // guardado e a busca não mudam. Opt-in (omitido = original), então a v2 não muda.
   uppercase?: boolean;
+  // Centraliza o texto na caixa (opt-in). display="code" já centraliza sozinho.
+  center?: boolean;
 }
 
 const norm = (s: string) =>
@@ -31,7 +33,7 @@ const norm = (s: string) =>
 // Combobox posicionado em % da form-sheet (igual aos demais campos, p/ o export do PDF
 // capturar o <input> e mostrar o NOME selecionado). Guarda o código, exibe o rótulo.
 // Sugestão por tecla (primeira letra filtra) + confirmar com Tab/Enter.
-export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label", invalid = false, title, mostrarTodosAoFocar = true, uppercase = false }: Props) {
+export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label", invalid = false, title, mostrarTodosAoFocar = true, uppercase = false, center = false }: Props) {
   const up = (s: string) => (uppercase ? s.toUpperCase() : s);
   const inputRef = useRef<HTMLInputElement>(null);
   const labelOf = (code: string) => options.find((o) => o.code === code)?.label ?? "";
@@ -49,26 +51,31 @@ export function ComboField({ value, onChange, options, top, left, width, height,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, options]);
 
-  // Encolhe a fonte p/ o rótulo caber no campo quando em MAIÚSCULAS (letras mais largas
-  // estouravam campos estreitos como Nacionalidade/Raça-Cor). Só roda quando uppercase,
-  // então a v2 não muda. Volta ao tamanho do CSS e diminui até caber (mínimo 6px).
+  // Mantém a fonte no tamanho natural (CSS) e SÓ diminui se o rótulo em MAIÚSCULAS
+  // realmente passar da largura do campo. Usa ResizeObserver p/ medir DEPOIS que o
+  // layout assenta (medir cedo dava largura ~0 e encolhia à toa). Só quando uppercase
+  // → a v2 não muda.
   useEffect(() => {
     if (!uppercase) return;
     const el = inputRef.current;
     if (!el) return;
-    el.style.fontSize = "";
-    const base = parseFloat(getComputedStyle(el).fontSize) || 14;
-    let size = Math.min(base, 16); // teto confortável; só encolhe se a palavra não couber
-    el.style.fontSize = `${size}px`;
-    let guard = 0;
-    // Encolhe deixando ~3px de folga p/ o texto não encostar nas bordas.
-    while (el.scrollWidth > el.clientWidth - 3 && size > 7 && guard < 24) {
-      size -= 0.5;
-      el.style.fontSize = `${size}px`;
-      guard++;
-    }
+    const fit = () => {
+      el.style.fontSize = ""; // volta ao tamanho natural do CSS
+      if (el.clientWidth < 16) return; // ainda sem layout — o observer chama de novo
+      let size = parseFloat(getComputedStyle(el).fontSize) || 14;
+      let guard = 0;
+      while (el.scrollWidth > el.clientWidth && size > 8 && guard < 30) {
+        size -= 0.5;
+        el.style.fontSize = `${size}px`;
+        guard++;
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, value, width, uppercase]);
+  }, [text, value, uppercase]);
 
   const q = norm(text);
   // Casa por prefixo em qualquer token do rótulo/sinônimos, ou pelo código.
@@ -105,7 +112,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
           height: `${height}%`,
           backgroundColor: disabled ? "rgba(0,0,0,0.045)" : undefined,
           cursor: disabled ? "not-allowed" : undefined,
-          textAlign: display === "code" || uppercase ? "center" : undefined,
+          textAlign: display === "code" || center ? "center" : undefined,
         }}
         value={up(text)}
         disabled={disabled}
