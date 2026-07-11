@@ -58,7 +58,7 @@ export const IDADE_WIDTHS = [2.48, 2.30, 2.24];
 export const QTD_LEFTS = [78.72, 81.56, 84.34, 87.24, 89.96];
 export const QTD_WIDTHS = [2.84, 2.78, 2.90, 2.72, 2.42];
 
-export const TOTAL_TOP = 84.48;
+export const TOTAL_TOP = 81.6;
 export const TOTAL_HEIGHT = 2.31;
 
 const zipBoxes = (lefts: number[], widths: number[]) =>
