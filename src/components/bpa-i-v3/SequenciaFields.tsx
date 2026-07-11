@@ -17,6 +17,8 @@ import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
 import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
+import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
+import { motivosObrigatoriosSeq, identificacaoIncompleta } from "@/lib/bpa-i-v3/obrigatorios";
 import * as L from "@/lib/bpai-v2-layout";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 
@@ -65,6 +67,13 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
   // Cruza procedimento × quantidade × idade × sexo × serviço/classe × CID contra o
   // SIGTAP oficial (uma única busca do procedimento, compartilhada entre as checagens).
   const val = useValidacaoProcedimento(s);
+  // v3: Serviço/Classe e CID são obrigatórios quando o SIGTAP os exige p/ o procedimento.
+  const exig = useExigenciasSigtap(s.codProc.join(""));
+  // Regras de obrigatoriedade só valem quando a sequência vai virar linha (tem procedimento).
+  const seqAtiva = hydrated && seqPreenchida(s);
+  const obrigatorios = seqAtiva ? motivosObrigatoriosSeq(s, exig) : [];
+  // Identificação vazia/incompleta acende a borda do campo (além de bloquear).
+  const identBloqueio = seqAtiva && identificacaoIncompleta(s.cnsPac);
   const dnInvalida = dnInvalidaData || (hydrated && val.idadeInvalida);
   const daInvalida = daInvalidaData || (hydrated && val.idadeInvalida);
   const dnTitle = dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
@@ -123,6 +132,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     caraterFaltando && CARATER_MOTIVO,
     cepMotivo,
     ...val.motivos,
+    ...obrigatorios,
   ].filter((m): m is string => Boolean(m));
 
   useEffect(() => {
@@ -134,7 +144,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     <div>
       {/* Paciente row 1: CPF/CNS (inteligente) + Nome */}
       <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-        values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={identInvalida} title={IDENT_MOTIVO} clearable compact />
+        values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={identInvalida || identBloqueio} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} clearable compact />
       {/* Selo do tipo detectado (só na tela; ignorado no PDF): CPF aos 11 díg., CNS aos 15. */}
       {ident.tipo && (
         <div

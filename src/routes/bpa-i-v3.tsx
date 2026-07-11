@@ -29,6 +29,7 @@ import { registrarUso } from "@/lib/bpa-i-v2/historico";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
+import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
 
 export const Route = createFileRoute("/bpa-i-v3")({
   head: () => ({
@@ -163,7 +164,12 @@ function BpaI() {
     setErrosSeq((prev) => (prev[si]?.join("|") === motivos.join("|") ? prev : { ...prev, [si]: motivos }));
   }, []);
   const cnsProfInvalido = hydrated && cnsInvalido(state.profCns.join(""));
+  // v3: cabeçalho obrigatório (estabelecimento + profissional + competência). Só cobra
+  // quando já há alguma sequência com procedimento — o formulário vazio não acende nada.
+  const temSeqAtiva = state.seqs.some(seqPreenchida);
+  const motivosCab = hydrated && temSeqAtiva ? motivosCabecalho(state) : [];
   const motivosInvalidos = [
+    ...motivosCab.map((m) => `Cabeçalho: ${m}`),
     ...(cnsProfInvalido ? ["Profissional: CNS inválido (dígito verificador não confere)."] : []),
     ...Object.entries(errosSeq).flatMap(([si, motivos]) => motivos.map((m) => `Sequência ${Number(si) + 1}: ${m}`)),
   ];
