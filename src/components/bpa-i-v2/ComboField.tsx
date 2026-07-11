@@ -58,11 +58,11 @@ export function ComboField({ value, onChange, options, top, left, width, height,
     if (!el) return;
     el.style.fontSize = "";
     const base = parseFloat(getComputedStyle(el).fontSize) || 14;
-    let size = Math.min(base, 12); // teto menor p/ campos estreitos em maiúsculas
+    let size = Math.min(base, 16); // teto confortável; só encolhe se a palavra não couber
     el.style.fontSize = `${size}px`;
     let guard = 0;
-    // Encolhe deixando ~5px de folga p/ o texto não encostar nas bordas.
-    while (el.scrollWidth > el.clientWidth - 5 && size > 6 && guard < 24) {
+    // Encolhe deixando ~3px de folga p/ o texto não encostar nas bordas.
+    while (el.scrollWidth > el.clientWidth - 3 && size > 7 && guard < 24) {
       size -= 0.5;
       el.style.fontSize = `${size}px`;
       guard++;
