@@ -164,6 +164,9 @@ function Home() {
             <Link to="/bpa-i-v2" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
               <FileText className="size-4" /> BPA-I
             </Link>
+            <Link to="/bpa-i-v3" className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3.5 py-2 text-sm font-semibold text-primary shadow-sm transition-colors hover:bg-primary/10">
+              <FileText className="size-4" /> BPA-I v3 <span className="rounded bg-primary/15 px-1 text-[10px] font-bold uppercase">beta</span>
+            </Link>
             <button onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60">
               <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </button>
