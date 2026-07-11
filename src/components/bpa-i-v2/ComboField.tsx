@@ -57,9 +57,12 @@ export function ComboField({ value, onChange, options, top, left, width, height,
     const el = inputRef.current;
     if (!el) return;
     el.style.fontSize = "";
-    let size = parseFloat(getComputedStyle(el).fontSize) || 14;
+    const base = parseFloat(getComputedStyle(el).fontSize) || 14;
+    let size = Math.min(base, 12); // teto menor p/ campos estreitos em maiúsculas
+    el.style.fontSize = `${size}px`;
     let guard = 0;
-    while (el.scrollWidth > el.clientWidth + 1 && size > 6 && guard < 24) {
+    // Encolhe deixando ~5px de folga p/ o texto não encostar nas bordas.
+    while (el.scrollWidth > el.clientWidth - 5 && size > 6 && guard < 24) {
       size -= 0.5;
       el.style.fontSize = `${size}px`;
       guard++;
@@ -102,7 +105,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
           height: `${height}%`,
           backgroundColor: disabled ? "rgba(0,0,0,0.045)" : undefined,
           cursor: disabled ? "not-allowed" : undefined,
-          textAlign: display === "code" ? "center" : undefined,
+          textAlign: display === "code" || uppercase ? "center" : undefined,
         }}
         value={up(text)}
         disabled={disabled}
