@@ -164,7 +164,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           readOnly={readOnly}
           tabIndex={readOnly ? -1 : undefined}
           title={invalid || warn ? title : undefined}
-          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}${dimFrom != null && i >= dimFrom ? " bg-slate-400/25 opacity-40" : ""}`}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}${dimFrom != null && i >= dimFrom ? " form-digit--dim" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
