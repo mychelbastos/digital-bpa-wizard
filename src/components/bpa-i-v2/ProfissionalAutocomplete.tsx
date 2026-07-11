@@ -10,12 +10,13 @@ interface Props {
   nome: string;
   onChangeNome: (nome: string) => void;
   onPick: (prof: ProfissionalCache) => void; // preenche Nome + CNS do profissional
+  uppercase?: boolean; // força maiúsculas ao digitar (opt-in; omitido = original → v2 intacta)
 }
 
 // Campo Nome do Profissional com autocomplete a partir do cache local de profissionais
 // do estabelecimento (alimentado pela Edge Function). É texto livre: se a API/base não
 // tiver o profissional, a pessoa digita normalmente (fallback gracioso, sem travar).
-export function ProfissionalAutocomplete({ cnes, top, left, width, height, nome, onChangeNome, onPick }: Props) {
+export function ProfissionalAutocomplete({ cnes, top, left, width, height, nome, onChangeNome, onPick, uppercase = false }: Props) {
   const [sugs, setSugs] = useState<ProfissionalCache[]>([]);
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -53,8 +54,8 @@ export function ProfissionalAutocomplete({ cnes, top, left, width, height, nome,
       <input
         className="form-text"
         style={{ position: "absolute", top: `${top}%`, left: `${left}%`, width: `${width}%`, height: `${height}%` }}
-        value={nome}
-        onChange={(e) => onChangeNome(e.target.value)}
+        value={uppercase ? nome.toUpperCase() : nome}
+        onChange={(e) => onChangeNome(uppercase ? e.target.value.toUpperCase() : e.target.value)}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current);
           setFocused(true);

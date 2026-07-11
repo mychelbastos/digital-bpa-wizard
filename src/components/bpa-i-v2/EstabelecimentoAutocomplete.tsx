@@ -9,13 +9,14 @@ interface Props {
   nome: string;
   onChangeNome: (nome: string) => void;
   onPick: (estab: EstabelecimentoSug) => void; // preenche Nome + CNES do estabelecimento
+  uppercase?: boolean; // força maiúsculas ao digitar (opt-in; omitido = original → v2 intacta)
 }
 
 // Campo Nome do Estabelecimento com autocomplete a partir da tabela `estabelecimentos`.
 // Complementa a busca por CNES (que já preenche o nome): aqui a pessoa digita parte do
 // NOME e escolhe da lista p/ preencher o CNES. É texto livre — se a base não tiver o
 // estabelecimento, digita normalmente (fallback gracioso, sem travar).
-export function EstabelecimentoAutocomplete({ top, left, width, height, nome, onChangeNome, onPick }: Props) {
+export function EstabelecimentoAutocomplete({ top, left, width, height, nome, onChangeNome, onPick, uppercase = false }: Props) {
   const [sugs, setSugs] = useState<EstabelecimentoSug[]>([]);
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -53,8 +54,8 @@ export function EstabelecimentoAutocomplete({ top, left, width, height, nome, on
       <input
         className="form-text"
         style={{ position: "absolute", top: `${top}%`, left: `${left}%`, width: `${width}%`, height: `${height}%` }}
-        value={nome}
-        onChange={(e) => onChangeNome(e.target.value)}
+        value={uppercase ? nome.toUpperCase() : nome}
+        onChange={(e) => onChangeNome(uppercase ? e.target.value.toUpperCase() : e.target.value)}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current);
           setFocused(true);

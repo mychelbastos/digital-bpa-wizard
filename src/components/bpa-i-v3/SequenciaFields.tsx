@@ -16,7 +16,7 @@ import { dataFuturaOuInvalida, atendimentoAntigo, atendimentoForaDaCompetencia }
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
-import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
+import { identificarPaciente, validarCpf } from "@/lib/bpa-i-v3/identificacao";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
 import { motivosObrigatoriosSeq, identificacaoIncompleta, parcialIncompleto } from "@/lib/bpa-i-v3/obrigatorios";
 import * as L from "@/lib/bpai-v2-layout";
@@ -54,6 +54,19 @@ const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês da competência
 // (não dá pra chamar hooks dentro do .map() do componente pai).
 export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange }: Props) {
   const R = L.REL;
+  const focarNome = () => setTimeout(() => document.getElementById(`s${si}-nome`)?.focus(), 0);
+  // Ao completar um CPF válido (11 díg.), alinha os números à DIREITA (folgas à esquerda,
+  // terminando na borda como o CNS) e pula direto para o Nome — sem obrigar Tab nas
+  // 4 células vazias. Comprimentos diferentes seguem o fluxo normal (esq→dir).
+  const onChangeIdent = (v: string[]) => {
+    const digits = v.join("").replace(/\D/g, "");
+    if (digits.length === 11 && validarCpf(digits)) {
+      u("cnsPac", [...Array(R.cnsPacBoxes.length - 11).fill(""), ...digits.split("")]);
+      focarNome();
+    } else {
+      u("cnsPac", v);
+    }
+  };
   // Campo inteligente CPF/CNS: detecta o tipo pelo comprimento e valida o dígito.
   const ident = identificarPaciente(s.cnsPac);
   const identInvalida = hydrated && ident.invalido;
@@ -156,7 +169,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     <div>
       {/* Paciente row 1: CPF/CNS (inteligente) + Nome */}
       <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-        values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={identInvalida || identBloqueio || identParcial} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} dimFrom={ident.tipo === "CPF" && ident.valido ? 11 : undefined} clearable compact />
+        values={s.cnsPac} onChange={onChangeIdent} onComplete={focarNome} invalid={identInvalida || identBloqueio || identParcial} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} dimEmpty={ident.tipo === "CPF" && ident.valido} clearable compact />
       {/* Selo do tipo detectado (só na tela; ignorado no PDF): CPF aos 11 díg., CNS aos 15. */}
       {ident.tipo && (
         <div
@@ -174,7 +187,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
           {ident.completo ? (ident.valido ? "✓ " : "✗ ") : ""}{ident.tipo}
         </div>
       )}
-      <TextField top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
+      <TextField id={`s${si}-nome`} top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
         value={s.nomePac} onChange={(v) => u("nomePac", v)} uppercase />
 
       {/* Row 2: Sexo / Data Nasc / Nacion / RaçaCor / Etnia / CEP / IBGE */}
@@ -192,17 +205,17 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
         onClear={() => u("dataNasc", Array(8).fill(""))} />
       <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
-        options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} />
+        options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} uppercase />
       <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
         options={RACAS} value={s.racaCor}
         onChange={(v) => {
           u("racaCor", v);
           // Etnia só vale para Indígena; em qualquer mudança de Raça/Cor, limpa.
           u("etnia", "");
-        }} />
+        }} uppercase />
       <ComboField top={seqTop + R.row2} left={R.etnia.left} width={R.etnia.width} height={L.DIGIT_H}
         options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
-        disabled={s.racaCor !== RACA_INDIGENA} />
+        disabled={s.racaCor !== RACA_INDIGENA} uppercase />
       <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
         values={s.cep} onChange={(v) => u("cep", v)} registerRefs={regBox(`s${si}-cep`)} invalid={cepIbgeDivergente || cepIncompleto} title={cepIncompleto ? "CEP incompleto (8 dígitos)." : cepMotivo} clearable compact />
       <NomeAoFocarPopover top={seqTop + R.row2} left={R.cep[0].left} height={L.DIGIT_H}
@@ -216,7 +229,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       <ComboField top={seqTop + R.row3} left={R.codLog[0].left}
         width={R.codLog[R.codLog.length - 1].left + R.codLog[R.codLog.length - 1].width - R.codLog[0].left}
         height={L.DIGIT_H} options={TIPOS_LOGRADOURO}
-        value={s.codLog.join("")} onChange={(v) => u("codLog", v.split(""))} />
+        value={s.codLog.join("")} onChange={(v) => u("codLog", v.split(""))} uppercase />
       <TextField top={seqTop + R.row3} left={R.endereco.left} width={R.endereco.width} height={L.DIGIT_H}
         value={s.endereco} onChange={(v) => u("endereco", v)} uppercase />
       <DigitBoxes id={`s${si}-num`} top={seqTop + R.row3} height={L.DIGIT_H} boxes={R.numero}
@@ -272,7 +285,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         width={R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width - R.carater[0].left}
         height={L.DIGIT_H} options={CARATERES} display="code"
         value={s.carater.join("")} onChange={(v) => u("carater", v.split(""))}
-        invalid={caraterFaltando} title={CARATER_MOTIVO} />
+        invalid={caraterFaltando} title={CARATER_MOTIVO} uppercase />
       {caraterNome && (
         <div
           data-html2canvas-ignore="true"
@@ -284,7 +297,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
             height: `${L.DIGIT_H}%`,
           }}
         >
-          {caraterNome}
+          {caraterNome.toUpperCase()}
         </div>
       )}
       <DigitBoxes id={`s${si}-aut`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.autorizacao}

@@ -738,6 +738,7 @@ function BpaI() {
 
           {/* Header */}
           <EstabelecimentoAutocomplete
+            uppercase
             {...L.NOME_ESTAB}
             nome={state.nomeEstab}
             onChangeNome={(v) =>
@@ -760,6 +761,7 @@ function BpaI() {
           {/* Profissional */}
           <DigitBoxes id="pcns" top={L.PROF_CNS_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CNS_BOXES} values={state.profCns} onChange={(v) => set("profCns", v)} invalid={cnsProfInvalido} title="CNS inválido (dígito verificador não confere)." clearable compact />
           <ProfissionalAutocomplete
+            uppercase
             cnes={cnesEstab}
             top={L.PROF_NOME.top} left={L.PROF_NOME.left} width={L.PROF_NOME.width} height={L.PROF_NOME.height}
             nome={state.profNome}

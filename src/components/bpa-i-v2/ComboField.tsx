@@ -20,6 +20,9 @@ interface Props {
   // pequenas, ex.: Raça/Cor). Em listas grandes (ex.: Município, 5mil+ linhas), passe
   // `false`: em vez da lista inteira, mostra um popover só com o nome já selecionado.
   mostrarTodosAoFocar?: boolean;
+  // Exibe o rótulo em MAIÚSCULAS (na caixa e na lista). Só afeta a exibição — o código
+  // guardado e a busca não mudam. Opt-in (omitido = original), então a v2 não muda.
+  uppercase?: boolean;
 }
 
 const norm = (s: string) =>
@@ -28,7 +31,9 @@ const norm = (s: string) =>
 // Combobox posicionado em % da form-sheet (igual aos demais campos, p/ o export do PDF
 // capturar o <input> e mostrar o NOME selecionado). Guarda o código, exibe o rótulo.
 // Sugestão por tecla (primeira letra filtra) + confirmar com Tab/Enter.
-export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label", invalid = false, title, mostrarTodosAoFocar = true }: Props) {
+export function ComboField({ value, onChange, options, top, left, width, height, disabled, display = "label", invalid = false, title, mostrarTodosAoFocar = true, uppercase = false }: Props) {
+  const up = (s: string) => (uppercase ? s.toUpperCase() : s);
+  const inputRef = useRef<HTMLInputElement>(null);
   const labelOf = (code: string) => options.find((o) => o.code === code)?.label ?? "";
   // O que aparece na caixa para um código: o rótulo, ou o próprio código.
   const shown = (code: string) => (display === "code" ? (labelOf(code) ? code : "") : labelOf(code));
@@ -43,6 +48,24 @@ export function ComboField({ value, onChange, options, top, left, width, height,
     setText(shown(value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, options]);
+
+  // Encolhe a fonte p/ o rótulo caber no campo quando em MAIÚSCULAS (letras mais largas
+  // estouravam campos estreitos como Nacionalidade/Raça-Cor). Só roda quando uppercase,
+  // então a v2 não muda. Volta ao tamanho do CSS e diminui até caber (mínimo 6px).
+  useEffect(() => {
+    if (!uppercase) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.fontSize = "";
+    let size = parseFloat(getComputedStyle(el).fontSize) || 14;
+    let guard = 0;
+    while (el.scrollWidth > el.clientWidth + 1 && size > 6 && guard < 24) {
+      size -= 0.5;
+      el.style.fontSize = `${size}px`;
+      guard++;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, value, width, uppercase]);
 
   const q = norm(text);
   // Casa por prefixo em qualquer token do rótulo/sinônimos, ou pelo código.
@@ -69,6 +92,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
   return (
     <>
       <input
+        ref={inputRef}
         className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}`}
         style={{
           position: "absolute",
@@ -80,7 +104,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
           cursor: disabled ? "not-allowed" : undefined,
           textAlign: display === "code" ? "center" : undefined,
         }}
-        value={text}
+        value={up(text)}
         disabled={disabled}
         readOnly={false}
         title={invalid ? title : undefined}
@@ -131,7 +155,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
           className="absolute z-[60] max-w-[280px] rounded-md border border-border bg-white px-3 py-1.5 text-xs text-foreground shadow-lg"
           style={{ top: `calc(${top + height}% + 2px)`, left: `${left}%` }}
         >
-          {labelOf(value)}
+          {up(labelOf(value))}
         </div>
       )}
       {open && !disabled && list.length > 0 && (
@@ -151,7 +175,7 @@ export function ComboField({ value, onChange, options, top, left, width, height,
               }}
             >
               <span className="font-mono text-xs text-muted-foreground">{o.code}</span>
-              <span>{o.label}</span>
+              <span>{up(o.label)}</span>
             </li>
           ))}
         </ul>

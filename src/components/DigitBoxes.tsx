@@ -45,12 +45,12 @@ interface Props {
   // Força letras maiúsculas (só faz sentido com numeric=false, ex.: CID). Opt-in:
   // omitido = comportamento original (usado pelas telas v2), então a v2 não muda.
   uppercase?: boolean;
-  // Esmaece as células a partir deste índice (inclusive), sinalizando que não são
-  // usadas (ex.: CPF de 11 díg. num campo de 15 do CNS). Continuam editáveis. Opt-in.
-  dimFrom?: number;
+  // Esmaece as células VAZIAS, sinalizando que não são usadas (ex.: as 4 folgas de um
+  // CPF de 11 díg. num campo de 15 do CNS, alinhado à direita). Continuam editáveis. Opt-in.
+  dimEmpty?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title, uppercase = false, dimFrom }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title, uppercase = false, dimEmpty = false }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -164,7 +164,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           readOnly={readOnly}
           tabIndex={readOnly ? -1 : undefined}
           title={invalid || warn ? title : undefined}
-          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}${dimFrom != null && i >= dimFrom ? " form-digit--dim" : ""}`}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}${dimEmpty && !values[i] ? " form-digit--dim" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
@@ -217,11 +217,14 @@ interface TextProps {
   title?: string;
   // Força letras maiúsculas. Opt-in (omitido = original), então a v2 não muda.
   uppercase?: boolean;
+  // id no <input> (p/ focar programaticamente, ex.: pular do CPF direto p/ o nome).
+  id?: string;
 }
 
-export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false, title, uppercase = false }: TextProps) {
+export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false, title, uppercase = false, id }: TextProps) {
   return (
     <input
+      id={id}
       value={value}
       onChange={(e) => onChange(uppercase ? e.target.value.toUpperCase() : e.target.value)}
       title={invalid ? title : undefined}
