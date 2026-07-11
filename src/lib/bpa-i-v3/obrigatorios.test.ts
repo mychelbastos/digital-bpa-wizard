@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { emptySeq } from "@/lib/bpai-v2-layout";
-import { motivosObrigatoriosSeq, motivosCabecalho, identificacaoIncompleta } from "./obrigatorios";
+import { motivosObrigatoriosSeq, motivosCabecalho, identificacaoIncompleta, parcialIncompleto } from "./obrigatorios";
 
 const semExig = { exigeServico: null, exigeCid: null } as const;
 
@@ -63,6 +63,18 @@ describe("motivosObrigatoriosSeq", () => {
     ]);
     // exig desconhecido (null) não bloqueia:
     expect(motivosObrigatoriosSeq(s, semExig)).toEqual([]);
+  });
+});
+
+describe("parcialIncompleto", () => {
+  it("vazio não é parcial (é 'obrigatório', não 'incompleto')", () => {
+    expect(parcialIncompleto(Array(8).fill(""), 8)).toBe(false);
+  });
+  it("data 20/03/202 (7 de 8 díg.) é parcial/incompleta", () => {
+    expect(parcialIncompleto("20032025".slice(0, 7).split("").concat([""]), 8)).toBe(true);
+  });
+  it("completo (8 díg.) não é parcial", () => {
+    expect(parcialIncompleto("20032025".split(""), 8)).toBe(false);
   });
 });
 

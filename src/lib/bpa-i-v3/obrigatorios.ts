@@ -14,6 +14,13 @@ import { identificarPaciente } from "./identificacao";
 const vazio = (v: string) => !v || !v.trim();
 const digs = (a: string[]) => a.join("").replace(/\D/g, "");
 
+// Campo de tamanho fixo começado mas incompleto (tem ao menos 1 dígito, mas não os n
+// esperados) — ex.: data 20/03/202 (7 de 8). Vazio NÃO conta (aí é "obrigatório").
+export function parcialIncompleto(arr: string[], n: number): boolean {
+  const d = digs(arr).length;
+  return d > 0 && d !== n;
+}
+
 export interface CabecalhoBpa {
   nomeEstab: string;
   cnes: string[];

@@ -24,7 +24,7 @@ import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
-import { HistoricoField } from "@/components/bpa-i-v2/HistoricoField";
+import { CboField } from "@/components/bpa-i-v3/CboField";
 import { registrarUso } from "@/lib/bpa-i-v2/historico";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
@@ -778,7 +778,7 @@ function BpaI() {
               });
             }}
           />
-          <HistoricoField id="pcbo" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CBO_BOXES} values={state.profCbo} onChange={(v) => set("profCbo", v)} tabela="cbo" clearable />
+          <CboField id="pcbo" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_CBO_BOXES} values={state.profCbo} onChange={(v) => set("profCbo", v)} clearable />
           {cboOpcoes.length > 1 && (
             <div
               className="absolute z-[70]"
@@ -806,7 +806,7 @@ function BpaI() {
           <FieldClear top={L.PROF_ROW2_TOP} left={endOf(L.PROF_ANO_BOXES) + 0.5} height={L.HEADER_DIGIT_H}
             getInputs={() => inputsOf("pmes", "pano")}
             onClear={() => setState((p) => ({ ...p, profMes: Array(2).fill(""), profAno: Array(4).fill("") }))} />
-          <TextField {...L.PROF_EQUIPE} value={state.profEquipe} onChange={(v) => set("profEquipe", v)} />
+          <TextField {...L.PROF_EQUIPE} value={state.profEquipe} onChange={(v) => set("profEquipe", v)} uppercase />
           <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} compact />
 
           {/* 3 Sequências */}
@@ -838,8 +838,8 @@ function BpaI() {
             getSnapshot={() => ({ ...state, respConfirmacao: undefined })}
           />
           {renderData("respData", L.RESP_DATA_DIA, L.RESP_DATA_MES, L.RESP_DATA_ANO)}
-          <TextField {...L.GEST_CARIMBO} value={state.gestCarimbo} onChange={(v) => set("gestCarimbo", v)} />
-          <TextField {...L.GEST_RUBRICA} value={state.gestRubrica} onChange={(v) => set("gestRubrica", v)} />
+          <TextField {...L.GEST_CARIMBO} value={state.gestCarimbo} onChange={(v) => set("gestCarimbo", v)} uppercase />
+          <TextField {...L.GEST_RUBRICA} value={state.gestRubrica} onChange={(v) => set("gestRubrica", v)} uppercase />
           {renderData("gestData", L.GEST_DATA_DIA, L.GEST_DATA_MES, L.GEST_DATA_ANO)}
         </div>
 

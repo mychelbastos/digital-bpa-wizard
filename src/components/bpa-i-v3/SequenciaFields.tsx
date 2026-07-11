@@ -18,7 +18,7 @@ import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedime
 import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
 import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
-import { motivosObrigatoriosSeq, identificacaoIncompleta } from "@/lib/bpa-i-v3/obrigatorios";
+import { motivosObrigatoriosSeq, identificacaoIncompleta, parcialIncompleto } from "@/lib/bpa-i-v3/obrigatorios";
 import * as L from "@/lib/bpai-v2-layout";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 
@@ -74,10 +74,17 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
   const obrigatorios = seqAtiva ? motivosObrigatoriosSeq(s, exig) : [];
   // Identificação vazia/incompleta acende a borda do campo (além de bloquear).
   const identBloqueio = seqAtiva && identificacaoIncompleta(s.cnsPac);
-  const dnInvalida = dnInvalidaData || (hydrated && val.idadeInvalida);
-  const daInvalida = daInvalidaData || (hydrated && val.idadeInvalida);
-  const dnTitle = dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
-  const daTitle = daInvalidaData ? DATA_INVALIDA_MOTIVO : (daForaCompetencia ? DATA_COMPETENCIA_AVISO : val.idadeMotivo);
+  // Campos de tamanho fixo começados mas incompletos (faltando caracteres): acendem
+  // vermelho e bloqueiam mesmo sem procedimento — feedback imediato (ex.: data 20/03/202).
+  const identParcial = hydrated && s.cnsPac.join("").replace(/\D/g, "").length > 0 && identificacaoIncompleta(s.cnsPac);
+  const dnIncompleta = hydrated && parcialIncompleto(s.dataNasc, 8);
+  const daIncompleta = hydrated && parcialIncompleto(s.dataAtend, 8);
+  const cepIncompleto = hydrated && parcialIncompleto(s.cep, 8);
+  const ibgeIncompleto = hydrated && parcialIncompleto(s.ibge, 7);
+  const dnInvalida = dnInvalidaData || (hydrated && val.idadeInvalida) || dnIncompleta;
+  const daInvalida = daInvalidaData || (hydrated && val.idadeInvalida) || daIncompleta;
+  const dnTitle = dnIncompleta ? "Data de nascimento incompleta — faltam dígitos." : dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
+  const daTitle = daIncompleta ? "Data do atendimento incompleta — faltam dígitos." : daInvalidaData ? DATA_INVALIDA_MOTIVO : (daForaCompetencia ? DATA_COMPETENCIA_AVISO : val.idadeMotivo);
   const daWarn = daAntiga || daForaCompetencia;
 
   // Cruza CEP × Cód. IBGE Município: busca o município real do CEP (ViaCEP, com
@@ -126,14 +133,19 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
   // Nome abreviado do Caráter de Atendimento selecionado, mostrado ao lado do código.
   const caraterNome = CARATERES.find((c) => c.code === s.carater.join(""))?.curto;
 
-  const motivos = [
+  const motivos = [...new Set([
     identInvalida && IDENT_MOTIVO,
+    identParcial && "Identificação do paciente incompleta — CPF tem 11 e CNS tem 15 dígitos.",
     (dnInvalidaData || daInvalidaData) && DATA_INVALIDA_MOTIVO,
+    dnIncompleta && "Data de nascimento incompleta (faltam dígitos).",
+    daIncompleta && "Data do atendimento incompleta (faltam dígitos).",
+    cepIncompleto && "CEP incompleto (8 dígitos).",
+    ibgeIncompleto && "Cód. IBGE do município incompleto (7 dígitos).",
     caraterFaltando && CARATER_MOTIVO,
     cepMotivo,
     ...val.motivos,
     ...obrigatorios,
-  ].filter((m): m is string => Boolean(m));
+  ].filter((m): m is string => Boolean(m)))];
 
   useEffect(() => {
     onValidacaoChange?.(si, motivos);
@@ -144,7 +156,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     <div>
       {/* Paciente row 1: CPF/CNS (inteligente) + Nome */}
       <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-        values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={identInvalida || identBloqueio} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} clearable compact />
+        values={s.cnsPac} onChange={(v) => u("cnsPac", v)} invalid={identInvalida || identBloqueio || identParcial} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} dimFrom={ident.tipo === "CPF" && ident.valido ? 11 : undefined} clearable compact />
       {/* Selo do tipo detectado (só na tela; ignorado no PDF): CPF aos 11 díg., CNS aos 15. */}
       {ident.tipo && (
         <div
@@ -163,7 +175,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         </div>
       )}
       <TextField top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
-        value={s.nomePac} onChange={(v) => u("nomePac", v)} />
+        value={s.nomePac} onChange={(v) => u("nomePac", v)} uppercase />
 
       {/* Row 2: Sexo / Data Nasc / Nacion / RaçaCor / Etnia / CEP / IBGE */}
       <TextField top={seqTop + R.row2} left={R.sexoM.left} width={R.sexoM.width} height={L.DIGIT_H} align="center"
@@ -192,13 +204,13 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
         disabled={s.racaCor !== RACA_INDIGENA} />
       <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
-        values={s.cep} onChange={(v) => u("cep", v)} registerRefs={regBox(`s${si}-cep`)} invalid={cepIbgeDivergente} title={cepMotivo} clearable compact />
+        values={s.cep} onChange={(v) => u("cep", v)} registerRefs={regBox(`s${si}-cep`)} invalid={cepIbgeDivergente || cepIncompleto} title={cepIncompleto ? "CEP incompleto (8 dígitos)." : cepMotivo} clearable compact />
       <NomeAoFocarPopover top={seqTop + R.row2} left={R.cep[0].left} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-cep`)} texto={cepMotivo ?? cepCidadeUf} />
       <ComboField top={seqTop + R.row2} left={R.ibge[0].left}
         width={R.ibge[R.ibge.length - 1].left + R.ibge[R.ibge.length - 1].width - R.ibge[0].left}
         height={L.DIGIT_H} options={MUNICIPIOS_IBGE} display="code" mostrarTodosAoFocar={false}
-        value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} invalid={cepIbgeDivergente} title={cepMotivo} />
+        value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} invalid={cepIbgeDivergente || ibgeIncompleto} title={ibgeIncompleto ? "Cód. IBGE incompleto (7 dígitos)." : cepMotivo} />
 
       {/* Row 3: Cod Logradouro / Endereço / Número / Complemento */}
       <ComboField top={seqTop + R.row3} left={R.codLog[0].left}
@@ -206,15 +218,15 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         height={L.DIGIT_H} options={TIPOS_LOGRADOURO}
         value={s.codLog.join("")} onChange={(v) => u("codLog", v.split(""))} />
       <TextField top={seqTop + R.row3} left={R.endereco.left} width={R.endereco.width} height={L.DIGIT_H}
-        value={s.endereco} onChange={(v) => u("endereco", v)} />
+        value={s.endereco} onChange={(v) => u("endereco", v)} uppercase />
       <DigitBoxes id={`s${si}-num`} top={seqTop + R.row3} height={L.DIGIT_H} boxes={R.numero}
         values={s.numero} onChange={(v) => u("numero", v)} numeric={false} clearable compact />
       <TextField top={seqTop + R.row3} left={R.complemento.left} width={R.complemento.width} height={L.DIGIT_H}
-        value={s.complemento} onChange={(v) => u("complemento", v)} />
+        value={s.complemento} onChange={(v) => u("complemento", v)} uppercase />
 
       {/* Row 4: Bairro / DDD / Telefone / Email */}
       <TextField top={seqTop + R.row4} left={R.bairro.left} width={R.bairro.width} height={L.DIGIT_H}
-        value={s.bairro} onChange={(v) => u("bairro", v)} />
+        value={s.bairro} onChange={(v) => u("bairro", v)} uppercase />
       <DigitBoxes id={`s${si}-ddd`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.ddd}
         values={s.ddd} onChange={(v) => u("ddd", v)} registerRefs={regBox(`s${si}-ddd`)} onComplete={() => focusBox(`s${si}-tel`)} compact />
       <DigitBoxes id={`s${si}-tel`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.telefone}
@@ -253,7 +265,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       <NomeAoFocarPopover top={seqTop + R.procRow2} left={R.servico[0].left} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-srv`, `s${si}-cls`)} texto={val.servicoMotivo ?? nomeServicoClasse} />
       <DigitBoxes id={`s${si}-cid`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.cid}
-        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} registerRefs={regBox(`s${si}-cid`)} invalid={hydrated && val.cidInvalido} title={val.cidMotivo} compact />
+        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} uppercase registerRefs={regBox(`s${si}-cid`)} invalid={hydrated && val.cidInvalido} title={val.cidMotivo} compact />
       <NomeAoFocarPopover top={seqTop + R.procRow2} left={R.cid[0].left} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-cid`)} texto={val.cidMotivo ?? nomeCid} />
       <ComboField top={seqTop + R.procRow2} left={R.carater[0].left}

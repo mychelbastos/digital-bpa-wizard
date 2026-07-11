@@ -42,9 +42,15 @@ interface Props {
   separated?: boolean;
   // Explica o motivo de um `invalid`/`warn` (tooltip nativo ao passar o mouse/tocar).
   title?: string;
+  // Força letras maiúsculas (só faz sentido com numeric=false, ex.: CID). Opt-in:
+  // omitido = comportamento original (usado pelas telas v2), então a v2 não muda.
+  uppercase?: boolean;
+  // Esmaece as células a partir deste índice (inclusive), sinalizando que não são
+  // usadas (ex.: CPF de 11 díg. num campo de 15 do CNS). Continuam editáveis. Opt-in.
+  dimFrom?: number;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title, uppercase = false, dimFrom }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
@@ -91,6 +97,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
   const handle = (i: number, v: string) => {
     let val = v.slice(-1);
     if (numeric && val && !/[0-9]/.test(val)) return;
+    if (uppercase && val) val = val.toUpperCase();
     if (rightAlign) {
       if (val) setRightAligned(values.filter(Boolean).join("") + val); // acumula à direita
       return;
@@ -125,7 +132,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     const text = e.clipboardData.getData("text").replace(/\s/g, "");
     if (!text) return;
     e.preventDefault();
-    const chars = numeric ? text.replace(/\D/g, "").split("") : text.split("");
+    const chars = numeric ? text.replace(/\D/g, "").split("") : (uppercase ? text.toUpperCase() : text).split("");
     if (rightAlign) {
       setRightAligned(values.filter(Boolean).join("") + chars.join(""));
       return;
@@ -157,7 +164,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           readOnly={readOnly}
           tabIndex={readOnly ? -1 : undefined}
           title={invalid || warn ? title : undefined}
-          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}${dimFrom != null && i >= dimFrom ? " bg-slate-400/25 opacity-40" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
@@ -208,13 +215,15 @@ interface TextProps {
   invalid?: boolean;
   // Explica o motivo do `invalid` (tooltip nativo ao passar o mouse/tocar).
   title?: string;
+  // Força letras maiúsculas. Opt-in (omitido = original), então a v2 não muda.
+  uppercase?: boolean;
 }
 
-export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false, title }: TextProps) {
+export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false, title, uppercase = false }: TextProps) {
   return (
     <input
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onChange(uppercase ? e.target.value.toUpperCase() : e.target.value)}
       title={invalid ? title : undefined}
       className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}`}
       style={{
