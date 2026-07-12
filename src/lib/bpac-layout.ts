@@ -63,7 +63,15 @@ export const TOTAL_HEIGHT = 2.31;
 
 // Formalização — RESPONSÁVEL (Estabelecimento): área de carimbo/rubrica onde entra a
 // confirmação eletrônica (assinatura). Posição ESTIMADA — calibrar sobre a imagem.
-export const RESP_CONFIRM = { top: 91.2, left: 9, width: 37, height: 2.2 };
+export const RESP_CONFIRM = { top: 89.5, left: 9, width: 37, height: 2.2 };
+
+// Campo DATA (Formalização do Responsável) — dia/mês/ano SOBRE a linha impressa
+// "DATA __/__/____". Preenchido automaticamente com hoje. Posições ESTIMADAS — calibrar.
+export const RESP_DATA_TOP = 92.9;
+export const RESP_DATA_H = 1.6;
+export const RESP_DATA_DIA = [{ left: 14.0, width: 1.5 }, { left: 15.5, width: 1.5 }];
+export const RESP_DATA_MES = [{ left: 17.8, width: 1.5 }, { left: 19.3, width: 1.5 }];
+export const RESP_DATA_ANO = [{ left: 21.6, width: 1.4 }, { left: 23.0, width: 1.4 }, { left: 24.4, width: 1.4 }, { left: 25.8, width: 1.4 }];
 
 const zipBoxes = (lefts: number[], widths: number[]) =>
   lefts.map((left, i) => ({ left, width: widths[i] }));

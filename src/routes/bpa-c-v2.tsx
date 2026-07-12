@@ -21,6 +21,7 @@ import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS,
   qtdBoxes, TOTAL_TOP, TOTAL_HEIGHT, RESP_CONFIRM,
+  RESP_DATA_TOP, RESP_DATA_H, RESP_DATA_DIA, RESP_DATA_MES, RESP_DATA_ANO,
   emptyRow, type RowData,
 } from "@/lib/bpac-layout";
 
@@ -46,6 +47,7 @@ interface State {
   folha: string[];
   rows: RowData[];
   respConfirmacao: Confirmacao | null;
+  respData: string[]; // 8 dígitos — data da formalização (auto: hoje)
 }
 
 // Mês/Ano da competência atual (pré-preenchidos por padrão; o usuário pode alterar).
@@ -57,6 +59,15 @@ const competenciaAtual = () => {
   };
 };
 
+// Data de hoje como 8 dígitos [D,D,M,M,A,A,A,A] — pré-preenche o campo DATA da assinatura.
+const hojeDigits = (): string[] => {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const aaaa = String(d.getFullYear()).padStart(4, "0");
+  return `${dd}${mm}${aaaa}`.split("");
+};
+
 const initialState = (): State => ({
   cnes: Array(7).fill(""),
   nome: "",
@@ -66,6 +77,7 @@ const initialState = (): State => ({
   folha: Array(3).fill(""),
   rows: Array.from({ length: 20 }, emptyRow),
   respConfirmacao: null,
+  respData: hojeDigits(),
 });
 
 function loadState(): State {
@@ -448,6 +460,13 @@ function BpaCV2() {
             onConfirmado={(c) => set("respConfirmacao", c)}
             getSnapshot={() => ({ ...state, respConfirmacao: undefined })}
           />
+          {/* DATA da formalização — preenchida automaticamente com hoje (editável) */}
+          <DigitBoxes id="rdd" top={RESP_DATA_TOP} height={RESP_DATA_H} boxes={RESP_DATA_DIA}
+            values={state.respData.slice(0, 2)} onChange={(v) => set("respData", [...v, ...state.respData.slice(2)])} compact />
+          <DigitBoxes id="rdm" top={RESP_DATA_TOP} height={RESP_DATA_H} boxes={RESP_DATA_MES}
+            values={state.respData.slice(2, 4)} onChange={(v) => set("respData", [...state.respData.slice(0, 2), ...v, ...state.respData.slice(4)])} compact />
+          <DigitBoxes id="rda" top={RESP_DATA_TOP} height={RESP_DATA_H} boxes={RESP_DATA_ANO}
+            values={state.respData.slice(4, 8)} onChange={(v) => set("respData", [...state.respData.slice(0, 4), ...v])} compact />
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
