@@ -68,14 +68,18 @@ export async function renomearFicha(id: string, titulo: string): Promise<boolean
   }
 }
 
-export async function listarFichas(): Promise<FichaResumo[]> {
+// Lista as fichas do usuário. `tipo` opcional filtra por BPA-C/BPA-I (omitido = todas —
+// mantém o comportamento atual de quem não passa o filtro).
+export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResumo[]> {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
+    let req = supabase
       .from("fichas")
       .select("id, titulo, competencia, updated_at")
       .order("updated_at", { ascending: false })
       .limit(50);
+    if (tipo) req = req.eq("tipo", tipo);
+    const { data, error } = await req;
     return error || !data ? [] : (data as FichaResumo[]);
   } catch {
     return [];

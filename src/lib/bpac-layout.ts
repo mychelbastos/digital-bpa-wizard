@@ -61,6 +61,10 @@ export const QTD_WIDTHS = [2.84, 2.78, 2.90, 2.72, 2.42];
 export const TOTAL_TOP = 81.6;
 export const TOTAL_HEIGHT = 2.31;
 
+// Formalização — RESPONSÁVEL (Estabelecimento): área de carimbo/rubrica onde entra a
+// confirmação eletrônica (assinatura). Posição ESTIMADA — calibrar sobre a imagem.
+export const RESP_CONFIRM = { top: 91.2, left: 9, width: 37, height: 2.2 };
+
 const zipBoxes = (lefts: number[], widths: number[]) =>
   lefts.map((left, i) => ({ left, width: widths[i] }));
 

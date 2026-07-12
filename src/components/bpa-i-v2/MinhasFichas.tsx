@@ -11,10 +11,12 @@ interface Props {
   onNova: () => void;
   /** Chamado quando a ficha renomeada é a que está aberta no formulário agora. */
   onRenomeada?: (id: string, titulo: string) => void;
+  /** Filtra as fichas por tipo (omitido = todas). */
+  tipo?: "BPA-C" | "BPA-I";
 }
 
 // Lista de fichas salvas no Supabase (do usuário logado). Abrir / nova / excluir.
-export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, onRenomeada }: Props) {
+export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, onRenomeada, tipo }: Props) {
   const [fichas, setFichas] = useState<FichaResumo[]>([]);
   const [carregando, setCarregando] = useState(false);
   // Renomear inline: id em edição + valor do input.
@@ -27,11 +29,11 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
     if (!open) return;
     setCarregando(true);
     setEditandoId(null);
-    listarFichas().then((f) => { setFichas(f); setCarregando(false); });
+    listarFichas(tipo).then((f) => { setFichas(f); setCarregando(false); });
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, tipo]);
 
   if (!open) return null;
 
