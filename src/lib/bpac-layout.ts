@@ -69,9 +69,11 @@ export const RESP_CONFIRM = { top: 89.5, left: 9, width: 37, height: 2.2 };
 // "DATA __/__/____". Preenchido automaticamente com hoje. Posições ESTIMADAS — calibrar.
 export const RESP_DATA_TOP = 92.9;
 export const RESP_DATA_H = 1.6;
-export const RESP_DATA_DIA = [{ left: 14.0, width: 1.5 }, { left: 15.5, width: 1.5 }];
-export const RESP_DATA_MES = [{ left: 17.8, width: 1.5 }, { left: 19.3, width: 1.5 }];
-export const RESP_DATA_ANO = [{ left: 21.6, width: 1.4 }, { left: 23.0, width: 1.4 }, { left: 24.4, width: 1.4 }, { left: 25.8, width: 1.4 }];
+// width maior que o espaçamento (0.9) de propósito: as caixas se sobrepõem um pouco,
+// mas cada dígito fica centralizado no mesmo lugar SEM cortar as bordas.
+export const RESP_DATA_DIA = [{ left: 12.35, width: 1.2 }, { left: 13.25, width: 1.2 }];
+export const RESP_DATA_MES = [{ left: 14.95, width: 1.2 }, { left: 15.85, width: 1.2 }];
+export const RESP_DATA_ANO = [{ left: 18.1, width: 1.2 }, { left: 19.0, width: 1.2 }, { left: 19.9, width: 1.2 }, { left: 20.8, width: 1.2 }];
 
 const zipBoxes = (lefts: number[], widths: number[]) =>
   lefts.map((left, i) => ({ left, width: widths[i] }));
