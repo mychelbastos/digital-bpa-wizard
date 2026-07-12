@@ -83,6 +83,25 @@ export async function servicoClassificacaoValida(procedimento: string, servico: 
   }
 }
 
+// CBO (ocupação) é compatível com este procedimento? Regra: se o procedimento tem
+// CBOs cadastrados, só esses valem; se não tem nenhum, não critica (retorna null).
+// null = não sabemos / sem restrição (fail-open, não bloqueia).
+export async function cboValidoParaProcedimento(procedimento: string, cbo: string): Promise<boolean | null> {
+  if (!supabase || procedimento.length !== 10 || cbo.length !== 6) return null;
+  try {
+    const { data, error } = await supabase
+      .from("procedimento_ocupacao")
+      .select("cbo")
+      .eq("procedimento", procedimento)
+      .limit(1000);
+    if (error) return null;
+    if (!data || data.length === 0) return null; // procedimento sem CBO cadastrado → não critica
+    return data.some((r) => (r as { cbo: string }).cbo === cbo);
+  } catch {
+    return null;
+  }
+}
+
 // CID é compatível com este procedimento?
 export async function cidValidoParaProcedimento(procedimento: string, cid: string): Promise<boolean | null> {
   if (!supabase || procedimento.length !== 10 || !cid) return null;

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { DigitBoxes } from "@/components/DigitBoxes";
 import { ProcedimentoField } from "@/components/bpa-i-v2/ProcedimentoField";
 import { CboField } from "@/components/bpa-i-v3/CboField";
-import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { useValidacaoLinhaBpaC } from "@/lib/bpa-c-v2/use-validacao-linha";
 import { procBoxes, cboBoxes, idadeBoxes, qtdBoxes, type RowData } from "@/lib/bpac-layout";
 
 interface Props {
@@ -11,38 +11,35 @@ interface Props {
   height: number;
   row: RowData;
   onUpdate: (field: keyof RowData, vals: string[]) => void;
+  // Reporta ao pai os motivos de erro desta linha (crivo SIGTAP) — o pai agrega p/
+  // acender o resumo e bloquear a geração enquanto houver campo em vermelho.
+  onValidacao?: (i: number, motivos: string[]) => void;
 }
 
-// Uma linha do BPA-C com as automações do BPA-I: Procedimento validado no SIGTAP
-// (nome no balão + borda quando não existe) e CBO com nome no balão. Idade e
-// Quantidade seguem como campos simples. Extraído p/ chamar o hook de busca do
-// procedimento 1x por linha (não dá pra chamar hook dentro de .map no componente pai).
-export function LinhaBpaC({ i, top, height, row, onUpdate }: Props) {
-  const proc = row.procedimento.join("");
-  const completo = proc.length === procBoxes.length;
-  const [nome, setNome] = useState<string | null>(null);
+// Uma linha do BPA-C com o crivo do SIGTAP: Procedimento (existe + nome no balão),
+// Idade (faixa etária), Quantidade (máximo) e CBO (compatível com o procedimento).
+// Extraído p/ chamar o hook de validação 1x por linha.
+export function LinhaBpaC({ i, top, height, row, onUpdate, onValidacao }: Props) {
+  const v = useValidacaoLinhaBpaC(row);
   useEffect(() => {
-    if (!completo) {
-      setNome(null);
-      return;
-    }
-    let cancel = false;
-    buscarProcedimentoSigtap(proc).then((p) => { if (!cancel) setNome(p?.nome ?? null); });
-    return () => { cancel = true; };
-  }, [proc, completo]);
-  const naoEncontrado = completo && nome === null;
+    onValidacao?.(i, v.motivos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.motivos.join("|")]);
 
   return (
     <div>
       <ProcedimentoField id={`p-${i}`} top={top} height={height} boxes={procBoxes}
-        values={row.procedimento} onChange={(v) => onUpdate("procedimento", v)}
-        naoEncontrado={naoEncontrado} nomeEncontrado={nome} />
+        values={row.procedimento} onChange={(vv) => onUpdate("procedimento", vv)}
+        naoEncontrado={v.naoEncontrado} nomeEncontrado={v.procNome} />
       <CboField id={`c-${i}`} top={top} height={height} boxes={cboBoxes}
-        values={row.cbo} onChange={(v) => onUpdate("cbo", v)} />
+        values={row.cbo} onChange={(vv) => onUpdate("cbo", vv)}
+        invalid={v.cboInvalido} title={v.cboMotivo} />
       <DigitBoxes id={`i-${i}`} top={top} height={height} boxes={idadeBoxes}
-        values={row.idade} onChange={(v) => onUpdate("idade", v)} />
+        values={row.idade} onChange={(vv) => onUpdate("idade", vv)}
+        invalid={v.idadeInvalida} title={v.idadeMotivo} />
       <DigitBoxes id={`q-${i}`} top={top} height={height} boxes={qtdBoxes}
-        values={row.quantidade} onChange={(v) => onUpdate("quantidade", v)} />
+        values={row.quantidade} onChange={(vv) => onUpdate("quantidade", vv)}
+        invalid={v.qtdeInvalida} title={v.qtdeMotivo} />
     </div>
   );
 }

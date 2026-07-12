@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpacBg from "@/assets/bpa-c.png";
 import { DigitBoxes } from "@/components/DigitBoxes";
@@ -118,6 +118,14 @@ function BpaCV2() {
   const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
   const [salvandoDireto, setSalvandoDireto] = useState(false);
   const [fichasOpen, setFichasOpen] = useState(false);
+  // Crivo SIGTAP por linha (procedimento/idade/qtde/CBO) — cada LinhaBpaC reporta seus
+  // motivos; aqui agregamos p/ acender o aviso e bloquear a geração.
+  const [errosLinha, setErrosLinha] = useState<Record<number, string[]>>({});
+  const onValidacaoLinha = useCallback((i: number, motivos: string[]) => {
+    setErrosLinha((prev) => (prev[i]?.join("|") === motivos.join("|") ? prev : { ...prev, [i]: motivos }));
+  }, []);
+  const motivosInvalidos = Object.entries(errosLinha).flatMap(([i, ms]) => ms.map((m) => `Linha ${Number(i) + 1}: ${m}`));
+  const temCamposInvalidos = motivosInvalidos.length > 0;
 
   useEffect(() => {
     setState(loadState());
@@ -183,6 +191,10 @@ function BpaCV2() {
   };
 
   const exportPdf = async () => {
+    if (temCamposInvalidos) {
+      toast.error("Corrija os campos em vermelho (crivo SIGTAP) antes de gerar o PDF.");
+      return;
+    }
     if (!sheetRef.current) return;
     setPrinting(true);
     await new Promise((r) => setTimeout(r, 80));
@@ -402,12 +414,25 @@ function BpaCV2() {
             <button
               onClick={exportPdf}
               disabled={printing}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              title={temCamposInvalidos ? "Corrija os campos em vermelho (crivo SIGTAP) antes de gerar" : undefined}
+              className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos ? " opacity-50" : ""}`}
             >
               {printing ? "Gerando..." : "Gerar PDF"}
             </button>
           </div>
         </div>
+        {temCamposInvalidos && (
+          <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-800">
+            <div className="mx-auto max-w-[1100px]">
+              <p className="font-semibold">
+                {motivosInvalidos.length === 1 ? "1 campo em vermelho" : `${motivosInvalidos.length} campos em vermelho`} (crivo SIGTAP) — corrija antes de gerar o PDF:
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {motivosInvalidos.map((m, idx) => <li key={idx}>{m}</li>)}
+              </ul>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
@@ -444,7 +469,8 @@ function BpaCV2() {
           {/* 20 linhas — com Procedimento (SIGTAP) e CBO inteligentes */}
           {ROW_TOPS.map((top, i) => (
             <LinhaBpaC key={i} i={i} top={top} height={ROW_HEIGHTS[i]}
-              row={state.rows[i]} onUpdate={(field, vals) => updateRow(i, field, vals)} />
+              row={state.rows[i]} onUpdate={(field, vals) => updateRow(i, field, vals)}
+              onValidacao={onValidacaoLinha} />
           ))}
 
           {/* Total — calculado automaticamente (somente leitura) */}
