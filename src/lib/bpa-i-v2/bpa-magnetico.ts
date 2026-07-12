@@ -4,18 +4,18 @@
 import type { SeqData } from "@/lib/bpai-v2-layout";
 import type { ConfigOrgao } from "./config";
 
-const dig = (v: string | string[]) =>
+export const dig = (v: string | string[]) =>
   (Array.isArray(v) ? v.join("") : v || "").replace(/\D/g, "");
 
 // NUM: dígitos com zeros à esquerda (n). blank=true => vazio vira brancos.
-function numF(v: string | string[], n: number, blank = false): string {
+export function numF(v: string | string[], n: number, blank = false): string {
   const d = dig(v);
   if (!d) return (blank ? " " : "0").repeat(n);
   return d.padStart(n, "0").slice(-n);
 }
 
 // ALFA: maiúsculas sem acento, só ASCII imprimível, brancos à direita (n).
-function alfaF(v: string, n: number): string {
+export function alfaF(v: string, n: number): string {
   const s = (v || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -25,7 +25,17 @@ function alfaF(v: string, n: number): string {
   return s.padEnd(n, " ");
 }
 
-const competencia = (ano: string[], mes: string[]) => numF(ano, 4) + numF(mes, 2);
+export const competencia = (ano: string[], mes: string[]) => numF(ano, 4) + numF(mes, 2);
+
+// Competência de REALIZAÇÃO da linha (AAAAMM) = mês/ano da data de atendimento
+// (fiel ao DATASUS: o cabeçalho leva a competência de APRESENTAÇÃO; cada linha leva a
+// sua própria competência de atendimento — permite produção retroativa). Se a data
+// estiver incompleta, cai na competência de apresentação (ano/mês do cabeçalho).
+export function competenciaLinha(dataAtend: string[], anoApres: string[], mesApres: string[]): string {
+  const s = dig(dataAtend);
+  if (s.length === 8) return s.slice(4, 8) + s.slice(2, 4); // ddmmaaaa -> aaaamm
+  return competencia(anoApres, mesApres);
+}
 
 // [d,d,m,m,a,a,a,a] -> aaaammdd; vazio/incompleto -> brancos.
 function dataAMD(d8: string[]): string {
@@ -61,17 +71,20 @@ export const seqPreenchida = (s: SeqData) => dig(s.codProc).length > 0;
 
 // Campo de controle do header: 1111 + (Σ(procedimento + quantidade) mod 1111).
 export function campoControle(seqs: SeqData[]): number {
+  return campoControleDe(seqs.filter(seqPreenchida).map((s) => ({ proc: dig(s.codProc), qtde: dig(s.qtde) })));
+}
+
+// Versão genérica do campo de controle — soma procedimento+quantidade de QUALQUER
+// conjunto de linhas (BPA-C 02 e/ou BPA-I 03), p/ o arquivo combinado do mês.
+export function campoControleDe(itens: { proc: string; qtde: string }[]): number {
   let soma = 0;
-  for (const s of seqs) {
-    if (!seqPreenchida(s)) continue;
-    soma += (Number(dig(s.codProc)) || 0) + (Number(dig(s.qtde)) || 0);
-  }
+  for (const it of itens) soma += (Number(dig(it.proc)) || 0) + (Number(dig(it.qtde)) || 0);
   return 1111 + (soma % 1111);
 }
 
 // Concatena campos garantindo o comprimento total esperado (a formatação por campo
 // já foi feita pelos helpers; aqui só corrigimos tamanho e validamos o total).
-function montar(campos: [number, string][], total: number): string {
+export function montar(campos: [number, string][], total: number): string {
   const linha = campos.map(([n, v]) => (v.length === n ? v : v.slice(0, n).padEnd(n, " "))).join("");
   if (linha.length !== total) throw new Error(`Linha com ${linha.length} chars, esperado ${total}`);
   return linha;
@@ -82,7 +95,7 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
   const campos: [number, string][] = [
     [2, "03"],
     [7, numF(d.cnes, 7)],
-    [6, competencia(d.profAno, d.profMes)],
+    [6, competenciaLinha(s.dataAtend, d.profAno, d.profMes)],
     [15, numF(d.profCns, 15)],
     [6, alfaF(dig(d.profCbo), 6)],
     [8, dataAMD(s.dataAtend)],
