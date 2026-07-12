@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { useAuthState } from "@/lib/bpa-i-v2/auth";
 import { LoginScreen } from "@/components/LoginScreen";
+import { AppSidebar } from "@/components/AppSidebar";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -138,7 +139,12 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <AuthGate>
-        <Outlet />
+        <div className="flex min-h-screen">
+          <AppSidebar />
+          <div className="min-w-0 flex-1">
+            <Outlet />
+          </div>
+        </div>
       </AuthGate>
       <Toaster />
     </QueryClientProvider>

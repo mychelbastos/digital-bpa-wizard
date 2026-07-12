@@ -197,12 +197,19 @@ function BpaI() {
   };
 
   useEffect(() => {
-    setState(loadState());
-    try {
-      fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
-      fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
-    } catch { /* noop */ }
+    const fichaParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ficha") : null;
+    if (fichaParam) {
+      // Aberta a partir de "Minhas fichas" (?ficha=<id>) — carrega direto do Supabase.
+      carregarFichaSalva(fichaParam);
+    } else {
+      setState(loadState());
+      try {
+        fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
+        fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
+      } catch { /* noop */ }
+    }
     setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Nome sugerido ao salvar: "primeiro nome do profissional · data de hoje · Folha nnn".

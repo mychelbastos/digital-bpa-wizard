@@ -131,12 +131,18 @@ function BpaCV2() {
   const temCamposInvalidos = motivosInvalidos.length > 0;
 
   useEffect(() => {
-    setState(loadState());
-    try {
-      fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
-      fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
-    } catch { /* noop */ }
+    const fichaParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ficha") : null;
+    if (fichaParam) {
+      carregarFichaSalva(fichaParam);
+    } else {
+      setState(loadState());
+      try {
+        fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
+        fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
+      } catch { /* noop */ }
+    }
     setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fonte cursiva (Caveat) p/ a "assinatura" eletrônica do Responsável.

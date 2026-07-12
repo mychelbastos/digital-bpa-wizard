@@ -8,6 +8,14 @@ export interface FichaResumo {
   titulo: string;
   competencia: string | null;
   updated_at: string;
+  tipo: "BPA-I" | "BPA-C";
+}
+
+// Ficha com o `dados` completo — usada no Fechamento do mês p/ reconstruir as linhas.
+export interface FichaCompleta {
+  id: string;
+  tipo: "BPA-I" | "BPA-C";
+  dados: unknown;
 }
 
 export interface FichaMetadados {
@@ -75,12 +83,26 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
   try {
     let req = supabase
       .from("fichas")
-      .select("id, titulo, competencia, updated_at")
+      .select("id, titulo, competencia, updated_at, tipo")
       .order("updated_at", { ascending: false })
-      .limit(50);
+      .limit(200);
     if (tipo) req = req.eq("tipo", tipo);
     const { data, error } = await req;
     return error || !data ? [] : (data as FichaResumo[]);
+  } catch {
+    return [];
+  }
+}
+
+// Todas as fichas de um mês de APRESENTAÇÃO (competência do cabeçalho) + CNES, com o
+// `dados` completo — base do Fechamento do mês (arquivo combinado 01+02+03).
+export async function fichasDoMes(competencia: string, cnes?: string): Promise<FichaCompleta[]> {
+  if (!supabase) return [];
+  try {
+    let req = supabase.from("fichas").select("id, tipo, dados").eq("competencia", competencia).limit(500);
+    if (cnes) req = req.eq("cnes", cnes);
+    const { data, error } = await req;
+    return error || !data ? [] : (data as FichaCompleta[]);
   } catch {
     return [];
   }
