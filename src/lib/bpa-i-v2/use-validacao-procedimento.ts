@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SeqData } from "@/lib/bpai-v2-layout";
-import { idadeEmMeses } from "@/lib/bpa-i-v2/validacao";
+import { idadeEmMeses, competenciaDoAtendimento } from "@/lib/bpa-i-v2/validacao";
 import {
   buscarProcedimentoSigtap,
   servicoClassificacaoValida,
@@ -49,13 +49,17 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
   const codProc = s.codProc.join("");
   const procCompleto = codProc.length === 10;
 
+  // Competência da linha = data do atendimento (prd-cmp). Se não estiver carregada no
+  // SIGTAP, o crivo cai na mais recente (ver resolverCompetencia).
+  const competencia = competenciaDoAtendimento(s.dataAtend);
+
   const [proc, setProc] = useState<ProcedimentoSigtap | null>(null);
   useEffect(() => {
     if (!procCompleto) { setProc(null); return; }
     let cancel = false;
-    buscarProcedimentoSigtap(codProc).then((p) => { if (!cancel) setProc(p); });
+    buscarProcedimentoSigtap(codProc, competencia).then((p) => { if (!cancel) setProc(p); });
     return () => { cancel = true; };
-  }, [codProc, procCompleto]);
+  }, [codProc, procCompleto, competencia]);
 
   const procNaoEncontrado = procCompleto && proc === null;
 
@@ -72,9 +76,9 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
   useEffect(() => {
     if (!procCompleto || servico.length !== 3 || classProc.length !== 3) { setServicoValido(null); return; }
     let cancel = false;
-    servicoClassificacaoValida(codProc, servico, classProc).then((v) => { if (!cancel) setServicoValido(v); });
+    servicoClassificacaoValida(codProc, servico, classProc, competencia).then((v) => { if (!cancel) setServicoValido(v); });
     return () => { cancel = true; };
-  }, [procCompleto, codProc, servico, classProc]);
+  }, [procCompleto, codProc, servico, classProc, competencia]);
   const servicoInvalido = servicoValido === false;
 
   const cid = s.cid.join("").trim();
@@ -82,9 +86,9 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
   useEffect(() => {
     if (!procCompleto || cid.length < 3) { setCidValido(null); return; }
     let cancel = false;
-    cidValidoParaProcedimento(codProc, cid).then((v) => { if (!cancel) setCidValido(v); });
+    cidValidoParaProcedimento(codProc, cid, competencia).then((v) => { if (!cancel) setCidValido(v); });
     return () => { cancel = true; };
-  }, [procCompleto, codProc, cid]);
+  }, [procCompleto, codProc, cid, competencia]);
   const cidInvalido = cidValido === false;
 
   const procNaoEncontradoMotivo = procNaoEncontrado ? "Código não encontrado na tabela oficial do SIGTAP." : undefined;

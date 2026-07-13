@@ -30,10 +30,13 @@ function formatarMeses(meses: number): string {
   return `${anos}a ${resto}m`;
 }
 
-// Crivo de uma linha do BPA-C contra a tabela SIGTAP da competência carregada:
+// Crivo de uma linha do BPA-C contra a tabela SIGTAP da competência do boletim:
 // procedimento existe? idade na faixa? quantidade dentro do máximo? CBO compatível?
+// No BPA-C consolidado não há data por linha — a competência da linha é a própria
+// competência do boletim (AAAAMM, do cabeçalho). Se ela não estiver carregada, o crivo
+// cai na competência mais recente (fail-open, ver resolverCompetencia).
 // Uma busca do procedimento por linha (hook), compartilhada entre as checagens.
-export function useValidacaoLinhaBpaC(row: RowData): ValidacaoLinhaBpaC {
+export function useValidacaoLinhaBpaC(row: RowData, competencia: string | null): ValidacaoLinhaBpaC {
   const codProc = row.procedimento.join("");
   const procCompleto = codProc.length === 10;
 
@@ -41,9 +44,9 @@ export function useValidacaoLinhaBpaC(row: RowData): ValidacaoLinhaBpaC {
   useEffect(() => {
     if (!procCompleto) { setProc(null); return; }
     let cancel = false;
-    buscarProcedimentoSigtap(codProc).then((p) => { if (!cancel) setProc(p); });
+    buscarProcedimentoSigtap(codProc, competencia).then((p) => { if (!cancel) setProc(p); });
     return () => { cancel = true; };
-  }, [codProc, procCompleto]);
+  }, [codProc, procCompleto, competencia]);
   const naoEncontrado = procCompleto && proc === null;
 
   // BPA-C guarda a idade em ANOS; o SIGTAP compara em meses (aprox.: anos × 12).
@@ -59,9 +62,9 @@ export function useValidacaoLinhaBpaC(row: RowData): ValidacaoLinhaBpaC {
   useEffect(() => {
     if (!procCompleto || cbo.length !== 6) { setCboValido(null); return; }
     let cancel = false;
-    cboValidoParaProcedimento(codProc, cbo).then((v) => { if (!cancel) setCboValido(v); });
+    cboValidoParaProcedimento(codProc, cbo, competencia).then((v) => { if (!cancel) setCboValido(v); });
     return () => { cancel = true; };
-  }, [procCompleto, codProc, cbo]);
+  }, [procCompleto, codProc, cbo, competencia]);
   const cboInvalido = cboValido === false;
 
   const idadeMotivo = idadeInvalida

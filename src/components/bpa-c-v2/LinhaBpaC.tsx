@@ -10,6 +10,8 @@ interface Props {
   top: number;
   height: number;
   row: RowData;
+  // Competência do boletim (AAAAMM) — usada como competência da linha no crivo SIGTAP.
+  competencia: string | null;
   onUpdate: (field: keyof RowData, vals: string[]) => void;
   // Reporta ao pai os motivos de erro desta linha (crivo SIGTAP) — o pai agrega p/
   // acender o resumo e bloquear a geração enquanto houver campo em vermelho.
@@ -19,8 +21,8 @@ interface Props {
 // Uma linha do BPA-C com o crivo do SIGTAP: Procedimento (existe + nome no balão),
 // Idade (faixa etária), Quantidade (máximo) e CBO (compatível com o procedimento).
 // Extraído p/ chamar o hook de validação 1x por linha.
-export function LinhaBpaC({ i, top, height, row, onUpdate, onValidacao }: Props) {
-  const v = useValidacaoLinhaBpaC(row);
+export function LinhaBpaC({ i, top, height, row, competencia, onUpdate, onValidacao }: Props) {
+  const v = useValidacaoLinhaBpaC(row, competencia);
   useEffect(() => {
     onValidacao?.(i, v.motivos);
     // eslint-disable-next-line react-hooks/exhaustive-deps

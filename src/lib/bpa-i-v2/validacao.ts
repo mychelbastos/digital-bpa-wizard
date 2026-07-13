@@ -112,6 +112,15 @@ export function cnsInvalido(cns: string): boolean {
 // mas existe produção retroativa legítima, então só alertamos. Só acende com a data
 // completa, de calendário válida e não-futura (essas já têm o alerta próprio), e com
 // a competência (mês+ano) completa.
+// Competência (AAAAMM) do atendimento a partir da data (DDMMAAAA). No BPA-I a competência
+// da linha é a data do atendimento (prd-cmp), não a do cabeçalho — é ela que o crivo
+// SIGTAP deve usar. null quando a data ainda não é válida (não filtra por competência).
+export function competenciaDoAtendimento(dataAtend: string[]): string | null {
+  if (!dataValida(dataAtend)) return null;
+  const s = dataAtend.join("");
+  return s.slice(4, 8) + s.slice(2, 4); // AAAA + MM
+}
+
 export function atendimentoForaDaCompetencia(dataAtend: string[], mes: string[], ano: string[]): boolean {
   if (!dataValida(dataAtend) || dataFuturaOuInvalida(dataAtend)) return false;
   const mm = mes.join(""), aaaa = ano.join("");
