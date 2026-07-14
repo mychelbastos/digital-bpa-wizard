@@ -1,8 +1,10 @@
 // Fechamento do mês: agrega TODAS as fichas de um mês de APRESENTAÇÃO (+ CNES) num
 // único arquivo magnético combinado — header (01) + linhas BPA-C (02) + linhas BPA-I
 // (03). As folhas são renumeradas em sequência no arquivo. A competência de cada linha
-// BPA-I vem da sua data de atendimento (produção retroativa); o cabeçalho leva a
-// competência de apresentação escolhida.
+// (BPA-C e BPA-I) vem do CABEÇALHO DA FICHA (a competência que o digitador leu da folha
+// física — profMes/profAno no BPA-I, ano/mes no BPA-C), NÃO é derivada da data de
+// atendimento. Isso reproduz faturamento retroativo (atendimento fora do mês da
+// competência), que é a regra. O cabeçalho 01 leva a competência de apresentação.
 import {
   linhaBpaI,
   seqPreenchida,
