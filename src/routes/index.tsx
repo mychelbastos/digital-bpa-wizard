@@ -219,7 +219,7 @@ function Home() {
               <Activity className="size-6" />
             </div>
             <h2 className="mt-4 text-base font-semibold text-foreground">Ainda não há produção registrada em {mesLabel(competencia)}.</h2>
-            <p className="mt-1 text-sm text-muted-foreground">A dashboard começa a preencher quando alguém gera PDF ou TXT nos formulários BPA-C/BPA-I.</p>
+            <p className="mt-1 text-sm text-muted-foreground">A dashboard preenche com as fichas BPA-C/BPA-I salvas neste mês de produção.</p>
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-3">
