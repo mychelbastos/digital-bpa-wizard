@@ -54,7 +54,8 @@ export const CBO_WIDTHS = [2.29, 2.24, 2.30, 2.23, 2.30, 2.24];
 export const IDADE_LEFTS = [65.60, 68.08, 70.38];
 export const IDADE_WIDTHS = [2.48, 2.30, 2.24];
 
-// QUANTIDADE — 5 cells in the main bracket + 1 isolated cell on the far right = 6 digits total.
+// QUANTIDADE — 5 células no papel. O registro 02 do arquivo reserva 6 posições (offsets
+// 40-45), mas numF preenche com zero à esquerda — a captura é de 5 dígitos.
 export const QTD_LEFTS = [78.72, 81.56, 84.34, 87.24, 89.96];
 export const QTD_WIDTHS = [2.84, 2.78, 2.90, 2.72, 2.42];
 

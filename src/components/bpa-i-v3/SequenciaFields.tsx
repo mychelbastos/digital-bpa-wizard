@@ -16,7 +16,6 @@ import { dataFuturaOuInvalida, atendimentoAntigo, atendimentoForaDaCompetencia }
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
-import { IdadeCapturada } from "@/components/bpa-i-v2/IdadeCapturada";
 import { identificarPaciente, validarCpf } from "@/lib/bpa-i-v3/identificacao";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
 import { motivosObrigatoriosSeq, identificacaoIncompleta, parcialIncompleto } from "@/lib/bpa-i-v3/obrigatorios";
@@ -205,8 +204,9 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
         onClear={() => u("dataNasc", Array(8).fill(""))} />
-      {/* Idade (anos) — captura só de tela p/ o arquivo magnético (não existe no papel). */}
-      <IdadeCapturada seqTop={seqTop} s={s} onChange={(v) => u("idade", v)} />
+      {/* Idade NÃO tem campo no papel do BPA-I nem input na tela: é derivada na geração
+          (anos completos na data de atendimento). SeqData.idade existe só como override
+          opcional do modelo (usado pelo harness de regressão), nunca capturado aqui. */}
       <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
         options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} uppercase center />
       <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}

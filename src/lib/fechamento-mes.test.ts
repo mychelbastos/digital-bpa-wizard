@@ -22,14 +22,16 @@ function linha03(fichas: FichaCompleta[]): string {
   return arquivo!.conteudo.split("\r\n").find((l) => l.startsWith("03"))!;
 }
 
-describe("teste de aceite — o app gera o que foi DIGITADO, não o derivado", () => {
-  it("idade DIGITADA (divergente do cálculo) sai fiel no .txt", () => {
-    // Cálculo daria 36 (nasc 1990, atend 2026); o digitador confirmou 70.
+describe("geração pelo caminho real do app (competência da ficha; idade derivada)", () => {
+  // Idade NÃO é capturada na UI do BPA-I (o papel não tem o campo). É derivada na geração.
+  // SeqData.idade existe só como OVERRIDE OPCIONAL do modelo (o harness de regressão o usa
+  // p/ reproduzir o arquivo real byte a byte). Estes dois casos travam esse contrato.
+  it("override opcional de idade (modelo) sai fiel no .txt quando presente", () => {
     const l = linha03([fichaBpaI({ idade: cells("070", 3) })]);
-    expect(l.slice(85, 88)).toBe("070"); // o DIGITADO, não "036"
+    expect(l.slice(85, 88)).toBe("070"); // o override, não o cálculo "036"
   });
 
-  it("sem idade digitada, cai no cálculo (pré-preenchimento) — 036", () => {
+  it("sem override, a idade é DERIVADA (anos completos na data de atendimento) — 036", () => {
     const l = linha03([fichaBpaI({ idade: [] })]);
     expect(l.slice(85, 88)).toBe("036");
   });

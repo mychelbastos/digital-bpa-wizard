@@ -16,7 +16,6 @@ import { cnsInvalido, dataFuturaOuInvalida, atendimentoAntigo, atendimentoForaDa
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
-import { IdadeCapturada } from "@/components/bpa-i-v2/IdadeCapturada";
 import * as L from "@/lib/bpai-v2-layout";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 
@@ -149,8 +148,8 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
         onClear={() => u("dataNasc", Array(8).fill(""))} />
-      {/* Idade (anos) — captura só de tela p/ o arquivo magnético (não existe no papel). */}
-      <IdadeCapturada seqTop={seqTop} s={s} onChange={(v) => u("idade", v)} />
+      {/* Idade NÃO tem campo no papel do BPA-I nem input na tela: derivada na geração.
+          SeqData.idade permanece só como override opcional do modelo (harness). */}
       <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
         options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} />
       <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
