@@ -20,10 +20,10 @@ const compAtual = () => {
 
 function Fechamento() {
   const [comp, setComp] = useState(compAtual());
-  const [cnes, setCnes] = useState("");
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<FechamentoMes | null>(null);
-  // CNES em que o usuário tem permissão de gerar_producao (gate do fechamento).
+  // CNES em que o usuário tem gerar_producao. A produção é por MUNICÍPIO (um .txt com
+  // todos os CNES visíveis, confirmado no PA292720.MAR); serve só p/ o gate do botão.
   const [cnesPermitidos, setCnesPermitidos] = useState<string[] | null>(null);
 
   useEffect(() => {
@@ -37,22 +37,19 @@ function Fechamento() {
       toast.error("Informe o mês de produção no formato AAAAMM.");
       return;
     }
-    const cnesAlvo = cnes.trim();
-    if (!cnesAlvo) {
-      toast.error("Informe o CNES da unidade cuja produção você vai fechar.");
-      return;
-    }
-    if (!cnesPermitidos?.includes(cnesAlvo)) {
-      toast.error("Você não tem permissão para gerar a produção deste CNES.");
+    if (!podeGerar) {
+      toast.error("Você não tem permissão para fechar produção.");
       return;
     }
     setLoading(true);
     setRes(null);
     try {
-      const fichas = await fichasDoMes(comp, cnesAlvo);
+      // Sem filtro de CNES: a RLS já restringe as fichas ao escopo do usuário (os CNES
+      // do município onde ele fecha produção). Um único arquivo por município/mês.
+      const fichas = await fichasDoMes(comp);
       const r = gerarArquivoMes(fichas, comp, comp.slice(0, 4).split(""), comp.slice(4, 6).split(""), loadConfig());
       setRes(r);
-      if (!r.arquivo) toast.warning("Nenhuma produção encontrada para esse mês/CNES.");
+      if (!r.arquivo) toast.warning("Nenhuma produção encontrada para esse mês.");
     } catch (err) {
       console.error(err);
       toast.error("Falha ao gerar o arquivo do mês. Veja o console.");
@@ -83,17 +80,12 @@ function Fechamento() {
           da data de atendimento (BPA-I); o cabeçalho do arquivo leva o mês de produção.
         </p>
 
-        <div className="mt-5 grid gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm sm:grid-cols-2">
-          <label className="text-xs font-medium text-foreground">
+        <div className="mt-5 grid gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <label className="text-xs font-medium text-foreground sm:max-w-xs">
             Mês de produção (AAAAMM)
             <input value={comp} onChange={(e) => setComp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="202607" className={input} />
           </label>
-          <label className="text-xs font-medium text-foreground">
-            CNES do estabelecimento
-            <input value={cnes} onChange={(e) => setCnes(e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder="0000000" className={input} list="cnes-permitidos" />
-            <datalist id="cnes-permitidos">{(cnesPermitidos ?? []).map((c) => <option key={c} value={c} />)}</datalist>
-          </label>
-          <div className="sm:col-span-2">
+          <div>
             {cnesPermitidos !== null && !podeGerar && (
               <p className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 <Lock className="size-4 shrink-0" /> Você não tem permissão para fechar produção (gerar .txt) em nenhuma unidade. Fale com o gestor.
@@ -125,7 +117,7 @@ function Fechamento() {
                 </pre>
               </>
             ) : (
-              <p className="mt-4 text-sm text-muted-foreground">Nenhuma produção encontrada para esse mês/CNES.</p>
+              <p className="mt-4 text-sm text-muted-foreground">Nenhuma produção encontrada para esse mês.</p>
             )}
           </div>
         )}
