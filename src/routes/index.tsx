@@ -12,6 +12,7 @@ import {
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { useAuthUser, signOut } from "@/lib/bpa-i-v2/auth";
+import { cnesComPermissao } from "@/lib/permissoes";
 
 const CARATER_NOME = new Map(CARATERES.map((c) => [c.code, c.label]));
 const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? null : null);
@@ -115,6 +116,13 @@ function Home() {
   const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => r.cid || "Sem CID").slice(0, 8), [filtradas]);
   const porCarater = useMemo(() => agrupar(filtradas.filter((r) => r.carater), (r) => r.carater || "sem-carater", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`).slice(0, 6), [filtradas]);
 
+  // Mostra o link de Administração só p/ quem tem 'gerenciar_vinculos' (a página também
+  // é gated no banco). Não decide acesso — só evita expor um link inútil.
+  const [podeAdmin, setPodeAdmin] = useState(false);
+  useEffect(() => {
+    cnesComPermissao("gerenciar_vinculos").then((c) => setPodeAdmin(c.length > 0));
+  }, []);
+
   // Escopo exibido, derivado dos VÍNCULOS (não de um "papel" na conta). É só rótulo — o
   // acesso real é decidido pela RLS/permissão no banco.
   const escopo = useMemo(() => {
@@ -139,6 +147,11 @@ function Home() {
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary ring-1 ring-primary/20">
                 <Users className="size-3.5" /> {user.nome || user.email}
               </span>
+            )}
+            {podeAdmin && (
+              <Link to="/admin" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <ShieldCheck className="size-3.5" /> Admin
+              </Link>
             )}
             <Link to="/perfil" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
               <Settings className="size-3.5" /> Perfil
