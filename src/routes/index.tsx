@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import {
-  carregarDashboardProfile, carregarNomesProcedimentos, carregarProducaoDashboard,
-  type DashboardProfile, type ProducaoBpaRow,
+  carregarVinculosUsuario, carregarNomesProcedimentos, carregarProducaoDashboard,
+  type VinculoResumo, type ProducaoBpaRow,
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { useAuthUser, signOut } from "@/lib/bpa-i-v2/auth";
@@ -58,7 +58,7 @@ function agrupar<T extends string>(rows: ProducaoBpaRow[], key: (r: ProducaoBpaR
 function Home() {
   const user = useAuthUser();
   const [rows, setRows] = useState<ProducaoBpaRow[]>([]);
-  const [profile, setProfile] = useState<DashboardProfile | null>(null);
+  const [vinculos, setVinculos] = useState<VinculoResumo[]>([]);
   const [competencia, setCompetencia] = useState(competenciaAtual());
   const [cnes, setCnes] = useState("todos");
   const [profissional, setProfissional] = useState("todos");
@@ -70,11 +70,11 @@ function Home() {
 
   const carregar = async () => {
     setLoading(true);
-    const [p, producao] = await Promise.all([
-      carregarDashboardProfile(),
+    const [vincs, producao] = await Promise.all([
+      carregarVinculosUsuario(),
       carregarProducaoDashboard(competencia),
     ]);
-    setProfile(p);
+    setVinculos(vincs);
     setRows(producao);
     setNomesProc(await carregarNomesProcedimentos(producao.map((r) => r.procedimento)));
     setAtualizadoEm(new Date());
@@ -115,11 +115,16 @@ function Home() {
   const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => r.cid || "Sem CID").slice(0, 8), [filtradas]);
   const porCarater = useMemo(() => agrupar(filtradas.filter((r) => r.carater), (r) => r.carater || "sem-carater", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`).slice(0, 6), [filtradas]);
 
-  const escopo = profile?.role === "supervisor"
-    ? { label: "Supervisão municipal", desc: "Você vê a produção de todas as unidades e profissionais.", icon: <ShieldCheck className="size-4" /> }
-    : profile?.cnes
-    ? { label: `Unidade ${profile.cnes}`, desc: "Produção da sua unidade.", icon: <Building2 className="size-4" /> }
-    : { label: "Minha produção", desc: "Você só vê o que você mesmo gerou.", icon: <Activity className="size-4" /> };
+  // Escopo exibido, derivado dos VÍNCULOS (não de um "papel" na conta). É só rótulo — o
+  // acesso real é decidido pela RLS/permissão no banco.
+  const escopo = useMemo(() => {
+    const cnesSet = new Set(vinculos.map((v) => v.cnes));
+    const coordena = vinculos.some((v) => v.papel !== "digitador") || cnesSet.size > 1;
+    if (coordena) return { label: "Coordenação", desc: `Você vê a produção de ${cnesSet.size} unidade${cnesSet.size > 1 ? "s" : ""} vinculada${cnesSet.size > 1 ? "s" : ""}.`, icon: <ShieldCheck className="size-4" /> };
+    const cnes = [...cnesSet][0];
+    if (cnes) return { label: `Unidade ${cnes}`, desc: "Produção das suas fichas nesta unidade.", icon: <Building2 className="size-4" /> };
+    return { label: "Sem vínculo ativo", desc: "Você não tem vínculo ativo com nenhuma unidade.", icon: <Activity className="size-4" /> };
+  }, [vinculos]);
 
   return (
     <div className="min-h-screen bg-muted/40">
