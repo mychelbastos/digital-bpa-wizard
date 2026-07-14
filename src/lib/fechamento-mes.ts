@@ -29,6 +29,8 @@ interface BpaIState {
 }
 interface BpaCState {
   cnes: string[];
+  ano: string[]; // competência de ATENDIMENTO desta ficha (cabeçalho) — vai nas linhas
+  mes: string[];
   rows: RowData[];
 }
 
@@ -46,8 +48,10 @@ export interface FechamentoMes {
   resumo: ResumoMes;
 }
 
-// compApres = AAAAMM de apresentação; anoApres/mesApres = os mesmos, em vetores (p/ os
-// campos das linhas BPA-C, cuja competência = a de apresentação do consolidado).
+// compApres = AAAAMM do MÊS DE PRODUÇÃO (vai no cabeçalho 01 do arquivo). anoApres/mesApres
+// = os mesmos em vetores, usados só como fallback quando uma ficha BPA-C não tem a própria
+// competência no `dados`. A competência de CADA linha BPA-C é a do cabeçalho da ficha
+// (atendimento); a de cada linha BPA-I é a data de atendimento da sequência.
 export function gerarArquivoMes(
   fichas: FichaCompleta[],
   compApres: string,
@@ -70,9 +74,12 @@ export function gerarArquivoMes(
     const rows = (st?.rows ?? []).filter(rowPreenchida);
     if (rows.length === 0) continue;
     fichasBpaC++;
+    // Competência das linhas = cabeçalho DESTA ficha (atendimento); fallback = mês de produção.
+    const anoLinha = st.ano?.length ? st.ano : anoApres;
+    const mesLinha = st.mes?.length ? st.mes : mesApres;
     for (let i = 0; i < rows.length; i += 20) {
       rows.slice(i, i + 20).forEach((r, j) => {
-        linhas.push(linhaBpaC({ cnes: st.cnes, ano: anoApres, mes: mesApres, folhaBase: [], rows: [] }, r, folha, j + 1));
+        linhas.push(linhaBpaC({ cnes: st.cnes, ano: anoLinha, mes: mesLinha, folhaBase: [], rows: [] }, r, folha, j + 1));
         controle.push({ proc: dig(r.procedimento), qtde: dig(r.quantidade) });
         linhasBpaC++;
       });

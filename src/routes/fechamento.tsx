@@ -25,7 +25,7 @@ function Fechamento() {
 
   const gerar = async () => {
     if (!/^[0-9]{6}$/.test(comp)) {
-      toast.error("Informe a competência de apresentação no formato AAAAMM.");
+      toast.error("Informe o mês de produção no formato AAAAMM.");
       return;
     }
     setLoading(true);
@@ -58,14 +58,16 @@ function Fechamento() {
 
       <main className="mx-auto mt-6 max-w-[900px] px-4">
         <p className="text-sm text-muted-foreground">
-          Gera <strong>um único arquivo magnético</strong> (.txt) com toda a produção do mês de
-          <strong> apresentação</strong> — BPA-C (registro 02) e BPA-I (registro 03) juntos, das fichas salvas.
-          A competência de cada atendimento BPA-I vem da data do atendimento (produção retroativa é aceita).
+          Gera <strong>um único arquivo magnético</strong> (.txt) com toda a produção do
+          <strong> mês de produção</strong> — BPA-C (registro 02) e BPA-I (registro 03) juntos, das fichas
+          criadas nesse mês. A produção pode conter fichas de competências de atendimento diferentes
+          (retroativas, até ~4 meses): a competência de cada linha vem do cabeçalho da ficha (BPA-C) ou
+          da data de atendimento (BPA-I); o cabeçalho do arquivo leva o mês de produção.
         </p>
 
         <div className="mt-5 grid gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm sm:grid-cols-2">
           <label className="text-xs font-medium text-foreground">
-            Competência de apresentação (AAAAMM)
+            Mês de produção (AAAAMM)
             <input value={comp} onChange={(e) => setComp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="202607" className={input} />
           </label>
           <label className="text-xs font-medium text-foreground">

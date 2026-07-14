@@ -11,13 +11,9 @@ import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
 import { cnsInvalido } from "@/lib/bpa-i-v2/validacao";
 import { SequenciaFields } from "@/components/bpa-i-v2/SequenciaFields";
 import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
-import { loadConfig } from "@/lib/bpa-i-v2/config";
-import { gerarArquivoBpa, idadeAnos, seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
-import { baixarTxt } from "@/lib/export-txt";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
-import { hashProducao, registrarProducaoBpa, type FormatoGerado } from "@/lib/dashboard-producao";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
@@ -141,7 +137,6 @@ function BpaI() {
   const [undoOpen, setUndoOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   // Guarda a intenção de gerar o .txt logo após salvar a config (quando estava incompleta).
-  const [gerarAposConfig, setGerarAposConfig] = useState(false);
   const [fichasOpen, setFichasOpen] = useState(false);
   const [salvarOpen, setSalvarOpen] = useState(false);
   // true = diálogo está em modo "Salvar como" (força criar uma cópia nova).
@@ -184,11 +179,6 @@ function BpaI() {
   // Borda direita (%) do último grupo — onde a lixeira do campo composto é ancorada.
   const endOf = (arr: { left: number; width: number }[]) => arr[arr.length - 1].left + arr[arr.length - 1].width;
   const competencia = () => state.profAno.join("") + state.profMes.join("");
-  const dataIso = (d: string[]) => {
-    const s = d.join("");
-    if (s.length !== 8) return null;
-    return `${s.slice(4, 8)}-${s.slice(2, 4)}-${s.slice(0, 2)}`;
-  };
 
   useEffect(() => {
     setState(loadState());
@@ -409,36 +399,11 @@ function BpaI() {
       await document.fonts?.ready; // garante a fonte cursiva carregada antes da captura
       await exportSheetPdf(sheetRef.current, "BPA-I.pdf");
       setPdfPendente(false); // PDF gerado p/ o estado atual
-      await registrarExportacao("pdf");
+      await registrarExportacao();
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Falha ao gerar PDF. Veja o console.");
     } finally { setPrinting(false); }
-  };
-
-  // Gera e baixa o arquivo magnético BPA (.txt). Precisa apenas de ao menos uma
-  // sequência com procedimento. A "Configuração do estabelecimento" é OPCIONAL: o
-  // cabeçalho do arquivo continua válido com esses campos em branco, e o BPA
-  // Magnético já tem os dados do órgão cadastrados na hora de importar. Quem quiser
-  // preencher usa o botão ⚙ manualmente.
-  const exportTxt = async () => {
-    if (temCamposInvalidos) {
-      toast.error("Corrija os campos em vermelho antes de gerar o arquivo .txt.");
-      return;
-    }
-    if (!state.seqs.some(seqPreenchida)) {
-      alert("Preencha ao menos um procedimento antes de gerar o arquivo magnético.");
-      return;
-    }
-    const cfg = loadConfig();
-    try {
-      const arq = gerarArquivoBpa(state, cfg);
-      baixarTxt(arq.nome, arq.conteudo);
-      await registrarExportacao("txt");
-    } catch (err) {
-      console.error("Falha ao gerar arquivo magnético", err);
-      alert("Falha ao gerar o arquivo magnético. Veja o console.");
-    }
   };
 
   // Ao exportar, registra no histórico o CBO do profissional e os procedimentos
@@ -467,57 +432,12 @@ function BpaI() {
     return id;
   };
 
-  const registrarExportacao = async (formato: FormatoGerado) => {
+  // Salva a ficha na nuvem (a produção da dashboard é derivada das fichas salvas) e
+  // alimenta o histórico de autocomplete. O .txt não sai mais daqui — só no Fechamento.
+  const registrarExportacao = async () => {
     registrarUsoDaFicha();
     const fichaId = await garantirFichaExportada();
-    if (!fichaId) {
-      toast.warning("Arquivo gerado, mas não consegui salvar a ficha/produção na nuvem.");
-      return;
-    }
-
-    const cnes = state.cnes.join("");
-    const comp = competencia();
-    const profCns = state.profCns.join("");
-    const cbo = state.profCbo.join("");
-    const linhas = await Promise.all(state.seqs.map(async (s, index) => {
-      if (!seqPreenchida(s)) return null;
-      const procedimento = s.codProc.join("");
-      const sourceKey = await hashProducao([
-        "BPA-I",
-        comp,
-        cnes,
-        profCns,
-        state.profFolha.join(""),
-        index,
-        procedimento,
-        s.dataAtend.join(""),
-        s.cnsPac.join(""),
-        s.qtde.join(""),
-      ]);
-      return {
-        sourceKey,
-        fichaId,
-        tipo: "BPA-I" as const,
-        competencia: comp,
-        dataAtendimento: dataIso(s.dataAtend),
-        cnes,
-        estabelecimentoNome: state.nomeEstab,
-        municipioIbge: s.ibge.join(""),
-        profissionalCns: profCns,
-        profissionalNome: state.profNome,
-        cbo,
-        procedimento,
-        quantidade: Number(s.qtde.join("")) || 1,
-        servico: s.servico.join(""),
-        classificacao: s.classProc.join(""),
-        cid: s.cid.join("").trim(),
-        carater: s.carater.join(""),
-        idade: idadeAnos(s.dataNasc, s.dataAtend) || null,
-      };
-    }));
-
-    const ok = await registrarProducaoBpa(linhas.filter((l): l is NonNullable<typeof l> => Boolean(l)), formato);
-    if (!ok) toast.warning("Arquivo gerado, mas a produção não foi registrada na dashboard.");
+    if (!fichaId) toast.warning("PDF gerado, mas não consegui salvar a ficha na nuvem.");
   };
 
   // Tem conteúdo preenchido que valha avisar antes de zerar?
@@ -677,11 +597,8 @@ function BpaI() {
                 )}
               </div>
             )}
-            <button onClick={() => { setGerarAposConfig(false); setConfigOpen(true); }} title="Configuração do estabelecimento (arquivo magnético)" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+            <button onClick={() => setConfigOpen(true)} title="Configuração do estabelecimento (arquivo magnético)" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
               ⚙ Config
-            </button>
-            <button onClick={exportTxt} title={temCamposInvalidos ? "Corrija os campos em vermelho antes de gerar" : "Gerar arquivo magnético BPA (.txt) p/ importar no SIA/SUS"} className={`rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100${temCamposInvalidos ? " opacity-50" : ""}`}>
-              Gerar .txt
             </button>
             <button onClick={exportPdf} disabled={printing} title={temCamposInvalidos ? "Corrija os campos em vermelho antes de gerar" : undefined} className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos ? " opacity-50" : ""}`}>
               {printing ? "Gerando..." : "Gerar PDF"}
@@ -692,7 +609,7 @@ function BpaI() {
           <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-800">
             <div className="mx-auto max-w-[1100px]">
               <p className="font-semibold">
-                {motivosInvalidos.length === 1 ? "1 campo em vermelho" : `${motivosInvalidos.length} campos em vermelho`} — corrija antes de salvar a ficha ou gerar o .txt/PDF:
+                {motivosInvalidos.length === 1 ? "1 campo em vermelho" : `${motivosInvalidos.length} campos em vermelho`} — corrija antes de salvar a ficha ou gerar o PDF:
               </p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4">
                 {motivosInvalidos.map((m, i) => <li key={i}>{m}</li>)}
@@ -704,8 +621,7 @@ function BpaI() {
 
       <ConfigModal
         open={configOpen}
-        onClose={() => { setConfigOpen(false); setGerarAposConfig(false); }}
-        onSaved={() => { if (gerarAposConfig) { setGerarAposConfig(false); exportTxt(); } }}
+        onClose={() => setConfigOpen(false)}
       />
 
       <SalvarFichaModal

@@ -1,37 +1,23 @@
 import { supabase } from "@/lib/supabase";
+import { fichasDoMes, type FichaCompleta } from "@/lib/bpa-i-v2/fichas";
+import { rowPreenchida } from "@/lib/bpa-c-v2/bpa-magnetico";
+import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
+import { competenciaDoAtendimento } from "@/lib/bpa-i-v2/validacao";
+import type { RowData } from "@/lib/bpac-layout";
+import type { SeqData } from "@/lib/bpai-v2-layout";
 
 export type TipoBpa = "BPA-C" | "BPA-I";
-export type FormatoGerado = "pdf" | "txt";
 
-export interface ProducaoBpaInput {
-  sourceKey: string;
-  fichaId: string | null;
-  tipo: TipoBpa;
-  competencia: string;
-  dataAtendimento?: string | null; // YYYY-MM-DD
-  cnes?: string | null;
-  estabelecimentoNome?: string | null;
-  municipioIbge?: string | null;
-  profissionalCns?: string | null;
-  profissionalNome?: string | null;
-  cbo?: string | null;
-  procedimento: string;
-  quantidade: number;
-  servico?: string | null;
-  classificacao?: string | null;
-  cid?: string | null;
-  carater?: string | null;
-  idade?: number | null;
-}
-
+// Uma linha de produção para a dashboard, achatada a partir do `dados` de uma ficha.
+// `competencia` é a de ATENDIMENTO (prd-cmp) da linha; o agrupamento da produção é por
+// `mesProducao` (mês em que a ficha foi criada), não por competência.
 export interface ProducaoBpaRow {
   id: string;
   tipo: TipoBpa;
   competencia: string;
-  data_atendimento: string | null;
+  mesProducao: string | null;
   cnes: string | null;
   estabelecimento_nome: string | null;
-  municipio_ibge: string | null;
   profissional_cns: string | null;
   profissional_nome: string | null;
   cbo: string | null;
@@ -42,8 +28,6 @@ export interface ProducaoBpaRow {
   cid: string | null;
   carater: string | null;
   idade: number | null;
-  ultimo_formato: FormatoGerado;
-  gerado_em: string;
 }
 
 export interface DashboardProfile {
@@ -53,72 +37,70 @@ export interface DashboardProfile {
   nome: string | null;
 }
 
-const normalizar = (v: string | null | undefined) => {
-  const s = (v ?? "").trim();
-  return s || null;
-};
+const j = (a?: string[]) => (a ?? []).join("");
 
-export async function hashProducao(parts: unknown[]): Promise<string> {
-  const texto = JSON.stringify(parts);
-  if (typeof crypto !== "undefined" && crypto.subtle) {
-    const bytes = new TextEncoder().encode(texto);
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-  }
-  let h = 0;
-  for (let i = 0; i < texto.length; i++) h = Math.imul(31, h) + texto.charCodeAt(i) | 0;
-  return `fallback-${Math.abs(h)}`;
+// Formatos do `dados` (jsonb) salvos pelos formulários — subconjunto do que a dashboard usa.
+interface BpaCDados { cnes?: string[]; nome?: string; mes?: string[]; ano?: string[]; rows?: RowData[] }
+interface BpaIDados {
+  cnes?: string[]; nomeEstab?: string; profCns?: string[]; profNome?: string;
+  profCbo?: string[]; profMes?: string[]; profAno?: string[]; seqs?: SeqData[];
 }
 
-export async function registrarProducaoBpa(linhas: ProducaoBpaInput[], formato: FormatoGerado): Promise<boolean> {
-  if (!supabase || linhas.length === 0) return false;
-  const agora = new Date().toISOString();
-  const payload = linhas.map((l) => ({
-    source_key: l.sourceKey,
-    ficha_id: l.fichaId,
-    tipo: l.tipo,
-    competencia: l.competencia,
-    data_atendimento: l.dataAtendimento || null,
-    cnes: normalizar(l.cnes),
-    estabelecimento_nome: normalizar(l.estabelecimentoNome),
-    municipio_ibge: normalizar(l.municipioIbge),
-    profissional_cns: normalizar(l.profissionalCns),
-    profissional_nome: normalizar(l.profissionalNome),
-    cbo: normalizar(l.cbo),
-    procedimento: l.procedimento,
-    quantidade: l.quantidade,
-    servico: normalizar(l.servico),
-    classificacao: normalizar(l.classificacao),
-    cid: normalizar(l.cid),
-    carater: normalizar(l.carater),
-    idade: l.idade ?? null,
-    ultimo_formato: formato,
-    gerado_em: agora,
-    updated_at: agora,
+// Achata uma ficha em suas linhas de produção. BPA-C: 1 linha por procedimento preenchido,
+// competência = cabeçalho (ano+mes). BPA-I: 1 linha por sequência preenchida, competência =
+// data de atendimento da sequência (produção retroativa).
+function achatarFicha(f: FichaCompleta): ProducaoBpaRow[] {
+  if (f.tipo === "BPA-C") {
+    const d = (f.dados ?? {}) as BpaCDados;
+    const comp = j(d.ano) + j(d.mes);
+    return (d.rows ?? []).filter(rowPreenchida).map((r, i) => ({
+      id: `${f.id}-c${i}`,
+      tipo: "BPA-C" as const,
+      competencia: comp,
+      mesProducao: f.mes_producao,
+      cnes: j(d.cnes) || null,
+      estabelecimento_nome: d.nome?.trim() || null,
+      profissional_cns: null,
+      profissional_nome: null,
+      cbo: j(r.cbo) || null,
+      procedimento: j(r.procedimento),
+      quantidade: Number(j(r.quantidade)) || 0,
+      servico: null,
+      classificacao: null,
+      cid: null,
+      carater: null,
+      idade: Number(j(r.idade)) || null,
+    }));
+  }
+  const d = (f.dados ?? {}) as BpaIDados;
+  const cbo = j(d.profCbo) || null;
+  const cns = j(d.profCns) || null;
+  return (d.seqs ?? []).filter(seqPreenchida).map((s, i) => ({
+    id: `${f.id}-i${i}`,
+    tipo: "BPA-I" as const,
+    competencia: competenciaDoAtendimento(s.dataAtend) ?? (j(d.profAno) + j(d.profMes)),
+    mesProducao: f.mes_producao,
+    cnes: j(d.cnes) || null,
+    estabelecimento_nome: d.nomeEstab?.trim() || null,
+    profissional_cns: cns,
+    profissional_nome: d.profNome?.trim() || null,
+    cbo,
+    procedimento: j(s.codProc),
+    quantidade: Number(j(s.qtde)) || 0,
+    servico: j(s.servico) || null,
+    classificacao: j(s.classProc) || null,
+    cid: j(s.cid).trim() || null,
+    carater: j(s.carater) || null,
+    idade: null,
   }));
-
-  try {
-    const { error } = await supabase.from("producao_bpa").upsert(payload, { onConflict: "source_key" });
-    return !error;
-  } catch {
-    return false;
-  }
 }
 
-export async function carregarProducaoDashboard(competencia?: string): Promise<ProducaoBpaRow[]> {
-  if (!supabase) return [];
-  try {
-    let req = supabase
-      .from("producao_bpa")
-      .select("id,tipo,competencia,data_atendimento,cnes,estabelecimento_nome,municipio_ibge,profissional_cns,profissional_nome,cbo,procedimento,quantidade,servico,classificacao,cid,carater,idade,ultimo_formato,gerado_em")
-      .order("gerado_em", { ascending: false })
-      .limit(5000);
-    if (competencia) req = req.eq("competencia", competencia);
-    const { data, error } = await req;
-    return error || !data ? [] : (data as ProducaoBpaRow[]);
-  } catch {
-    return [];
-  }
+// Produção de um MÊS DE PRODUÇÃO (mês em que as fichas foram criadas), achatada em linhas.
+// Fonte única = tabela `fichas` (RLS já limita ao dono). Sem mês, retorna vazio.
+export async function carregarProducaoDashboard(mesProducao?: string): Promise<ProducaoBpaRow[]> {
+  if (!supabase || !mesProducao) return [];
+  const fichas = await fichasDoMes(mesProducao);
+  return fichas.flatMap(achatarFicha);
 }
 
 // Nome oficial (SIGTAP) de vários procedimentos de uma vez. Retorna um mapa

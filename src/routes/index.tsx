@@ -173,7 +173,7 @@ function Home() {
         {/* Filtros */}
         <section className="mb-5 grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 md:grid-cols-4">
           <label className="text-xs font-medium text-foreground">
-            Competência
+            Mês de produção
             <input type="month" value={`${competencia.slice(0, 4)}-${competencia.slice(4, 6)}`} onChange={(e) => setCompetencia(e.target.value.replace("-", ""))} className={selectCls} />
           </label>
           <label className="text-xs font-medium text-foreground">

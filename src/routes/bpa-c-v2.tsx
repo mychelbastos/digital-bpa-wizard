@@ -5,13 +5,9 @@ import bpacBg from "@/assets/bpa-c.png";
 import { DigitBoxes } from "@/components/DigitBoxes";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
-import { gerarArquivoBpaC, rowPreenchida } from "@/lib/bpa-c-v2/bpa-magnetico";
-import { loadConfig } from "@/lib/bpa-i-v2/config";
-import { baixarTxt } from "@/lib/export-txt";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
-import { hashProducao, registrarProducaoBpa } from "@/lib/dashboard-producao";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
@@ -209,7 +205,7 @@ function BpaCV2() {
     await new Promise((r) => setTimeout(r, 80));
     try {
       await exportSheetPdf(sheetRef.current, "BPA-C.pdf");
-      await registrarExportacao("pdf");
+      await persistirFicha();
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Falha ao gerar PDF. Veja o console para detalhes.");
@@ -291,7 +287,9 @@ function BpaCV2() {
   };
   const novaFicha = () => { setState(initialState()); limparFichaPersistida(); };
 
-  const registrarExportacao = async (formato: "pdf" | "txt" = "pdf") => {
+  // Salva a ficha na nuvem (a produção da dashboard é derivada das fichas salvas). O .txt
+  // não sai mais daqui — é gerado só no Fechamento do mês, com toda a produção junta.
+  const persistirFicha = async () => {
     const comp = competencia();
     const cnes = state.cnes.join("");
     const titulo = `BPA-C ${state.nome || cnes || "ficha"} ${comp}`.trim();
@@ -299,58 +297,11 @@ function BpaCV2() {
       tipo: "BPA-C",
       cnes,
     });
-
     if (!id) {
-      toast.warning("Arquivo gerado, mas não consegui salvar a ficha/produção na nuvem.");
+      toast.warning("PDF gerado, mas não consegui salvar a ficha na nuvem.");
       return;
     }
     persistFicha(id, titulo);
-
-    const linhas = await Promise.all(state.rows.map(async (r, index) => {
-      const procedimento = r.procedimento.join("");
-      const quantidade = Number(r.quantidade.join("")) || 0;
-      if (!procedimento || quantidade <= 0) return null;
-      const cbo = r.cbo.join("");
-      const sourceKey = await hashProducao(["BPA-C", comp, cnes, state.folha.join(""), index, procedimento, cbo, r.idade.join(""), quantidade]);
-      return {
-        sourceKey,
-        fichaId: id,
-        tipo: "BPA-C" as const,
-        competencia: comp,
-        cnes,
-        estabelecimentoNome: state.nome,
-        cbo,
-        procedimento,
-        quantidade,
-        idade: Number(r.idade.join("")) || null,
-      };
-    }));
-
-    const ok = await registrarProducaoBpa(linhas.filter((l): l is NonNullable<typeof l> => Boolean(l)), formato);
-    if (!ok) toast.warning("Arquivo gerado, mas a produção não foi registrada na dashboard.");
-  };
-
-  // Gera e baixa o arquivo magnético BPA-C (.txt) da ficha atual (registro 02).
-  const exportTxt = async () => {
-    if (temCamposInvalidos) {
-      toast.error("Corrija os campos em vermelho (crivo SIGTAP) antes de gerar o .txt.");
-      return;
-    }
-    if (!state.rows.some(rowPreenchida)) {
-      toast.error("Preencha ao menos um procedimento com quantidade antes de gerar o .txt.");
-      return;
-    }
-    try {
-      const arq = gerarArquivoBpaC(
-        { cnes: state.cnes, ano: state.ano, mes: state.mes, folhaBase: state.folha, rows: state.rows },
-        loadConfig(),
-      );
-      baixarTxt(arq.nome, arq.conteudo);
-      await registrarExportacao("txt");
-    } catch (err) {
-      console.error("Falha ao gerar arquivo magnético BPA-C", err);
-      toast.error("Falha ao gerar o arquivo magnético. Veja o console.");
-    }
   };
 
   // Total calculado em tempo real a partir das quantidades das 20 linhas.
@@ -443,13 +394,6 @@ function BpaCV2() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={exportTxt}
-              title={temCamposInvalidos ? "Corrija os campos em vermelho (crivo SIGTAP) antes de gerar" : "Gerar arquivo magnético BPA-C (.txt) p/ importar no SIA/SUS"}
-              className={`rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100${temCamposInvalidos ? " opacity-50" : ""}`}
-            >
-              Gerar .txt
-            </button>
             <button
               onClick={exportPdf}
               disabled={printing}

@@ -7,15 +7,24 @@ export interface FichaResumo {
   id: string;
   titulo: string;
   competencia: string | null;
+  mes_producao: string | null;
   updated_at: string;
   tipo: "BPA-I" | "BPA-C";
 }
 
-// Ficha com o `dados` completo — usada no Fechamento do mês p/ reconstruir as linhas.
+// Ficha com o `dados` completo — usada no Fechamento do mês e na dashboard p/ reconstruir
+// as linhas. `mes_producao` = mês em que foi criada (agrupamento da produção).
 export interface FichaCompleta {
   id: string;
   tipo: "BPA-I" | "BPA-C";
+  mes_producao: string | null;
   dados: unknown;
+}
+
+// Mês de produção (AAAAMM) = mês local atual — carimbado no 1º save da ficha.
+function mesProducaoAtual(): string {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export interface FichaMetadados {
@@ -45,6 +54,7 @@ export async function salvarFicha(
   };
   try {
     if (id) {
+      // Update NÃO mexe em mes_producao: o mês de produção é fixado na criação da ficha.
       const { error } = await supabase
         .from("fichas")
         .update({ ...payload, updated_at: new Date().toISOString() })
@@ -53,7 +63,7 @@ export async function salvarFicha(
     }
     const { data, error } = await supabase
       .from("fichas")
-      .insert(payload)
+      .insert({ ...payload, mes_producao: mesProducaoAtual() })
       .select("id")
       .single();
     return error || !data ? null : (data as { id: string }).id;
@@ -83,7 +93,7 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
   try {
     let req = supabase
       .from("fichas")
-      .select("id, titulo, competencia, updated_at, tipo")
+      .select("id, titulo, competencia, mes_producao, updated_at, tipo")
       .order("updated_at", { ascending: false })
       .limit(200);
     if (tipo) req = req.eq("tipo", tipo);
@@ -94,12 +104,14 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
   }
 }
 
-// Todas as fichas de um mês de APRESENTAÇÃO (competência do cabeçalho) + CNES, com o
-// `dados` completo — base do Fechamento do mês (arquivo combinado 01+02+03).
-export async function fichasDoMes(competencia: string, cnes?: string): Promise<FichaCompleta[]> {
+// Todas as fichas de um MÊS DE PRODUÇÃO (mês em que foram criadas) + CNES, com o `dados`
+// completo — base do Fechamento do mês (arquivo combinado 01+02+03) e da dashboard. A
+// produção de um mês pode conter fichas de competências de atendimento diferentes (até 4
+// meses de retroatividade); o agrupamento é por mês de produção, não por competência.
+export async function fichasDoMes(mesProducao: string, cnes?: string): Promise<FichaCompleta[]> {
   if (!supabase) return [];
   try {
-    let req = supabase.from("fichas").select("id, tipo, dados").eq("competencia", competencia).limit(500);
+    let req = supabase.from("fichas").select("id, tipo, mes_producao, dados").eq("mes_producao", mesProducao).limit(500);
     if (cnes) req = req.eq("cnes", cnes);
     const { data, error } = await req;
     return error || !data ? [] : (data as FichaCompleta[]);
