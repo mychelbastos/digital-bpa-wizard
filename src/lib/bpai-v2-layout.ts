@@ -122,6 +122,9 @@ export interface SeqData {
   email: string;
   dataAtend: string[]; // 8 digits
   dataAtendConfirmada: boolean; // true = pessoa confirmou o aviso de >120 dias p/ esta data
+  idade?: string[]; // 3 díg. CAPTURADO da folha (pré-preenchido pelo cálculo, editável). Vazio => gerador calcula.
+  cpfPac?: string[]; // 11 díg. cauda v04.11 — CAPTURADO (hipótese: CPF do paciente). Vazio => brancos.
+  situacaoRua?: string; // 1 char S/N — cauda v04.11 CAPTURADO (hipótese: situação de rua). Vazio => branco.
   codProc: string[];
   qtde: string[];
   cnpj: string[];
@@ -152,6 +155,9 @@ export const emptySeq = (): SeqData => ({
   email: "",
   dataAtend: Array(8).fill(""),
   dataAtendConfirmada: false,
+  idade: Array(3).fill(""),
+  cpfPac: Array(11).fill(""),
+  situacaoRua: "",
   codProc: Array(10).fill(""),
   qtde: Array(3).fill(""),
   cnpj: Array(14).fill(""),

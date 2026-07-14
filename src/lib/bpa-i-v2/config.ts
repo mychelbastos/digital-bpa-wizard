@@ -7,8 +7,8 @@ export interface ConfigOrgao {
   sigla: string; // sigla do órgão de origem (6)
   cgcCpf: string; // CNPJ/CPF do prestador (14 dígitos)
   orgaoDestinoNome: string; // nome do órgão destino (40)
-  destinoTipo: "M" | "E"; // Municipal / Estadual
-  versao: string; // versão do sistema (10)
+  destinoTipo: "M" | "E"; // Municipal / Estadual (indicador destino, 1 char no header)
+  versao: string; // versão do layout (6 no header) — v04.11 observada = "D04.11"
 }
 
 const KEY = "bpa-i-v2-config";
@@ -19,7 +19,7 @@ export const configVazia = (): ConfigOrgao => ({
   cgcCpf: "",
   orgaoDestinoNome: "",
   destinoTipo: "M",
-  versao: "DIGBPA1.0",
+  versao: "D04.11",
 });
 
 export function loadConfig(): ConfigOrgao {

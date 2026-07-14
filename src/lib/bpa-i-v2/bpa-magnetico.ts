@@ -1,6 +1,9 @@
-// Gerador do arquivo magnético BPA-I (.txt) no layout oficial DATASUS/SIA.
-// Header (tipo 01) = 130 chars; linha BPA-I (tipo 03) = 338 chars; ambos + CRLF.
-// Fonte: "Layout da interface texto do BPA" (FEHOSP/DATASUS).
+// Gerador do arquivo magnético BPA-I (.txt) no layout oficial DATASUS/SIA v04.11.
+// Header (tipo 01) = 126 chars; linha BPA-I (tipo 03) = 350 chars; ambos + CRLF.
+// Layout conferido byte a byte contra um arquivo real aceito pelo DATASUS.
+// PRINCÍPIO: o gerador NÃO deriva o que o formulário CAPTURA. Competência e idade
+// são campos da ficha/linha (lidos do cabeçalho e do corpo da folha física), não
+// cálculos — por isso saem exatamente como o digitador confirmou.
 import type { SeqData } from "@/lib/bpai-v2-layout";
 import type { ConfigOrgao } from "./config";
 
@@ -27,15 +30,12 @@ export function alfaF(v: string, n: number): string {
 
 export const competencia = (ano: string[], mes: string[]) => numF(ano, 4) + numF(mes, 2);
 
-// Competência de REALIZAÇÃO da linha (AAAAMM) = mês/ano da data de atendimento
-// (fiel ao DATASUS: o cabeçalho leva a competência de APRESENTAÇÃO; cada linha leva a
-// sua própria competência de atendimento — permite produção retroativa). Se a data
-// estiver incompleta, cai na competência de apresentação (ano/mês do cabeçalho).
-export function competenciaLinha(dataAtend: string[], anoApres: string[], mesApres: string[]): string {
-  const s = dig(dataAtend);
-  if (s.length === 8) return s.slice(4, 8) + s.slice(2, 4); // ddmmaaaa -> aaaamm
-  return competencia(anoApres, mesApres);
-}
+// A competência da linha NÃO se deriva da data de atendimento. Ela está escrita no
+// CABEÇALHO DA FOLHA FÍSICA e é constante para todas as linhas daquela folha; por isso
+// atendimentos retroativos (fora do mês da competência) são normais — é faturamento
+// retroativo. No modelo, a competência é campo da ficha (profAno/profMes), propagado
+// para todas as linhas. (Confirmado byte a byte: dentro de uma folha a competência é
+// constante; a chave de unicidade é CNES+prof+COMPETÊNCIA+folha+seq.)
 
 // [d,d,m,m,a,a,a,a] -> aaaammdd; vazio/incompleto -> brancos.
 function dataAMD(d8: string[]): string {
@@ -92,10 +92,15 @@ export function montar(campos: [number, string][], total: number): string {
 
 export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number): string {
   const raca = dig(s.racaCor);
+  // Idade CAPTURADA da folha (o que o digitador confirmou); se vazia, pré-preenche com
+  // o cálculo (anos completos na data de atendimento — a regra que mais acerta). Nunca
+  // sobrescreve a captura: erros humanos de idade no papel devem sair fiéis ao papel.
+  const idadeCap = dig(s.idade ?? []);
+  const idade = idadeCap.length ? numF(idadeCap, 3) : numF(String(idadeAnos(s.dataNasc, s.dataAtend)), 3);
   const campos: [number, string][] = [
     [2, "03"],
     [7, numF(d.cnes, 7)],
-    [6, competenciaLinha(s.dataAtend, d.profAno, d.profMes)],
+    [6, competencia(d.profAno, d.profMes)],
     [15, numF(d.profCns, 15)],
     [6, alfaF(dig(d.profCbo), 6)],
     [8, dataAMD(s.dataAtend)],
@@ -110,7 +115,7 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     // o dígito do UF, gerando um município inexistente).
     [6, numF(dig(s.ibge).slice(0, 6), 6, true)],
     [4, alfaF(s.cid.join(""), 4)],
-    [3, numF(String(idadeAnos(s.dataNasc, s.dataAtend)), 3)],
+    [3, idade],
     [6, numF(s.qtde, 6)],
     [2, numF(s.carater, 2, true)],
     [13, numF(s.autorizacao, 13, true)],
@@ -134,16 +139,26 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     [11, ((dig(s.ddd) + dig(s.telefone)) || "").padEnd(11, " ").slice(0, 11)],
     [40, alfaF(s.email, 40)],
     [10, " ".repeat(10)], // INE (não coletado)
+    // Cauda do v04.11 (12 chars). HIPÓTESE (a confirmar por import): CPF do paciente (11)
+    // + situação de rua S/N (1). São CAPTURADOS, não derivados: default em branco (fichas
+    // que não coletam), mas passam fiéis quando informados — foi o que fechou 556/556 do
+    // PA292720.MAR (1 registro traz "N" aqui e o DATASUS aceitou).
+    [11, numF(s.cpfPac ?? [], 11, true)], // CPF do paciente (hipótese)
+    [1, s.situacaoRua === "S" || s.situacaoRua === "N" ? s.situacaoRua : " "], // situação de rua (hipótese)
   ];
-  return montar(campos, 338);
+  return montar(campos, 350);
 }
 
+// Header (registro 01) = 126 chars no layout v04.11. Confirmado byte a byte contra
+// PA292720.MAR: a cauda é destino(1) + versão(6) = "MD04.11"; a contagem de linhas
+// INCLUI o próprio header (nLinhas de dados + 1). `nLinhas` recebido = só as linhas de
+// dados; somamos 1 aqui.
 export function header(cfg: ConfigOrgao, comp: string, nLinhas: number, nFolhas: number, controle: number): string {
   const campos: [number, string][] = [
     [2, "01"],
     [5, "#BPA#"],
     [6, numF(comp, 6)],
-    [6, numF(String(nLinhas), 6)],
+    [6, numF(String(nLinhas + 1), 6)],
     [6, numF(String(nFolhas), 6)],
     [4, numF(String(controle), 4)],
     [30, alfaF(cfg.orgaoOrigemNome, 30)],
@@ -151,9 +166,9 @@ export function header(cfg: ConfigOrgao, comp: string, nLinhas: number, nFolhas:
     [14, numF(cfg.cgcCpf, 14)],
     [40, alfaF(cfg.orgaoDestinoNome, 40)],
     [1, cfg.destinoTipo === "E" ? "E" : "M"],
-    [10, alfaF(cfg.versao || "DIGBPA1.0", 10)],
+    [6, alfaF(cfg.versao || "D04.11", 6)],
   ];
-  return montar(campos, 130);
+  return montar(campos, 126);
 }
 
 export interface ArquivoBpa {

@@ -45,13 +45,13 @@ describe("linhaBpaC (registro 02)", () => {
 });
 
 describe("gerarArquivoBpaC", () => {
-  it("header 130 + 1 linha 48, nome PAC<comp>.txt, termina com CRLF", () => {
+  it("header 126 (v04.11) + 1 linha 48, nome PAC<comp>.txt, termina com CRLF", () => {
     const arq = gerarArquivoBpaC(dados(), cfg());
     expect(arq.nome).toBe("PAC202606.txt");
     expect(arq.linhas).toBe(1);
     const linhas = arq.conteudo.split("\r\n").filter(Boolean);
     expect(linhas.length).toBe(2);
-    expect(linhas[0].length).toBe(130);
+    expect(linhas[0].length).toBe(126);
     expect(linhas[1].length).toBe(48);
     expect(arq.conteudo.endsWith("\r\n")).toBe(true);
   });

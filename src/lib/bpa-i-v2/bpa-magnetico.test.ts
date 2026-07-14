@@ -36,7 +36,7 @@ const cfg = () => ({ ...configVazia(), orgaoOrigemNome: "PREF MUN EXEMPLO", sigl
 
 describe("linhaBpaI", () => {
   const l = linhaBpaI(dados(), seqExemplo(), 1, 1);
-  it("tem 338 caracteres", () => expect(l.length).toBe(338));
+  it("tem 350 caracteres (v04.11)", () => expect(l.length).toBe(350));
   it("começa com 03 + CNES + competência", () => {
     expect(l.slice(0, 2)).toBe("03");
     expect(l.slice(2, 9)).toBe("2510332"); // CNES pos 3-9
@@ -76,27 +76,50 @@ describe("linhaBpaI", () => {
 });
 
 describe("header e arquivo", () => {
-  it("header tem 130 chars e começa com 01#BPA#", () => {
+  it("header tem 126 chars (v04.11) e começa com 01#BPA#", () => {
     const h = header(cfg(), "202606", 1, 1, 1234);
-    expect(h.length).toBe(130);
+    expect(h.length).toBe(126);
     expect(h.slice(0, 7)).toBe("01#BPA#");
     expect(h.slice(7, 13)).toBe("202606");
-    expect(h.slice(119, 120)).toBe("E"); // destino M/E pos 120
+    expect(h.slice(13, 19)).toBe("000002"); // nº linhas = dados(1) + header(1)
+    expect(h.slice(119, 120)).toBe("E"); // destino M/E
+    expect(h.slice(120, 126)).toBe("D04.11"); // versão (6)
   });
   it("campo de controle no intervalo [1111..2221]", () => {
     const c = campoControle(dados().seqs);
     expect(c).toBeGreaterThanOrEqual(1111);
     expect(c).toBeLessThanOrEqual(2221);
   });
-  it("gera arquivo: 1 header + 1 linha, cada linha 340 com CRLF", () => {
+  it("gera arquivo: 1 header (126) + 1 linha (350), termina com CRLF", () => {
     const arq = gerarArquivoBpa(dados(), cfg());
     expect(arq.nome).toBe("PA202606.txt");
     expect(arq.linhas).toBe(1);
     const linhas = arq.conteudo.split("\r\n").filter(Boolean);
     expect(linhas.length).toBe(2); // header + 1 BPA-I
-    expect(linhas[0].length).toBe(130);
-    expect(linhas[1].length).toBe(338);
+    expect(linhas[0].length).toBe(126);
+    expect(linhas[1].length).toBe(350);
     expect(arq.conteudo.endsWith("\r\n")).toBe(true);
+  });
+});
+
+describe("capturar, não derivar (regra do layout real)", () => {
+  it("competência da linha vem da FICHA (profAno/profMes), não da data de atendimento", () => {
+    // Atendimento em 202511, mas a folha é competência 202601 (faturamento retroativo).
+    const d = { ...dados(), profMes: cells("01", 2), profAno: cells("2026", 4) };
+    const seq = { ...seqExemplo(), dataAtend: cells("07112025", 8) }; // 07/11/2025
+    const l = linhaBpaI(d, seq, 1, 1);
+    expect(l.slice(9, 15)).toBe("202601"); // da ficha, NÃO 202511 do atendimento
+  });
+  it("idade CAPTURADA sobrepõe o cálculo; vazia cai no cálculo", () => {
+    const capt = linhaBpaI(dados(), { ...seqExemplo(), idade: cells("070", 3) }, 1, 1);
+    expect(capt.slice(85, 88)).toBe("070"); // fiel ao papel (mesmo divergindo do cálculo=36)
+    const calc = linhaBpaI(dados(), { ...seqExemplo(), idade: [] }, 1, 1);
+    expect(calc.slice(85, 88)).toBe("036"); // sem captura, calcula
+  });
+  it("situação de rua (cauda v04.11) passa fiel; default em branco", () => {
+    const comN = linhaBpaI(dados(), { ...seqExemplo(), situacaoRua: "N" }, 1, 1);
+    expect(comN.slice(349, 350)).toBe("N");
+    expect(linhaBpaI(dados(), seqExemplo(), 1, 1).slice(349, 350)).toBe(" ");
   });
 });
 
