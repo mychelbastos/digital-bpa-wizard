@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { signOut } from "@/lib/bpa-i-v2/auth";
-import { cnesComPermissao } from "@/lib/permissoes";
+import { souAdmin } from "@/lib/permissoes";
 
 const formularios = [
   { to: "/bpa-i-v3", label: "BPA-I" },
@@ -31,7 +31,7 @@ export function AppSidebar() {
 
   useEffect(() => {
     let vivo = true;
-    cnesComPermissao("gerenciar_vinculos").then((cnes) => vivo && setPodeAdmin(cnes.length > 0));
+    souAdmin().then((ok) => vivo && setPodeAdmin(ok));
     return () => {
       vivo = false;
     };

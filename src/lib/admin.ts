@@ -55,6 +55,18 @@ export interface OrganizacaoAdmin {
   gestao_fim: string | null;
 }
 
+// Cria uma prefeitura (organização) nova — só super-admin. Devolve o id.
+export async function criarOrganizacao(nome: string, ibge: string, uf: string): Promise<string> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { data, error } = await supabase.rpc("admin_criar_organizacao", {
+    _nome: nome,
+    _ibge: ibge,
+    _uf: uf,
+  });
+  if (error) throw new Error(error.message);
+  return data as string;
+}
+
 export async function listarOrganizacoes(): Promise<OrganizacaoAdmin[]> {
   if (!supabase) return [];
   try {

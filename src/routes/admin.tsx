@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { souSuperAdmin } from "@/lib/permissoes";
 import {
   ShieldCheck,
   Loader2,
@@ -27,6 +28,7 @@ import {
   listarOrganizacoes,
   salvarOrganizacao,
   salvarGestao,
+  criarOrganizacao,
   leiturasRecentes,
   type VinculoAdmin,
   type PessoaAdmin,
@@ -80,8 +82,13 @@ function Admin() {
   const [estabPorOrg, setEstabPorOrg] = useState<Record<string, EstabelecimentoOrg[]>>({});
   const [organizacoes, setOrganizacoes] = useState<OrganizacaoAdmin[]>([]);
   const [leituras, setLeituras] = useState<LeituraLog[]>([]);
+  const [superAdmin, setSuperAdmin] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
+
+  useEffect(() => {
+    souSuperAdmin().then(setSuperAdmin);
+  }, []);
 
   const recarregar = useCallback(() => {
     return Promise.all([
@@ -274,6 +281,21 @@ function Admin() {
     }
   };
 
+  const criarPrefeitura = async (nome: string, ibge: string, uf: string) => {
+    setSalvando("criar-prefeitura");
+    try {
+      await criarOrganizacao(nome, ibge, uf);
+      await recarregar();
+      toast.success(`Prefeitura "${nome}" criada.`);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao criar prefeitura.");
+      return false;
+    } finally {
+      setSalvando(null);
+    }
+  };
+
   // Organizações que o admin gerencia (derivadas das pessoas listadas), com nome.
   const orgs = useMemo(() => {
     const m = new Map<string, string>();
@@ -282,7 +304,7 @@ function Admin() {
   }, [pessoas]);
 
   const hojeISO = new Date().toISOString().slice(0, 10);
-  const semAcesso = !carregando && pessoas.length === 0;
+  const semAcesso = !carregando && pessoas.length === 0 && organizacoes.length === 0 && !superAdmin;
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
@@ -308,14 +330,23 @@ function Admin() {
           </p>
         ) : (
           <>
-            {organizacoes.length > 0 && (
+            {(organizacoes.length > 0 || superAdmin) && (
               <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Landmark className="size-4" /> Prefeitura e gestão
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Landmark className="size-4" /> Prefeitura e gestão ({organizacoes.length})
+                  </h2>
+                  {superAdmin && (
+                    <CriarPrefeituraForm
+                      criando={salvando === "criar-prefeitura"}
+                      onCriar={criarPrefeitura}
+                    />
+                  )}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Dados do município e o <strong>cabeçalho do arquivo magnético</strong> (registro
                   01). Isto vale para toda a organização — não é mais por usuário.
+                  {superAdmin && " Como super-admin, você vê e administra todas as prefeituras."}
                 </p>
                 <div className="mt-4 space-y-4">
                   {organizacoes.map((o) => (
@@ -457,6 +488,86 @@ function PermPill({
   );
 }
 
+function CriarPrefeituraForm({
+  criando,
+  onCriar,
+}: {
+  criando: boolean;
+  onCriar: (nome: string, ibge: string, uf: string) => Promise<boolean>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [nome, setNome] = useState("");
+  const [ibge, setIbge] = useState("");
+  const [uf, setUf] = useState("");
+  const campo = "rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground";
+
+  const submeter = async () => {
+    if (!nome.trim()) return;
+    const ok = await onCriar(nome.trim(), ibge.trim(), uf.trim());
+    if (ok) {
+      setNome("");
+      setIbge("");
+      setUf("");
+      setAberto(false);
+    }
+  };
+
+  if (!aberto) {
+    return (
+      <button
+        onClick={() => setAberto(true)}
+        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+      >
+        <Plus className="size-3.5" /> Criar prefeitura
+      </button>
+    );
+  }
+  return (
+    <div className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-2">
+      <label className="flex flex-1 flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+        Nome da prefeitura
+        <input
+          className={campo}
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          placeholder="Ex.: FMS — Cidade/UF"
+        />
+      </label>
+      <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+        Município (IBGE)
+        <input
+          className={`${campo} w-24`}
+          value={ibge}
+          onChange={(e) => setIbge(e.target.value.replace(/\D/g, ""))}
+          placeholder="2927200"
+        />
+      </label>
+      <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+        UF
+        <input
+          className={`${campo} w-12`}
+          maxLength={2}
+          value={uf}
+          onChange={(e) => setUf(e.target.value.toUpperCase())}
+        />
+      </label>
+      <button
+        onClick={submeter}
+        disabled={!nome.trim() || criando}
+        className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+      >
+        {criando ? <Loader2 className="size-3.5 animate-spin" /> : null} Criar
+      </button>
+      <button
+        onClick={() => setAberto(false)}
+        className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+      >
+        Cancelar
+      </button>
+    </div>
+  );
+}
+
 function OrgCard({
   org,
   salvandoOrg,
@@ -518,6 +629,10 @@ function OrgCard({
       <div className="mt-3 text-[11px] font-medium text-muted-foreground">
         Cabeçalho do arquivo magnético (registro 01)
       </div>
+      <p className="mt-0.5 text-[10px] text-muted-foreground">
+        Preenchido uma vez por prefeitura — deve bater com o que o DATASUS aceita. A versão do
+        layout raramente muda (padrão <span className="font-mono">D04.11</span>).
+      </p>
       <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className={rotulo}>
           Órgão de origem (máx. 30)

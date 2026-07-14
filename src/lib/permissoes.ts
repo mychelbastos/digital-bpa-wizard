@@ -12,3 +12,25 @@ export async function cnesComPermissao(perm: string): Promise<string[]> {
     return [];
   }
 }
+
+// Vê a página de Administração? (super-admin global OU gerenciar_vinculos em alguma unidade).
+export async function souAdmin(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc("sou_admin");
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+// É super-admin do sistema (operador que administra todas as prefeituras)?
+export async function souSuperAdmin(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc("is_super_admin");
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
