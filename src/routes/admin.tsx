@@ -1,7 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ShieldCheck, Loader2, Users, Eye, ChevronDown, Building2, Plus, X } from "lucide-react";
+import {
+  ShieldCheck,
+  Loader2,
+  Users,
+  Eye,
+  ChevronDown,
+  Building2,
+  Plus,
+  X,
+  Landmark,
+} from "lucide-react";
 import {
   listarVinculosAdmin,
   listarPessoasAdmin,
@@ -14,11 +24,15 @@ import {
   vincularUnidade,
   desvincularUnidade,
   criarConta,
+  listarOrganizacoes,
+  salvarOrganizacao,
+  salvarGestao,
   leiturasRecentes,
   type VinculoAdmin,
   type PessoaAdmin,
   type PermissaoCat,
   type EstabelecimentoOrg,
+  type OrganizacaoAdmin,
   type LeituraLog,
 } from "@/lib/admin";
 
@@ -64,6 +78,7 @@ function Admin() {
   const [perms, setPerms] = useState<PermissaoCat[]>([]);
   const [cargoDefaults, setCargoDefaults] = useState<Record<string, string[]>>({});
   const [estabPorOrg, setEstabPorOrg] = useState<Record<string, EstabelecimentoOrg[]>>({});
+  const [organizacoes, setOrganizacoes] = useState<OrganizacaoAdmin[]>([]);
   const [leituras, setLeituras] = useState<LeituraLog[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -74,17 +89,19 @@ function Admin() {
       listarVinculosAdmin(),
       listarPermissoes(),
       listarPapelPermissoes(),
+      listarOrganizacoes(),
       leiturasRecentes(50),
-    ]).then(async ([pe, v, p, cd, l]) => {
-      setPessoas(pe);
-      setVinculos(v);
-      setPerms(p);
-      setCargoDefaults(cd);
-      setLeituras(l);
+    ]).then(async ([pe, v, p, cd, orgs, l]) => {
+      setPessoas(pe as PessoaAdmin[]);
+      setVinculos(v as VinculoAdmin[]);
+      setPerms(p as PermissaoCat[]);
+      setCargoDefaults(cd as Record<string, string[]>);
+      setOrganizacoes(orgs as OrganizacaoAdmin[]);
+      setLeituras(l as LeituraLog[]);
       // Estabelecimentos por organização (para o seletor "adicionar unidade").
-      const orgs = [...new Set(pe.map((x) => x.organizacao_id))];
-      const listas = await Promise.all(orgs.map((o) => estabelecimentosOrg(o)));
-      setEstabPorOrg(Object.fromEntries(orgs.map((o, i) => [o, listas[i]])));
+      const orgIds = [...new Set((pe as PessoaAdmin[]).map((x) => x.organizacao_id))];
+      const listas = await Promise.all(orgIds.map((o) => estabelecimentosOrg(o)));
+      setEstabPorOrg(Object.fromEntries(orgIds.map((o, i) => [o, listas[i]])));
     });
   }, []);
 
@@ -217,6 +234,46 @@ function Admin() {
     }
   };
 
+  const gravarOrganizacao = async (o: OrganizacaoAdmin) => {
+    setSalvando(`org:${o.id}`);
+    try {
+      await salvarOrganizacao({
+        id: o.id,
+        nome: o.nome,
+        municipio_ibge: o.municipio_ibge ?? "",
+        uf: o.uf ?? "",
+        cab_orgao_origem: o.cab_orgao_origem ?? "",
+        cab_sigla: o.cab_sigla ?? "",
+        cab_cgc_cpf: o.cab_cgc_cpf ?? "",
+        cab_orgao_destino: o.cab_orgao_destino ?? "",
+        cab_destino_tipo: o.cab_destino_tipo,
+        cab_versao: o.cab_versao,
+      });
+      await recarregar();
+      toast.success("Organização salva.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao salvar organização.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const gravarGestao = async (
+    o: OrganizacaoAdmin,
+    g: { id: string | null; nome: string; inicio: string; fim: string },
+  ) => {
+    setSalvando(`gestao:${o.id}`);
+    try {
+      await salvarGestao(o.id, g.id, g.nome, g.inicio, g.fim || null);
+      await recarregar();
+      toast.success("Gestão salva.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao salvar gestão.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
   // Organizações que o admin gerencia (derivadas das pessoas listadas), com nome.
   const orgs = useMemo(() => {
     const m = new Map<string, string>();
@@ -251,6 +308,30 @@ function Admin() {
           </p>
         ) : (
           <>
+            {organizacoes.length > 0 && (
+              <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Landmark className="size-4" /> Prefeitura e gestão
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Dados do município e o <strong>cabeçalho do arquivo magnético</strong> (registro
+                  01). Isto vale para toda a organização — não é mais por usuário.
+                </p>
+                <div className="mt-4 space-y-4">
+                  {organizacoes.map((o) => (
+                    <OrgCard
+                      key={o.id}
+                      org={o}
+                      salvandoOrg={salvando === `org:${o.id}`}
+                      salvandoGestao={salvando === `gestao:${o.id}`}
+                      onSalvarOrg={gravarOrganizacao}
+                      onSalvarGestao={gravarGestao}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -373,6 +454,197 @@ function PermPill({
       {label}
       {est.override && !loading ? <span className="ml-1 text-amber-600">≠</span> : null}
     </button>
+  );
+}
+
+function OrgCard({
+  org,
+  salvandoOrg,
+  salvandoGestao,
+  onSalvarOrg,
+  onSalvarGestao,
+}: {
+  org: OrganizacaoAdmin;
+  salvandoOrg: boolean;
+  salvandoGestao: boolean;
+  onSalvarOrg: (o: OrganizacaoAdmin) => void;
+  onSalvarGestao: (
+    o: OrganizacaoAdmin,
+    g: { id: string | null; nome: string; inicio: string; fim: string },
+  ) => void;
+}) {
+  const [o, setO] = useState<OrganizacaoAdmin>(org);
+  const [g, setG] = useState({
+    id: org.gestao_id,
+    nome: org.gestao_nome ?? "",
+    inicio: org.gestao_inicio ?? "",
+    fim: org.gestao_fim ?? "",
+  });
+  const set = <K extends keyof OrganizacaoAdmin>(k: K, v: OrganizacaoAdmin[K]) =>
+    setO((prev) => ({ ...prev, [k]: v }));
+  const campo = "rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground";
+  const rotulo = "flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground";
+
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <div className="text-sm font-semibold text-foreground">{org.nome}</div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className={rotulo}>
+          Nome da organização
+          <input className={campo} value={o.nome} onChange={(e) => set("nome", e.target.value)} />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className={rotulo}>
+            Município (IBGE)
+            <input
+              className={campo}
+              value={o.municipio_ibge ?? ""}
+              onChange={(e) => set("municipio_ibge", e.target.value)}
+            />
+          </label>
+          <label className={rotulo}>
+            UF
+            <input
+              className={campo}
+              maxLength={2}
+              value={o.uf ?? ""}
+              onChange={(e) => set("uf", e.target.value.toUpperCase())}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-3 text-[11px] font-medium text-muted-foreground">
+        Cabeçalho do arquivo magnético (registro 01)
+      </div>
+      <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className={rotulo}>
+          Órgão de origem (máx. 30)
+          <input
+            className={campo}
+            maxLength={30}
+            value={o.cab_orgao_origem ?? ""}
+            onChange={(e) => set("cab_orgao_origem", e.target.value)}
+            placeholder="Ex.: SECRETARIA MUNICIPAL DE SAUDE"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className={rotulo}>
+            Sigla (máx. 6)
+            <input
+              className={campo}
+              maxLength={6}
+              value={o.cab_sigla ?? ""}
+              onChange={(e) => set("cab_sigla", e.target.value)}
+            />
+          </label>
+          <label className={rotulo}>
+            CNPJ/CPF (14 díg.)
+            <input
+              className={campo}
+              inputMode="numeric"
+              maxLength={14}
+              value={o.cab_cgc_cpf ?? ""}
+              onChange={(e) => set("cab_cgc_cpf", e.target.value.replace(/\D/g, ""))}
+            />
+          </label>
+        </div>
+        <label className={rotulo}>
+          Órgão de destino (máx. 40)
+          <input
+            className={campo}
+            maxLength={40}
+            value={o.cab_orgao_destino ?? ""}
+            onChange={(e) => set("cab_orgao_destino", e.target.value)}
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className={rotulo}>
+            Tipo de destino
+            <select
+              className={campo}
+              value={o.cab_destino_tipo}
+              onChange={(e) => set("cab_destino_tipo", e.target.value)}
+            >
+              <option value="M">Municipal</option>
+              <option value="E">Estadual</option>
+            </select>
+          </label>
+          <label className={rotulo}>
+            Versão do layout
+            <input
+              className={campo}
+              maxLength={6}
+              value={o.cab_versao}
+              onChange={(e) => set("cab_versao", e.target.value)}
+            />
+          </label>
+        </div>
+      </div>
+      <div className="mt-2">
+        <button
+          onClick={() => onSalvarOrg(o)}
+          disabled={salvandoOrg}
+          className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {salvandoOrg ? <Loader2 className="size-3.5 animate-spin" /> : null} Salvar organização
+        </button>
+      </div>
+
+      <div className="mt-4 border-t border-border pt-3">
+        <div className="text-[11px] font-medium text-muted-foreground">
+          Gestão vigente (mandato)
+        </div>
+        <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <label className={rotulo}>
+            Nome
+            <input
+              className={campo}
+              value={g.nome}
+              onChange={(e) => setG((p) => ({ ...p, nome: e.target.value }))}
+              placeholder="Ex.: 2025–2028"
+            />
+          </label>
+          <label className={rotulo}>
+            Início
+            <input
+              type="date"
+              className={campo}
+              value={g.inicio}
+              onChange={(e) => setG((p) => ({ ...p, inicio: e.target.value }))}
+            />
+          </label>
+          <label className={rotulo}>
+            Fim (opcional)
+            <input
+              type="date"
+              className={campo}
+              value={g.fim}
+              onChange={(e) => setG((p) => ({ ...p, fim: e.target.value }))}
+            />
+          </label>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            onClick={() => onSalvarGestao(org, g)}
+            disabled={salvandoGestao || !g.nome || !g.inicio}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            {salvandoGestao ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {g.id ? "Salvar gestão" : "Criar gestão"}
+          </button>
+          {g.id && (
+            <button
+              onClick={() => setG({ id: null, nome: "", inicio: "", fim: "" })}
+              className="text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              + nova gestão
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

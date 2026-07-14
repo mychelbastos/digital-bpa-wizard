@@ -37,6 +37,81 @@ export interface PessoaAdmin {
   perms: Record<string, number>;
 }
 
+// Organização (Prefeitura) + cabeçalho do arquivo magnético + última gestão.
+export interface OrganizacaoAdmin {
+  id: string;
+  nome: string;
+  municipio_ibge: string | null;
+  uf: string | null;
+  cab_orgao_origem: string | null;
+  cab_sigla: string | null;
+  cab_cgc_cpf: string | null;
+  cab_orgao_destino: string | null;
+  cab_destino_tipo: string;
+  cab_versao: string;
+  gestao_id: string | null;
+  gestao_nome: string | null;
+  gestao_inicio: string | null;
+  gestao_fim: string | null;
+}
+
+export async function listarOrganizacoes(): Promise<OrganizacaoAdmin[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.rpc("admin_organizacoes");
+    return error || !data ? [] : (data as OrganizacaoAdmin[]);
+  } catch {
+    return [];
+  }
+}
+
+export async function salvarOrganizacao(o: {
+  id: string;
+  nome: string;
+  municipio_ibge: string;
+  uf: string;
+  cab_orgao_origem: string;
+  cab_sigla: string;
+  cab_cgc_cpf: string;
+  cab_orgao_destino: string;
+  cab_destino_tipo: string;
+  cab_versao: string;
+}): Promise<void> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { error } = await supabase.rpc("admin_salvar_organizacao", {
+    _org: o.id,
+    _nome: o.nome,
+    _ibge: o.municipio_ibge,
+    _uf: o.uf,
+    _orig: o.cab_orgao_origem,
+    _sigla: o.cab_sigla,
+    _cgc: o.cab_cgc_cpf,
+    _dest: o.cab_orgao_destino,
+    _dtipo: o.cab_destino_tipo,
+    _versao: o.cab_versao,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function salvarGestao(
+  orgId: string,
+  gestaoId: string | null,
+  nome: string,
+  inicio: string,
+  fim: string | null,
+): Promise<string> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { data, error } = await supabase.rpc("admin_salvar_gestao", {
+    _org: orgId,
+    _gestao_id: gestaoId,
+    _nome: nome,
+    _inicio: inicio,
+    _fim: fim,
+  });
+  if (error) throw new Error(error.message);
+  return data as string;
+}
+
 export interface LeituraLog {
   lida_em: string;
   email: string;

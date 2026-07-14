@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Download, CalendarCheck, Loader2, Lock, Snowflake, LockOpen } from "lucide-react";
 import { fichasDoMes } from "@/lib/bpa-i-v2/fichas";
 import { gerarArquivoMes, type FechamentoMes } from "@/lib/fechamento-mes";
-import { loadConfig } from "@/lib/bpa-i-v2/config";
+import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { baixarTxt } from "@/lib/export-txt";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { exportarProducao, reabrirProducao, listarProducoes, type Producao } from "@/lib/producoes";
@@ -39,6 +39,8 @@ function Fechamento() {
   useEffect(() => {
     cnesComPermissao("gerar_producao").then(setCnesPermitidos);
     recarregarProducoes();
+    // Espelha a config do cabeçalho da organização (fonte da verdade) para o gerador.
+    sincronizarConfigDaOrg();
   }, [recarregarProducoes]);
 
   const podeGerar = cnesPermitidos !== null && cnesPermitidos.length > 0;
