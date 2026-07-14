@@ -32,6 +32,9 @@ function Fechamento() {
   const [reabrindo, setReabrindo] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
   const [reabrindoBusy, setReabrindoBusy] = useState(false);
+  // Cabeçalho que sairá no arquivo (versão/destino) — muda quase todo mês; mostramos para o
+  // operador conferir antes de fechar.
+  const [cfgCab, setCfgCab] = useState(() => loadConfig());
 
   const recarregarProducoes = useCallback(() => {
     listarProducoes().then(setProducoes);
@@ -40,7 +43,7 @@ function Fechamento() {
     cnesComPermissao("gerar_producao").then(setCnesPermitidos);
     recarregarProducoes();
     // Espelha a config do cabeçalho da organização (fonte da verdade) para o gerador.
-    sincronizarConfigDaOrg();
+    sincronizarConfigDaOrg().then(() => setCfgCab(loadConfig()));
   }, [recarregarProducoes]);
 
   const podeGerar = cnesPermitidos !== null && cnesPermitidos.length > 0;
@@ -220,6 +223,13 @@ function Fechamento() {
                 value={`${res.resumo.linhasBpaI} · ${res.resumo.fichasBpaI} fichas`}
               />
             </div>
+            <p className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Cabeçalho do arquivo: destino{" "}
+              <strong className="text-foreground">{cfgCab.orgaoDestinoNome || "—"}</strong> · versão{" "}
+              <strong className="font-mono text-foreground">{cfgCab.versao || "—"}</strong>. O
+              layout do DATASUS muda quase todo mês — confira em Administração › Prefeitura antes de
+              fechar.
+            </p>
             {res.resumo.chavesDuplicadas > 0 && (
               <p className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
                 ⚠️ Consistência: {res.resumo.chavesDuplicadas} linha(s) com chave duplicada (CNES ·

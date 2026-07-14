@@ -159,24 +159,31 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
   return montar(campos, 350);
 }
 
-// Header (registro 01) = 126 chars no layout v04.11. Offsets 0-indexed CONFIRMADOS byte a
-// byte contra PA292720.MAR (arquivo aceito pelo DATASUS) — soma 126 exata:
+// Header (registro 01) = 126 chars. Offsets 0-indexed CONFIRMADOS byte a byte contra DOIS
+// arquivos reais aceitos pelo DATASUS (PA292720.MAR mar/2026 e PA292720.JUN jun/2026):
 //   tipo           [0:2]     "01"
 //   identificador  [2:7]     "#BPA#"
-//   competência    [7:13]    AAAAMM (ex.: 202603)
+//   competência    [7:13]    AAAAMM (do MÊS DE APRESENTAÇÃO; ex.: 202606)
 //   qtd linhas     [13:19]   6 díg. — INCLUI o próprio header (linhas de dados + 1)
-//   qtd folhas     [19:25]   6 díg.
+//   qtd folhas     [19:25]   6 díg. — combinações distintas de (CNES+competência+folha),
+//                            contadas separadamente para BPA-C e BPA-I e somadas
+//                            (jun: 23 = 11 BPA-C + 12 BPA-I; mar: 29). NÃO inclui prof/CBO.
 //   campo controle [25:29]   4 díg. — 1111 + (Σ(procedimento+quantidade) mod 1111)
 //   órgão origem   [29:59]   30 chars
 //   sigla          [59:65]   6 chars
 //   CNPJ/CPF       [65:79]   14 chars
-//   órgão destino  [79:119]  40 chars
+//   órgão destino  [79:119]  40 chars  ⟵ MUDA por competência (ver abaixo)
 //   tipo destino   [119]     1 char  (M/E)
-//   versão         [120:126] 6 chars (v04.11 = "D04.11")
+//   versão         [120:126] 6 chars  ⟵ MUDA por competência (ver abaixo)
 //
-// ⚠️ ARMADILHA (não "corrigir"): no arquivo real o órgão de destino é a Secretaria do
-// ESTADO da Bahia e o tipo de destino é "M" — parece inconsistente, MAS é exatamente o
-// que o DATASUS aceitou. Não troque para "E" sem um novo arquivo de referência confirmando.
+// ⚠️ O LAYOUT DO DATASUS MUDA (~mês a mês). Órgão de destino e VERSÃO NÃO são constantes:
+//   mar/2026: destino "SECRETARIA DA SAUDE DO ESTADO DA BAHIA", versão "D04.11"
+//   jun/2026: destino "MINISTERIO DA SAUDE",                    versão "D04.14"
+// Por isso vêm da CONFIG DA ORGANIZAÇÃO (editável), nunca fixos no código.
+//
+// ⚠️ ARMADILHA (não "corrigir"): o tipo de destino é "M" mesmo quando o destino é um órgão
+// federal/estadual — o relatório oficial imprime "ORGAO (M)UNICIPAL OU (E)STADUAL : M". É o
+// valor aceito pelo DATASUS; não troque para "E" sem um novo arquivo de referência.
 export function header(
   cfg: ConfigOrgao,
   comp: string,
@@ -196,7 +203,7 @@ export function header(
     [14, numF(cfg.cgcCpf, 14)],
     [40, alfaF(cfg.orgaoDestinoNome, 40)],
     [1, cfg.destinoTipo === "E" ? "E" : "M"],
-    [6, alfaF(cfg.versao || "D04.11", 6)],
+    [6, alfaF(cfg.versao || "D04.14", 6)],
   ];
   return montar(campos, 126);
 }

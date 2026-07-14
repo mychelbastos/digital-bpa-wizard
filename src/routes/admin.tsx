@@ -676,8 +676,9 @@ function OrgCard({
         Cabeçalho do arquivo magnético (registro 01)
       </div>
       <p className="mt-0.5 text-[10px] text-muted-foreground">
-        Preenchido uma vez por prefeitura — deve bater com o que o DATASUS aceita. A versão do
-        layout raramente muda (padrão <span className="font-mono">D04.11</span>).
+        Deve bater com o que o DATASUS aceita <strong>na competência de apresentação</strong>. O
+        órgão de destino e a versão mudam quase todo mês (atual{" "}
+        <span className="font-mono">D04.14</span>) — atualize a cada remessa.
       </p>
       <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className={rotulo}>
@@ -744,9 +745,11 @@ function OrgCard({
         </div>
       </div>
       <p className="mt-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">
-        ⚠️ No arquivo aceito pelo DATASUS, o destino pode ser a Secretaria do{" "}
-        <strong>Estado</strong> com o tipo <strong>“Municipal”</strong> — parece errado, mas é o
-        valor observado. Não altere sem um novo arquivo de referência.
+        ⚠️ O layout do DATASUS <strong>muda quase todo mês</strong>: atualize o órgão de destino e a
+        versão quando sair uma nova (jun/2026 = MINISTERIO DA SAUDE / D04.14; mar = Secretaria do
+        Estado / D04.11). E o tipo é <strong>“Municipal” (M)</strong> mesmo com destino federal — é
+        o valor que o DATASUS aceita (o relatório imprime “ORGAO (M)UNICIPAL OU (E)STADUAL : M”).
+        Não troque para “E” sem novo arquivo de referência.
       </p>
       <div className="mt-2">
         <button

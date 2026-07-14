@@ -76,14 +76,14 @@ describe("linhaBpaI", () => {
 });
 
 describe("header e arquivo", () => {
-  it("header tem 126 chars (v04.11) e começa com 01#BPA#", () => {
+  it("header tem 126 chars e começa com 01#BPA#", () => {
     const h = header(cfg(), "202606", 1, 1, 1234);
     expect(h.length).toBe(126);
     expect(h.slice(0, 7)).toBe("01#BPA#");
     expect(h.slice(7, 13)).toBe("202606");
     expect(h.slice(13, 19)).toBe("000002"); // nº linhas = dados(1) + header(1)
     expect(h.slice(119, 120)).toBe("E"); // destino M/E
-    expect(h.slice(120, 126)).toBe("D04.11"); // versão (6)
+    expect(h.slice(120, 126)).toBe("D04.14"); // versão default atual (muda ~mês a mês)
   });
   it("campo de controle no intervalo [1111..2221]", () => {
     const c = campoControle(dados().seqs);

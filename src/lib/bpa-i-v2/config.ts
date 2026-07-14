@@ -11,7 +11,7 @@ export interface ConfigOrgao {
   cgcCpf: string; // CNPJ/CPF do prestador (14 dígitos)
   orgaoDestinoNome: string; // nome do órgão destino (40)
   destinoTipo: "M" | "E"; // Municipal / Estadual (indicador destino, 1 char no header)
-  versao: string; // versão do layout (6 no header) — v04.11 observada = "D04.11"
+  versao: string; // versão do layout (6 no header). MUDA ~mês a mês (mar=D04.11, jun=D04.14)
 }
 
 const KEY = "bpa-i-v2-config";
@@ -22,7 +22,7 @@ export const configVazia = (): ConfigOrgao => ({
   cgcCpf: "",
   orgaoDestinoNome: "",
   destinoTipo: "M",
-  versao: "D04.11",
+  versao: "D04.14",
 });
 
 export function loadConfig(): ConfigOrgao {
@@ -71,7 +71,7 @@ export async function sincronizarConfigDaOrg(): Promise<ConfigOrgao | null> {
       cgcCpf: r.cab_cgc_cpf ?? "",
       orgaoDestinoNome: r.cab_orgao_destino ?? "",
       destinoTipo: r.cab_destino_tipo === "E" ? "E" : "M",
-      versao: r.cab_versao || "D04.11",
+      versao: r.cab_versao || "D04.14",
     };
     if (configCompleta(cfg)) saveConfig(cfg);
     return cfg;
