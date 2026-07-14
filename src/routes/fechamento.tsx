@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Download, CalendarCheck, Loader2 } from "lucide-react";
+import { Download, CalendarCheck, Loader2, Lock } from "lucide-react";
 import { fichasDoMes } from "@/lib/bpa-i-v2/fichas";
 import { gerarArquivoMes, type FechamentoMes } from "@/lib/fechamento-mes";
 import { loadConfig } from "@/lib/bpa-i-v2/config";
 import { baixarTxt } from "@/lib/export-txt";
+import { cnesComPermissao } from "@/lib/permissoes";
 
 export const Route = createFileRoute("/fechamento")({
   head: () => ({ meta: [{ title: "Fechamento do mês — arquivo magnético BPA" }] }),
@@ -22,16 +23,33 @@ function Fechamento() {
   const [cnes, setCnes] = useState("");
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<FechamentoMes | null>(null);
+  // CNES em que o usuário tem permissão de gerar_producao (gate do fechamento).
+  const [cnesPermitidos, setCnesPermitidos] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    cnesComPermissao("gerar_producao").then(setCnesPermitidos);
+  }, []);
+
+  const podeGerar = cnesPermitidos !== null && cnesPermitidos.length > 0;
 
   const gerar = async () => {
     if (!/^[0-9]{6}$/.test(comp)) {
       toast.error("Informe o mês de produção no formato AAAAMM.");
       return;
     }
+    const cnesAlvo = cnes.trim();
+    if (!cnesAlvo) {
+      toast.error("Informe o CNES da unidade cuja produção você vai fechar.");
+      return;
+    }
+    if (!cnesPermitidos?.includes(cnesAlvo)) {
+      toast.error("Você não tem permissão para gerar a produção deste CNES.");
+      return;
+    }
     setLoading(true);
     setRes(null);
     try {
-      const fichas = await fichasDoMes(comp, cnes.trim() || undefined);
+      const fichas = await fichasDoMes(comp, cnesAlvo);
       const r = gerarArquivoMes(fichas, comp, comp.slice(0, 4).split(""), comp.slice(4, 6).split(""), loadConfig());
       setRes(r);
       if (!r.arquivo) toast.warning("Nenhuma produção encontrada para esse mês/CNES.");
@@ -71,11 +89,17 @@ function Fechamento() {
             <input value={comp} onChange={(e) => setComp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="202607" className={input} />
           </label>
           <label className="text-xs font-medium text-foreground">
-            CNES do estabelecimento <span className="text-muted-foreground">(opcional — vazio = todos)</span>
-            <input value={cnes} onChange={(e) => setCnes(e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder="0000000" className={input} />
+            CNES do estabelecimento
+            <input value={cnes} onChange={(e) => setCnes(e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder="0000000" className={input} list="cnes-permitidos" />
+            <datalist id="cnes-permitidos">{(cnesPermitidos ?? []).map((c) => <option key={c} value={c} />)}</datalist>
           </label>
           <div className="sm:col-span-2">
-            <button onClick={gerar} disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+            {cnesPermitidos !== null && !podeGerar && (
+              <p className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <Lock className="size-4 shrink-0" /> Você não tem permissão para fechar produção (gerar .txt) em nenhuma unidade. Fale com o gestor.
+              </p>
+            )}
+            <button onClick={gerar} disabled={loading || !podeGerar} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
               {loading ? <><Loader2 className="size-4 animate-spin" /> Buscando…</> : <>Gerar arquivo do mês</>}
             </button>
           </div>
