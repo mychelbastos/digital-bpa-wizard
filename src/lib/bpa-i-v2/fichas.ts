@@ -130,12 +130,5 @@ export async function carregarFicha(id: string): Promise<unknown | null> {
   }
 }
 
-export async function excluirFicha(id: string): Promise<boolean> {
-  if (!supabase) return false;
-  try {
-    const { error } = await supabase.from("fichas").delete().eq("id", id);
-    return !error;
-  } catch {
-    return false;
-  }
-}
+// Exclusão de ficha foi removida de propósito: produção nunca é apagada (doc de
+// arquitetura, seção 8). Correção pós-export = reabrir produção ou nova versão.

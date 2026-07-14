@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { FolderOpen, Trash2, Pencil, Check, Loader2, FileText } from "lucide-react";
-import { listarFichas, excluirFicha, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { FolderOpen, Pencil, Check, Loader2, FileText } from "lucide-react";
+import { listarFichas, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
 
 export const Route = createFileRoute("/minhas-fichas")({
   head: () => ({ meta: [{ title: "Minhas fichas — BPA" }] }),
@@ -27,9 +27,6 @@ function MinhasFichasPage() {
     listarFichas().then((f) => { setFichas(f); setCarregando(false); });
   }, []);
 
-  const excluir = async (id: string) => {
-    if (await excluirFicha(id)) setFichas((prev) => prev.filter((f) => f.id !== id));
-  };
   const confirmarRenomeio = async (id: string) => {
     const titulo = novoNome.trim();
     if (titulo && (await renomearFicha(id, titulo))) {
@@ -87,7 +84,6 @@ function MinhasFichasPage() {
                         </a>
                         <a href={rotaDoTipo(f.tipo, f.id)} className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"><FileText className="mr-1 inline size-3.5" />Abrir</a>
                         <button aria-label="Renomear" onClick={() => { setEditandoId(f.id); setNovoNome(f.titulo || ""); }} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-4" /></button>
-                        <button aria-label="Excluir" onClick={() => excluir(f.id)} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="size-4" /></button>
                       </>
                     )}
                   </div>

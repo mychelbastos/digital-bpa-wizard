@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FolderOpen, X, Trash2, FilePlus2, Loader2, Pencil, Check } from "lucide-react";
-import { listarFichas, excluirFicha, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { FolderOpen, X, FilePlus2, Loader2, Pencil, Check } from "lucide-react";
+import { listarFichas, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
 
 interface Props {
   open: boolean;
@@ -36,10 +36,6 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
   }, [open, onClose, tipo]);
 
   if (!open) return null;
-
-  const excluir = async (id: string) => {
-    if (await excluirFicha(id)) setFichas((prev) => prev.filter((f) => f.id !== id));
-  };
 
   const iniciarRenomeio = (f: FichaResumo) => {
     setEditandoId(f.id);
@@ -121,9 +117,6 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
                     </button>
                     <button aria-label="Renomear" onClick={() => iniciarRenomeio(f)} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                       <Pencil className="size-4" />
-                    </button>
-                    <button aria-label="Excluir" onClick={() => excluir(f.id)} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
-                      <Trash2 className="size-4" />
                     </button>
                   </>
                 )}
