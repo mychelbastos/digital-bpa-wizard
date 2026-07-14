@@ -112,7 +112,11 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
                 ) : (
                   <>
                     <button onClick={() => { onCarregar(f.id, f.titulo || "Ficha BPA-I"); onClose(); }} className="min-w-0 flex-1 text-left">
-                      <div className="truncate text-sm font-medium text-foreground">{f.titulo || "Ficha BPA-I"}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-foreground">{f.titulo || "Ficha BPA-I"}</span>
+                        {f.substituida && <span className="shrink-0 rounded-full border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">substituída</span>}
+                        {f.congelada && !f.substituida && <span className="shrink-0 rounded-full border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">congelada</span>}
+                      </div>
                       <div className="text-xs text-muted-foreground">{f.competencia ? `Comp. ${f.competencia} · ` : ""}{fmt(f.updated_at)}{f.id === fichaAtualId ? " · atual" : ""}</div>
                     </button>
                     <button aria-label="Renomear" onClick={() => iniciarRenomeio(f)} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">

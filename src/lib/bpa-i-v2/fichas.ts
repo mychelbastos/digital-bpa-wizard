@@ -10,6 +10,10 @@ export interface FichaResumo {
   mes_producao: string | null;
   updated_at: string;
   tipo: "BPA-I" | "BPA-C";
+  // Ciclo de vida (Fase 3): congelada = produção do mês exportada/transmitida; substituída
+  // = existe versão mais nova (retificação).
+  congelada?: boolean;
+  substituida?: boolean;
 }
 
 // Ficha com o `dados` completo — usada no Fechamento do mês e na dashboard p/ reconstruir
@@ -93,12 +97,26 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
   try {
     let req = supabase
       .from("fichas")
-      .select("id, titulo, competencia, mes_producao, updated_at, tipo")
+      .select("id, titulo, competencia, mes_producao, updated_at, tipo, substituida_por, producoes(status)")
       .order("updated_at", { ascending: false })
       .limit(200);
     if (tipo) req = req.eq("tipo", tipo);
     const { data, error } = await req;
-    return error || !data ? [] : (data as FichaResumo[]);
+    if (error || !data) return [];
+    return (data as unknown as Array<Record<string, unknown>>).map((r) => {
+      const prod = Array.isArray(r.producoes) ? r.producoes[0] : r.producoes;
+      const st = (prod as { status?: string } | null | undefined)?.status;
+      return {
+        id: r.id as string,
+        titulo: r.titulo as string,
+        competencia: (r.competencia as string) ?? null,
+        mes_producao: (r.mes_producao as string) ?? null,
+        updated_at: r.updated_at as string,
+        tipo: r.tipo as "BPA-I" | "BPA-C",
+        congelada: st === "exportada" || st === "transmitida",
+        substituida: Boolean(r.substituida_por),
+      };
+    });
   } catch {
     return [];
   }

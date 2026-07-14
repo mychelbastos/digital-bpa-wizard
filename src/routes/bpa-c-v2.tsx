@@ -16,6 +16,8 @@ import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
+import { statusDaFicha, retificarFicha, type FichaStatus } from "@/lib/producoes";
+import { Snowflake, GitBranch } from "lucide-react";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS,
@@ -117,6 +119,15 @@ function BpaCV2() {
   const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
   const [salvandoDireto, setSalvandoDireto] = useState(false);
   const [fichasOpen, setFichasOpen] = useState(false);
+  // Ciclo de vida da ficha (Fase 3).
+  const [ficStatus, setFicStatus] = useState<FichaStatus | null>(null);
+  const [retificando, setRetificando] = useState(false);
+  const congelada = ficStatus?.congelada ?? false;
+  const substituidaPor = ficStatus?.substituida_por ?? null;
+  const refreshStatus = useCallback((id: string | null) => {
+    if (!id) { setFicStatus(null); return; }
+    statusDaFicha(id).then(setFicStatus);
+  }, []);
   // Crivo SIGTAP por linha (procedimento/idade/qtde/CBO) — cada LinhaBpaC reporta seus
   // motivos; aqui agregamos p/ acender o aviso e bloquear a geração.
   const [errosLinha, setErrosLinha] = useState<Record<number, string[]>>({});
@@ -136,6 +147,7 @@ function BpaCV2() {
         fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
         fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
       } catch { /* noop */ }
+      refreshStatus(fichaIdRef.current);
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -270,6 +282,7 @@ function BpaCV2() {
     toast.success(idAlvo ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
   const salvarClique = async () => {
+    if (congelada) { toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar."); return; }
     if (!fichaIdRef.current || !fichaTituloRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
     setSalvandoDireto(true);
     const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current, competencia(), state, metaFicha());
@@ -284,8 +297,20 @@ function BpaCV2() {
     if (!dados) return;
     setState({ ...initialState(), ...(dados as Partial<State>) });
     persistFicha(id, titulo ?? "Ficha BPA-C");
+    refreshStatus(id);
   };
-  const novaFicha = () => { setState(initialState()); limparFichaPersistida(); };
+  const novaFicha = () => { setState(initialState()); limparFichaPersistida(); setFicStatus(null); };
+  const retificar = async () => {
+    if (!fichaIdRef.current) return;
+    setRetificando(true);
+    try {
+      const nova = await retificarFicha(fichaIdRef.current);
+      toast.success("Retificação criada. Abrindo a nova versão para edição.");
+      window.location.href = `/bpa-c-v2?ficha=${nova}`;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao retificar.");
+    } finally { setRetificando(false); }
+  };
 
   // Salva a ficha na nuvem (a produção da dashboard é derivada das fichas salvas). O .txt
   // não sai mais daqui — é gerado só no Fechamento do mês, com toda a produção junta.
@@ -346,9 +371,9 @@ function BpaCV2() {
               <div className="group relative flex">
                 <button
                   onClick={salvarClique}
-                  disabled={salvandoDireto}
-                  title={fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
-                  className="rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
+                  disabled={salvandoDireto || congelada}
+                  title={congelada ? "Ficha congelada — reabra a produção ou retifique" : fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
+                  className={`rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60${congelada ? " opacity-50" : ""}`}
                 >
                   {salvandoDireto ? "Salvando…" : `💾 Salvar${fichaTituloRef.current ? "" : " ficha"}`}
                 </button>
@@ -419,6 +444,21 @@ function BpaCV2() {
       </header>
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
+        {substituidaPor ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <GitBranch className="size-4 shrink-0" />
+            Esta ficha foi <strong>substituída por uma versão mais nova</strong> (retificação). Permanece só como histórico.
+            <a href={`/bpa-c-v2?ficha=${substituidaPor}`} className="font-semibold text-primary hover:underline">Abrir a versão vigente →</a>
+          </div>
+        ) : congelada ? (
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+            <Snowflake className="size-4 shrink-0" />
+            <span><strong>Ficha congelada</strong> — a produção deste mês foi fechada. Para corrigir: reabra a produção (em Fechamento) ou emita uma <strong>retificação</strong> (nova versão).</span>
+            <button onClick={retificar} disabled={retificando} className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-400 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-60">
+              <GitBranch className="size-3.5" /> {retificando ? "Retificando…" : "Retificar (nova versão)"}
+            </button>
+          </div>
+        ) : null}
         <div
           ref={sheetRef}
           className={`form-sheet ${printing ? "form-sheet--print" : ""}`}
