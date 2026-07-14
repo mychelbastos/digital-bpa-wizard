@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ShieldCheck, Loader2, Users, Eye, ChevronDown, Building2 } from "lucide-react";
+import { ShieldCheck, Loader2, Users, Eye, ChevronDown, Building2, Plus, X } from "lucide-react";
 import {
   listarVinculosAdmin,
   listarPessoasAdmin,
@@ -10,10 +10,14 @@ import {
   definirPermissao,
   definirPermissaoPessoa,
   trocarCargoPessoa,
+  estabelecimentosOrg,
+  vincularUnidade,
+  desvincularUnidade,
   leiturasRecentes,
   type VinculoAdmin,
   type PessoaAdmin,
   type PermissaoCat,
+  type EstabelecimentoOrg,
   type LeituraLog,
 } from "@/lib/admin";
 
@@ -26,7 +30,8 @@ const LABEL_CARGO: Record<string, string> = {
   digitador: "Digitador",
   operador_remessa: "Operador de remessa",
   coordenador: "Coordenador",
-  admin_org: "Administrador",
+  admin_org: "Administrador de vínculos",
+  administrador_geral: "Administrador geral",
 };
 const nomeCargo = (p: string) => LABEL_CARGO[p] ?? p;
 
@@ -57,6 +62,7 @@ function Admin() {
   const [vinculos, setVinculos] = useState<VinculoAdmin[]>([]);
   const [perms, setPerms] = useState<PermissaoCat[]>([]);
   const [cargoDefaults, setCargoDefaults] = useState<Record<string, string[]>>({});
+  const [estabPorOrg, setEstabPorOrg] = useState<Record<string, EstabelecimentoOrg[]>>({});
   const [leituras, setLeituras] = useState<LeituraLog[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -68,12 +74,16 @@ function Admin() {
       listarPermissoes(),
       listarPapelPermissoes(),
       leiturasRecentes(50),
-    ]).then(([pe, v, p, cd, l]) => {
+    ]).then(async ([pe, v, p, cd, l]) => {
       setPessoas(pe);
       setVinculos(v);
       setPerms(p);
       setCargoDefaults(cd);
       setLeituras(l);
+      // Estabelecimentos por organização (para o seletor "adicionar unidade").
+      const orgs = [...new Set(pe.map((x) => x.organizacao_id))];
+      const listas = await Promise.all(orgs.map((o) => estabelecimentosOrg(o)));
+      setEstabPorOrg(Object.fromEntries(orgs.map((o, i) => [o, listas[i]])));
     });
   }, []);
 
@@ -156,6 +166,42 @@ function Admin() {
     }
   };
 
+  const vincular = async (pessoa: PessoaAdmin, cnes: string, papel: string) => {
+    const chave = `${pessoa.user_id}:vinc`;
+    setSalvando(chave);
+    try {
+      await vincularUnidade(pessoa.user_id, pessoa.organizacao_id, cnes, papel);
+      await recarregar();
+      toast.success(`Vinculado ao CNES ${cnes}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao vincular unidade.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const desvincular = async (pessoa: PessoaAdmin, cnes: string) => {
+    if (
+      !window.confirm(
+        `Desvincular ${pessoa.email} do CNES ${cnes}? ` +
+          "O acesso é encerrado agora; o histórico do vínculo é preservado.",
+      )
+    )
+      return;
+    const chave = `${pessoa.user_id}:${cnes}:desvinc`;
+    setSalvando(chave);
+    try {
+      await desvincularUnidade(pessoa.user_id, pessoa.organizacao_id, cnes);
+      await recarregar();
+      toast.success(`Desvinculado do CNES ${cnes}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao desvincular unidade.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const hojeISO = new Date().toISOString().slice(0, 10);
   const semAcesso = !carregando && pessoas.length === 0;
 
   return (
@@ -203,13 +249,18 @@ function Admin() {
                     cargos={Object.keys(cargoDefaults).sort()}
                     vinculos={vinculos.filter(
                       (v) =>
-                        v.user_id === pessoa.user_id && v.organizacao_id === pessoa.organizacao_id,
+                        v.user_id === pessoa.user_id &&
+                        v.organizacao_id === pessoa.organizacao_id &&
+                        (v.fim === null || v.fim >= hojeISO),
                     )}
+                    estabelecimentos={estabPorOrg[pessoa.organizacao_id] ?? []}
                     cargoDefaults={cargoDefaults}
                     salvando={salvando}
                     onTogglePessoa={togglePessoa}
                     onTrocarCargo={trocarCargo}
                     onToggleVinculo={toggleVinculo}
+                    onVincular={vincular}
+                    onDesvincular={desvincular}
                   />
                 ))}
               </div>
@@ -300,11 +351,14 @@ function PessoaCard({
   defaults,
   cargos,
   vinculos,
+  estabelecimentos,
   cargoDefaults,
   salvando,
   onTogglePessoa,
   onTrocarCargo,
   onToggleVinculo,
+  onVincular,
+  onDesvincular,
 }: {
   pessoa: PessoaAdmin;
   permsOrg: PermissaoCat[];
@@ -312,14 +366,29 @@ function PessoaCard({
   defaults: Set<string>;
   cargos: string[];
   vinculos: VinculoAdmin[];
+  estabelecimentos: EstabelecimentoOrg[];
   cargoDefaults: Record<string, string[]>;
   salvando: string | null;
   onTogglePessoa: (p: PessoaAdmin, perm: PermissaoCat, est: EstadoPerm) => void;
   onTrocarCargo: (p: PessoaAdmin, papel: string) => void;
   onToggleVinculo: (v: VinculoAdmin, perm: PermissaoCat) => void;
+  onVincular: (p: PessoaAdmin, cnes: string, papel: string) => void;
+  onDesvincular: (p: PessoaAdmin, cnes: string) => void;
 }) {
   const [abrirUnidades, setAbrirUnidades] = useState(false);
+  const [addAberto, setAddAberto] = useState(false);
+  const [novoCnes, setNovoCnes] = useState("");
+  const [novoPapel, setNovoPapel] = useState("");
   const cargoAtual = pessoa.papeis.length === 1 ? pessoa.papeis[0] : "";
+  const cnesDisponiveis = estabelecimentos.filter((e) => !pessoa.cnes.includes(e.cnes));
+
+  const confirmarAdd = () => {
+    if (!novoCnes || !novoPapel) return;
+    onVincular(pessoa, novoCnes, novoPapel);
+    setAddAberto(false);
+    setNovoCnes("");
+    setNovoPapel("");
+  };
 
   return (
     <div className="rounded-xl border border-border p-4">
@@ -353,15 +422,85 @@ function PessoaCard({
         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
           <Building2 className="size-3" /> Unidades ({pessoa.cnes.length}):
         </span>
+        {pessoa.cnes.length === 0 && (
+          <span className="text-[11px] text-muted-foreground">nenhuma unidade ativa</span>
+        )}
         {pessoa.cnes.map((c) => (
           <span
             key={c}
-            className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 py-0.5 pl-1.5 pr-1 font-mono text-[11px] text-foreground"
           >
             {c}
+            <button
+              onClick={() => onDesvincular(pessoa, c)}
+              disabled={salvando === `${pessoa.user_id}:${c}:desvinc`}
+              title="Desvincular esta unidade"
+              className="rounded-sm p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+            >
+              <X className="size-3" />
+            </button>
           </span>
         ))}
+        {!addAberto && cnesDisponiveis.length > 0 && (
+          <button
+            onClick={() => {
+              setAddAberto(true);
+              setNovoPapel(cargoAtual || "");
+            }}
+            className="inline-flex items-center gap-0.5 rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Plus className="size-3" /> Adicionar unidade
+          </button>
+        )}
       </div>
+
+      {addAberto && (
+        <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-2">
+          <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+            Unidade (CNES)
+            <select
+              value={novoCnes}
+              onChange={(e) => setNovoCnes(e.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+            >
+              <option value="">Selecione…</option>
+              {cnesDisponiveis.map((e) => (
+                <option key={e.cnes} value={e.cnes}>
+                  {e.cnes} — {e.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+            Cargo na unidade
+            <select
+              value={novoPapel}
+              onChange={(e) => setNovoPapel(e.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+            >
+              <option value="">Selecione…</option>
+              {cargos.map((c) => (
+                <option key={c} value={c}>
+                  {nomeCargo(c)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={confirmarAdd}
+            disabled={!novoCnes || !novoPapel || salvando === `${pessoa.user_id}:vinc`}
+            className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+          >
+            Vincular
+          </button>
+          <button
+            onClick={() => setAddAberto(false)}
+            className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
 
       {permsOrg.length > 0 && (
         <div className="mt-3">

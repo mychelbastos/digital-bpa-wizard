@@ -143,6 +143,54 @@ export async function definirPermissao(
   if (error) throw new Error(error.message);
 }
 
+export interface EstabelecimentoOrg {
+  cnes: string;
+  nome: string;
+}
+
+// Estabelecimentos (CNES) da organização — para o seletor "adicionar unidade".
+export async function estabelecimentosOrg(orgId: string): Promise<EstabelecimentoOrg[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.rpc("admin_estabelecimentos_org", { _org: orgId });
+    return error || !data ? [] : (data as EstabelecimentoOrg[]);
+  } catch {
+    return [];
+  }
+}
+
+// Cria um vínculo vigente da pessoa com o CNES no papel dado.
+export async function vincularUnidade(
+  userId: string,
+  orgId: string,
+  cnes: string,
+  papel: string,
+): Promise<void> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { error } = await supabase.rpc("admin_vincular_unidade", {
+    _user_id: userId,
+    _org: orgId,
+    _cnes: cnes,
+    _papel: papel,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// Encerra a vigência dos vínculos ativos da pessoa nesse CNES (acesso cai na hora; histórico fica).
+export async function desvincularUnidade(
+  userId: string,
+  orgId: string,
+  cnes: string,
+): Promise<void> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { error } = await supabase.rpc("admin_desvincular_unidade", {
+    _user_id: userId,
+    _org: orgId,
+    _cnes: cnes,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function leiturasRecentes(limite = 100): Promise<LeituraLog[]> {
   if (!supabase) return [];
   try {
