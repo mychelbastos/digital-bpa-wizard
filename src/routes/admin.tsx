@@ -1,13 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ShieldCheck, Loader2, Users, Eye } from "lucide-react";
+import { ShieldCheck, Loader2, Users, Eye, ChevronDown, Building2 } from "lucide-react";
 import {
   listarVinculosAdmin,
+  listarPessoasAdmin,
   listarPermissoes,
+  listarPapelPermissoes,
   definirPermissao,
+  definirPermissaoPessoa,
+  trocarCargoPessoa,
   leiturasRecentes,
   type VinculoAdmin,
+  type PessoaAdmin,
   type PermissaoCat,
   type LeituraLog,
 } from "@/lib/admin";
@@ -17,39 +22,76 @@ export const Route = createFileRoute("/admin")({
   component: Admin,
 });
 
+const LABEL_CARGO: Record<string, string> = {
+  digitador: "Digitador",
+  operador_remessa: "Operador de remessa",
+  coordenador: "Coordenador",
+  admin_org: "Administrador",
+};
+const nomeCargo = (p: string) => LABEL_CARGO[p] ?? p;
+
+// Estado de uma permissão numa pessoa, derivado de quantos vínculos a têm vs. o total.
+type EstadoPerm = {
+  ativa: boolean; // todos os vínculos têm
+  parcial: boolean; // alguns têm
+  padrao: boolean; // faz parte do pacote do cargo
+  override: boolean; // difere do padrão do cargo (ou é parcial)
+};
+
+function estadoPermissao(
+  codigo: string,
+  perms: Record<string, number>,
+  total: number,
+  defaults: Set<string>,
+): EstadoPerm {
+  const c = perms[codigo] ?? 0;
+  const ativa = total > 0 && c >= total;
+  const parcial = c > 0 && c < total;
+  const padrao = defaults.has(codigo);
+  const override = parcial || ativa !== padrao;
+  return { ativa, parcial, padrao, override };
+}
+
 function Admin() {
+  const [pessoas, setPessoas] = useState<PessoaAdmin[]>([]);
   const [vinculos, setVinculos] = useState<VinculoAdmin[]>([]);
   const [perms, setPerms] = useState<PermissaoCat[]>([]);
+  const [cargoDefaults, setCargoDefaults] = useState<Record<string, string[]>>({});
   const [leituras, setLeituras] = useState<LeituraLog[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
 
   const recarregar = useCallback(() => {
-    return Promise.all([listarVinculosAdmin(), listarPermissoes(), leiturasRecentes(50)]).then(
-      ([v, p, l]) => {
-        setVinculos(v);
-        setPerms(p);
-        setLeituras(l);
-      },
-    );
+    return Promise.all([
+      listarPessoasAdmin(),
+      listarVinculosAdmin(),
+      listarPermissoes(),
+      listarPapelPermissoes(),
+      leiturasRecentes(50),
+    ]).then(([pe, v, p, cd, l]) => {
+      setPessoas(pe);
+      setVinculos(v);
+      setPerms(p);
+      setCargoDefaults(cd);
+      setLeituras(l);
+    });
   }, []);
 
   useEffect(() => {
     recarregar().finally(() => setCarregando(false));
   }, [recarregar]);
 
-  const toggle = async (v: VinculoAdmin, codigo: string, ativo: boolean) => {
-    const chave = `${v.vinculo_id}:${codigo}`;
-    setSalvando(chave);
-    try {
-      await definirPermissao(v.vinculo_id, codigo, !ativo);
-      await recarregar();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao alterar permissão.");
-    } finally {
-      setSalvando(null);
-    }
-  };
+  const permsOrg = useMemo(() => perms.filter((p) => p.escopo === "organizacao"), [perms]);
+  const permsCnes = useMemo(() => perms.filter((p) => p.escopo === "cnes"), [perms]);
+
+  const defaultsDaPessoa = useCallback(
+    (pessoa: PessoaAdmin) => {
+      const s = new Set<string>();
+      for (const papel of pessoa.papeis) for (const c of cargoDefaults[papel] ?? []) s.add(c);
+      return s;
+    },
+    [cargoDefaults],
+  );
 
   const fmt = (iso: string) => {
     try {
@@ -59,7 +101,62 @@ function Admin() {
     }
   };
 
-  const semAcesso = !carregando && vinculos.length === 0;
+  // Toggle no nível da PESSOA: aplica a todos os vínculos. Se já é override, reseta ao padrão.
+  const togglePessoa = async (pessoa: PessoaAdmin, p: PermissaoCat, est: EstadoPerm) => {
+    const chave = `${pessoa.user_id}:${p.codigo}`;
+    setSalvando(chave);
+    try {
+      const alvo: boolean | null = est.override ? null : !est.padrao;
+      await definirPermissaoPessoa(pessoa.user_id, pessoa.organizacao_id, p.codigo, alvo);
+      await recarregar();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao alterar permissão.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const trocarCargo = async (pessoa: PessoaAdmin, papel: string) => {
+    if (papel === (pessoa.papeis.length === 1 ? pessoa.papeis[0] : "")) return;
+    if (
+      !window.confirm(
+        `Trocar o cargo de ${pessoa.email} para "${nomeCargo(papel)}"? ` +
+          "As permissões voltam ao pacote do cargo (ajustes por unidade são descartados).",
+      )
+    )
+      return;
+    const chave = `${pessoa.user_id}:cargo`;
+    setSalvando(chave);
+    try {
+      await trocarCargoPessoa(pessoa.user_id, pessoa.organizacao_id, papel);
+      await recarregar();
+      toast.success(`Cargo alterado para ${nomeCargo(papel)}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao trocar cargo.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  // Override por UNIDADE (um vínculo). Mesma lógica de ciclo contra o padrão do cargo do vínculo.
+  const toggleVinculo = async (v: VinculoAdmin, p: PermissaoCat) => {
+    const padrao = (cargoDefaults[v.papel] ?? []).includes(p.codigo);
+    const ativa = v.permissoes.includes(p.codigo);
+    const override = ativa !== padrao;
+    const chave = `${v.vinculo_id}:${p.codigo}`;
+    setSalvando(chave);
+    try {
+      const alvo: boolean | null = override ? null : !padrao;
+      await definirPermissao(v.vinculo_id, p.codigo, alvo);
+      await recarregar();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao alterar permissão.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const semAcesso = !carregando && pessoas.length === 0;
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
@@ -87,50 +184,33 @@ function Admin() {
           <>
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Users className="size-4" /> Vínculos ({vinculos.length})
+                <Users className="size-4" /> Pessoas ({pessoas.length})
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Clique numa permissão para conceder/revogar (override sobre o papel). O papel é só
-                um pacote-padrão; a autorização real é a lista de permissões efetivas.
+                Uma pessoa por cartão. O <strong>cargo</strong> traz o pacote-padrão de permissões;
+                ajustes ficam marcados como <span className="text-amber-700">≠ padrão</span>. As
+                permissões de unidade valem para todas as unidades da pessoa (personalize por
+                unidade no rodapé de cada cartão).
               </p>
-              <div className="mt-4 space-y-3">
-                {vinculos.map((v) => (
-                  <div key={v.vinculo_id} className="rounded-xl border border-border p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-foreground">
-                          {v.email}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {v.org_nome} · CNES {v.cnes} · papel{" "}
-                          <span className="font-medium">{v.papel}</span>
-                          {v.fim ? ` · até ${v.fim}` : ""}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {perms.map((p) => {
-                        const ativo = v.permissoes.includes(p.codigo);
-                        const chave = `${v.vinculo_id}:${p.codigo}`;
-                        return (
-                          <button
-                            key={p.codigo}
-                            onClick={() => toggle(v, p.codigo, ativo)}
-                            disabled={salvando === chave}
-                            title={p.descricao}
-                            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                              ativo
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                                : "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100"
-                            } disabled:opacity-50`}
-                          >
-                            {salvando === chave ? "…" : ativo ? "✓ " : "+ "}
-                            {p.codigo}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+              <div className="mt-4 space-y-4">
+                {pessoas.map((pessoa) => (
+                  <PessoaCard
+                    key={`${pessoa.user_id}:${pessoa.organizacao_id}`}
+                    pessoa={pessoa}
+                    permsOrg={permsOrg}
+                    permsCnes={permsCnes}
+                    defaults={defaultsDaPessoa(pessoa)}
+                    cargos={Object.keys(cargoDefaults).sort()}
+                    vinculos={vinculos.filter(
+                      (v) =>
+                        v.user_id === pessoa.user_id && v.organizacao_id === pessoa.organizacao_id,
+                    )}
+                    cargoDefaults={cargoDefaults}
+                    salvando={salvando}
+                    onTogglePessoa={togglePessoa}
+                    onTrocarCargo={trocarCargo}
+                    onToggleVinculo={toggleVinculo}
+                  />
                 ))}
               </div>
             </section>
@@ -175,6 +255,205 @@ function Admin() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function PermPill({
+  label,
+  title,
+  est,
+  loading,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  est: EstadoPerm;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  const base =
+    "relative rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50";
+  let cls: string;
+  if (est.parcial) cls = "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100";
+  else if (est.ativa)
+    cls = "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
+  else cls = "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100";
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      title={`${title}${est.override ? " · diferente do padrão do cargo" : ""}`}
+      className={`${base} ${cls} ${est.override ? "ring-2 ring-amber-300/70" : ""}`}
+    >
+      {loading ? "…" : est.parcial ? "◐ " : est.ativa ? "✓ " : "+ "}
+      {label}
+      {est.override && !loading ? <span className="ml-1 text-amber-600">≠</span> : null}
+    </button>
+  );
+}
+
+function PessoaCard({
+  pessoa,
+  permsOrg,
+  permsCnes,
+  defaults,
+  cargos,
+  vinculos,
+  cargoDefaults,
+  salvando,
+  onTogglePessoa,
+  onTrocarCargo,
+  onToggleVinculo,
+}: {
+  pessoa: PessoaAdmin;
+  permsOrg: PermissaoCat[];
+  permsCnes: PermissaoCat[];
+  defaults: Set<string>;
+  cargos: string[];
+  vinculos: VinculoAdmin[];
+  cargoDefaults: Record<string, string[]>;
+  salvando: string | null;
+  onTogglePessoa: (p: PessoaAdmin, perm: PermissaoCat, est: EstadoPerm) => void;
+  onTrocarCargo: (p: PessoaAdmin, papel: string) => void;
+  onToggleVinculo: (v: VinculoAdmin, perm: PermissaoCat) => void;
+}) {
+  const [abrirUnidades, setAbrirUnidades] = useState(false);
+  const cargoAtual = pessoa.papeis.length === 1 ? pessoa.papeis[0] : "";
+
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-foreground">{pessoa.email}</div>
+          <div className="text-xs text-muted-foreground">{pessoa.org_nome}</div>
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Cargo
+          <div className="relative">
+            <select
+              value={cargoAtual}
+              onChange={(e) => onTrocarCargo(pessoa, e.target.value)}
+              disabled={salvando === `${pessoa.user_id}:cargo`}
+              className="appearance-none rounded-md border border-border bg-background py-1 pl-2.5 pr-7 text-xs font-medium text-foreground disabled:opacity-50"
+            >
+              {cargoAtual === "" && <option value="">— vários —</option>}
+              {cargos.map((c) => (
+                <option key={c} value={c}>
+                  {nomeCargo(c)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          </div>
+        </label>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+          <Building2 className="size-3" /> Unidades ({pessoa.cnes.length}):
+        </span>
+        {pessoa.cnes.map((c) => (
+          <span
+            key={c}
+            className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+          >
+            {c}
+          </span>
+        ))}
+      </div>
+
+      {permsOrg.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[11px] font-medium text-muted-foreground">
+            Permissão da organização
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {permsOrg.map((p) => {
+              const est = estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults);
+              return (
+                <PermPill
+                  key={p.codigo}
+                  label={p.codigo}
+                  title={p.descricao}
+                  est={est}
+                  loading={salvando === `${pessoa.user_id}:${p.codigo}`}
+                  onClick={() => onTogglePessoa(pessoa, p, est)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3">
+        <div className="text-[11px] font-medium text-muted-foreground">
+          Permissões de unidade (valem para todas)
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {permsCnes.map((p) => {
+            const est = estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults);
+            return (
+              <PermPill
+                key={p.codigo}
+                label={p.codigo}
+                title={p.descricao}
+                est={est}
+                loading={salvando === `${pessoa.user_id}:${p.codigo}`}
+                onClick={() => onTogglePessoa(pessoa, p, est)}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {vinculos.length > 1 && (
+        <div className="mt-3 border-t border-border pt-2">
+          <button
+            onClick={() => setAbrirUnidades((v) => !v)}
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronDown
+              className={`size-3.5 transition-transform ${abrirUnidades ? "rotate-180" : ""}`}
+            />
+            Personalizar por unidade
+          </button>
+          {abrirUnidades && (
+            <div className="mt-2 space-y-2">
+              {vinculos.map((v) => (
+                <div key={v.vinculo_id} className="rounded-lg border border-border/70 p-2">
+                  <div className="text-[11px] text-muted-foreground">
+                    CNES <span className="font-mono text-foreground">{v.cnes}</span> · cargo{" "}
+                    {nomeCargo(v.papel)}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {permsCnes.map((p) => {
+                      const padrao = (cargoDefaults[v.papel] ?? []).includes(p.codigo);
+                      const ativa = v.permissoes.includes(p.codigo);
+                      const est: EstadoPerm = {
+                        ativa,
+                        parcial: false,
+                        padrao,
+                        override: ativa !== padrao,
+                      };
+                      return (
+                        <PermPill
+                          key={p.codigo}
+                          label={p.codigo}
+                          title={p.descricao}
+                          est={est}
+                          loading={salvando === `${v.vinculo_id}:${p.codigo}`}
+                          onClick={() => onToggleVinculo(v, p)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

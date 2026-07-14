@@ -1,7 +1,18 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
-import { Home, FileText, FolderOpen, CalendarCheck, UserCog, LogOut, ChevronDown, Files } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Home,
+  FileText,
+  FolderOpen,
+  CalendarCheck,
+  UserCog,
+  LogOut,
+  ChevronDown,
+  Files,
+  ShieldCheck,
+} from "lucide-react";
 import { signOut } from "@/lib/bpa-i-v2/auth";
+import { cnesComPermissao } from "@/lib/permissoes";
 
 const formularios = [
   { to: "/bpa-i-v3", label: "BPA-I" },
@@ -15,7 +26,16 @@ const linkCls = (active: boolean) =>
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [formOpen, setFormOpen] = useState(true);
+  const [podeAdmin, setPodeAdmin] = useState(false);
   const formActive = formularios.some((f) => pathname.startsWith(f.to));
+
+  useEffect(() => {
+    let vivo = true;
+    cnesComPermissao("gerenciar_vinculos").then((cnes) => vivo && setPodeAdmin(cnes.length > 0));
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   return (
     <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-background md:flex">
@@ -31,8 +51,12 @@ export function AppSidebar() {
           onClick={() => setFormOpen((o) => !o)}
           className={`${linkCls(formActive && !formOpen)} w-full justify-between`}
         >
-          <span className="flex items-center gap-2"><Files className="size-4 shrink-0" /> Formulários</span>
-          <ChevronDown className={`size-4 shrink-0 transition-transform ${formOpen ? "" : "-rotate-90"}`} />
+          <span className="flex items-center gap-2">
+            <Files className="size-4 shrink-0" /> Formulários
+          </span>
+          <ChevronDown
+            className={`size-4 shrink-0 transition-transform ${formOpen ? "" : "-rotate-90"}`}
+          />
         </button>
         {formOpen && (
           <div className="ml-3 space-y-1 border-l border-border pl-2">
@@ -53,6 +77,11 @@ export function AppSidebar() {
         <Link to="/perfil" className={linkCls(pathname.startsWith("/perfil"))}>
           <UserCog className="size-4 shrink-0" /> Perfil
         </Link>
+        {podeAdmin && (
+          <Link to="/admin" className={linkCls(pathname.startsWith("/admin"))}>
+            <ShieldCheck className="size-4 shrink-0" /> Administração
+          </Link>
+        )}
       </nav>
       <button
         type="button"
