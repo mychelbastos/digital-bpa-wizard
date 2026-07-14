@@ -13,6 +13,7 @@ import {
   estabelecimentosOrg,
   vincularUnidade,
   desvincularUnidade,
+  criarConta,
   leiturasRecentes,
   type VinculoAdmin,
   type PessoaAdmin,
@@ -201,6 +202,28 @@ function Admin() {
     }
   };
 
+  const criarContaNova = async (email: string, senha: string, cnes: string, papel: string) => {
+    setSalvando("criar-conta");
+    try {
+      await criarConta(email, senha, cnes, papel);
+      await recarregar();
+      toast.success(`Conta ${email} criada e vinculada ao CNES ${cnes}.`);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao criar conta.");
+      return false;
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  // Organizações que o admin gerencia (derivadas das pessoas listadas), com nome.
+  const orgs = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of pessoas) m.set(p.organizacao_id, p.org_nome);
+    return [...m].map(([id, nome]) => ({ id, nome }));
+  }, [pessoas]);
+
   const hojeISO = new Date().toISOString().slice(0, 10);
   const semAcesso = !carregando && pessoas.length === 0;
 
@@ -229,9 +252,18 @@ function Admin() {
         ) : (
           <>
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Users className="size-4" /> Pessoas ({pessoas.length})
-              </h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Users className="size-4" /> Pessoas ({pessoas.length})
+                </h2>
+                <CriarContaForm
+                  orgs={orgs}
+                  cargos={Object.keys(cargoDefaults).sort()}
+                  estabPorOrg={estabPorOrg}
+                  criando={salvando === "criar-conta"}
+                  onCriar={criarContaNova}
+                />
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 Uma pessoa por cartão. O <strong>cargo</strong> traz o pacote-padrão de permissões;
                 ajustes ficam marcados como <span className="text-amber-700">≠ padrão</span>. As
@@ -341,6 +373,155 @@ function PermPill({
       {label}
       {est.override && !loading ? <span className="ml-1 text-amber-600">≠</span> : null}
     </button>
+  );
+}
+
+function CriarContaForm({
+  orgs,
+  cargos,
+  estabPorOrg,
+  criando,
+  onCriar,
+}: {
+  orgs: { id: string; nome: string }[];
+  cargos: string[];
+  estabPorOrg: Record<string, EstabelecimentoOrg[]>;
+  criando: boolean;
+  onCriar: (email: string, senha: string, cnes: string, papel: string) => Promise<boolean>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [org, setOrg] = useState(orgs.length === 1 ? orgs[0].id : "");
+  const [cnes, setCnes] = useState("");
+  const [papel, setPapel] = useState("");
+
+  const estabs = estabPorOrg[org] ?? [];
+  const senhaCurta = senha.length > 0 && senha.length < 8;
+  const valido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && senha.length >= 8 && cnes && papel;
+
+  const submeter = async () => {
+    if (!valido) return;
+    const ok = await onCriar(email.trim(), senha, cnes, papel);
+    if (ok) {
+      setEmail("");
+      setSenha("");
+      setCnes("");
+      setPapel("");
+      setAberto(false);
+    }
+  };
+
+  if (!aberto) {
+    return (
+      <button
+        onClick={() => {
+          setAberto(true);
+          setOrg(orgs.length === 1 ? orgs[0].id : "");
+        }}
+        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+      >
+        <Plus className="size-3.5" /> Criar conta
+      </button>
+    );
+  }
+
+  return (
+    <div className="w-full rounded-xl border border-border bg-muted/30 p-3">
+      <div className="text-xs font-semibold text-foreground">Criar conta nova</div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        A conta é ativada na hora (sem e-mail de confirmação). A pessoa entra com este e-mail e
+        senha — oriente-a a trocar a senha depois.
+      </p>
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+          E-mail
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="pessoa@exemplo.com"
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+          />
+        </label>
+        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+          Senha inicial (mín. 8)
+          <input
+            type="password"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            autoComplete="new-password"
+            className={`rounded-md border bg-background px-2 py-1 text-xs text-foreground ${senhaCurta ? "border-destructive" : "border-border"}`}
+          />
+        </label>
+        {orgs.length > 1 && (
+          <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+            Organização
+            <select
+              value={org}
+              onChange={(e) => {
+                setOrg(e.target.value);
+                setCnes("");
+              }}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+            >
+              <option value="">Selecione…</option>
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+          Unidade (CNES)
+          <select
+            value={cnes}
+            onChange={(e) => setCnes(e.target.value)}
+            disabled={!org}
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-50"
+          >
+            <option value="">Selecione…</option>
+            {estabs.map((e) => (
+              <option key={e.cnes} value={e.cnes}>
+                {e.cnes} — {e.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
+          Cargo
+          <select
+            value={papel}
+            onChange={(e) => setPapel(e.target.value)}
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+          >
+            <option value="">Selecione…</option>
+            {cargos.map((c) => (
+              <option key={c} value={c}>
+                {nomeCargo(c)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={submeter}
+          disabled={!valido || criando}
+          className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {criando ? <Loader2 className="size-3.5 animate-spin" /> : null} Criar e vincular
+        </button>
+        <button
+          onClick={() => setAberto(false)}
+          className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
   );
 }
 

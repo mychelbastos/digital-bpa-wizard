@@ -148,6 +148,35 @@ export interface EstabelecimentoOrg {
   nome: string;
 }
 
+// Cria uma conta nova pelo painel (sem verificação por e-mail) e já vincula ao CNES no papel
+// dado. Roda numa Edge Function com service-role, gated por 'gerenciar_vinculos' no CNES.
+// Devolve o user_id criado. Traduz o erro JSON da função (não o genérico do supabase-js).
+export async function criarConta(
+  email: string,
+  senha: string,
+  cnes: string,
+  papel: string,
+): Promise<string> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { data, error } = await supabase.functions.invoke("admin-criar-usuario", {
+    body: { email, senha, cnes, papel },
+  });
+  if (error) {
+    let msg = error.message;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      const body = ctx ? await ctx.json() : null;
+      if (body?.erro) msg = body.erro;
+    } catch {
+      /* mantém msg genérica */
+    }
+    throw new Error(msg);
+  }
+  if (data?.erro) throw new Error(data.erro);
+  if (!data?.user_id) throw new Error("Resposta inesperada ao criar conta.");
+  return data.user_id as string;
+}
+
 // Estabelecimentos (CNES) da organização — para o seletor "adicionar unidade".
 export async function estabelecimentosOrg(orgId: string): Promise<EstabelecimentoOrg[]> {
   if (!supabase) return [];
