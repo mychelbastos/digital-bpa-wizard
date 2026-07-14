@@ -43,6 +43,24 @@ export interface ResumoMes {
   linhasBpaC: number;
   fichasBpaI: number;
   fichasBpaC: number;
+  // Chave de unicidade confirmada contra o PA292720.MAR (Fase 5): sem competência havia
+  // 86 colisões BPA-I / 96 BPA-C; COM competência, 0. O DATASUS recusa a importação se
+  // duas linhas colidem em (CNES, prof/CBO, competência, folha, sequência). Como as folhas
+  // são renumeradas em sequência no arquivo, isto deve ser sempre 0 — é uma salvaguarda.
+  chavesDuplicadas: number;
+}
+
+// Chave de unicidade de uma linha do arquivo (Fase 5). "prof" = CNS do profissional no
+// BPA-I; CBO no BPA-C (consolidado, sem profissional nominal).
+export function chaveLinha(
+  tipo: "02" | "03",
+  cnes: string,
+  prof: string,
+  comp: string,
+  folha: number,
+  seq: number,
+): string {
+  return `${tipo}|${cnes}|${prof}|${comp}|${folha}|${seq}`;
 }
 
 export interface FechamentoMes {
@@ -64,6 +82,12 @@ export function gerarArquivoMes(
   const CRLF = "\r\n";
   const linhas: string[] = [];
   const controle: { proc: string; qtde: string }[] = [];
+  const chaves = new Set<string>();
+  let chavesDuplicadas = 0;
+  const registrarChave = (k: string) => {
+    if (chaves.has(k)) chavesDuplicadas++;
+    else chaves.add(k);
+  };
   let folha = 1;
   let linhasBpaC = 0;
   let linhasBpaI = 0;
@@ -81,8 +105,18 @@ export function gerarArquivoMes(
     const mesLinha = st.mes?.length ? st.mes : mesApres;
     for (let i = 0; i < rows.length; i += 20) {
       rows.slice(i, i + 20).forEach((r, j) => {
-        linhas.push(linhaBpaC({ cnes: st.cnes, ano: anoLinha, mes: mesLinha, folhaBase: [], rows: [] }, r, folha, j + 1));
+        linhas.push(
+          linhaBpaC(
+            { cnes: st.cnes, ano: anoLinha, mes: mesLinha, folhaBase: [], rows: [] },
+            r,
+            folha,
+            j + 1,
+          ),
+        );
         controle.push({ proc: dig(r.procedimento), qtde: dig(r.quantidade) });
+        registrarChave(
+          chaveLinha("02", dig(st.cnes), dig(r.cbo), dig(anoLinha) + dig(mesLinha), folha, j + 1),
+        );
         linhasBpaC++;
       });
       folha++;
@@ -108,6 +142,16 @@ export function gerarArquivoMes(
       seqs.slice(i, i + 3).forEach((s, j) => {
         linhas.push(linhaBpaI(dados, s, folha, j + 1));
         controle.push({ proc: dig(s.codProc), qtde: dig(s.qtde) });
+        registrarChave(
+          chaveLinha(
+            "03",
+            dig(st.cnes),
+            dig(st.profCns),
+            dig(st.profAno) + dig(st.profMes),
+            folha,
+            j + 1,
+          ),
+        );
         linhasBpaI++;
       });
       folha++;
@@ -121,11 +165,15 @@ export function gerarArquivoMes(
     linhasBpaC,
     fichasBpaI,
     fichasBpaC,
+    chavesDuplicadas,
   };
   if (linhas.length === 0) return { arquivo: null, resumo };
 
   const nFolhas = folha - 1;
   const head = header(cfg, compApres, linhas.length, nFolhas, campoControleDe(controle));
   const conteudo = [head, ...linhas].join(CRLF) + CRLF;
-  return { arquivo: { conteudo, nome: `PA${compApres}.txt`, linhas: linhas.length, folhas: nFolhas }, resumo };
+  return {
+    arquivo: { conteudo, nome: `PA${compApres}.txt`, linhas: linhas.length, folhas: nFolhas },
+    resumo,
+  };
 }

@@ -218,6 +218,13 @@ function Fechamento() {
                 value={`${res.resumo.linhasBpaI} · ${res.resumo.fichasBpaI} fichas`}
               />
             </div>
+            {res.resumo.chavesDuplicadas > 0 && (
+              <p className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                ⚠️ Consistência: {res.resumo.chavesDuplicadas} linha(s) com chave duplicada (CNES ·
+                profissional/CBO · competência · folha · sequência). O DATASUS recusaria a
+                importação — não feche esta produção e reporte.
+              </p>
+            )}
             {res.arquivo ? (
               <>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -229,7 +236,16 @@ function Fechamento() {
                   </button>
                   <button
                     onClick={() => setConfirmarFechar(true)}
-                    disabled={fechando || prodDoMes?.status === "transmitida"}
+                    disabled={
+                      fechando ||
+                      prodDoMes?.status === "transmitida" ||
+                      res.resumo.chavesDuplicadas > 0
+                    }
+                    title={
+                      res.resumo.chavesDuplicadas > 0
+                        ? "Há chaves duplicadas — corrija antes de fechar"
+                        : undefined
+                    }
                     className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
                     {fechando ? (
