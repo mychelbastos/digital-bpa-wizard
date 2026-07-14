@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { statusDaFicha, retificarFicha, type FichaStatus } from "@/lib/producoes";
+import { Snowflake, GitBranch } from "lucide-react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
@@ -144,6 +146,15 @@ function BpaI() {
   const [salvarComoNovo, setSalvarComoNovo] = useState(false);
   const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
   const [salvandoDireto, setSalvandoDireto] = useState(false);
+  // Ciclo de vida da ficha (Fase 3): congelada (produção fechada) e/ou substituída.
+  const [ficStatus, setFicStatus] = useState<FichaStatus | null>(null);
+  const [retificando, setRetificando] = useState(false);
+  const congelada = ficStatus?.congelada ?? false;
+  const substituidaPor = ficStatus?.substituida_por ?? null;
+  const refreshStatus = useCallback((id: string | null) => {
+    if (!id) { setFicStatus(null); return; }
+    statusDaFicha(id).then(setFicStatus);
+  }, []);
   // Id da ficha no Supabase (persistido p/ continuar atualizando a mesma após reload).
   const fichaIdRef = useRef<string | null>(null);
   // Título da ficha atual (quando já salva/carregada), p/ pré-preencher o "Salvar".
@@ -197,6 +208,7 @@ function BpaI() {
         fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
         fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
       } catch { /* noop */ }
+      refreshStatus(fichaIdRef.current);
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -257,6 +269,10 @@ function BpaI() {
   // Clique direto no botão "Salvar": se a ficha já existe, grava sem pedir nome de
   // novo. Se ainda não foi salva, abre o diálogo (primeira vez precisa de nome).
   const salvarClique = async () => {
+    if (congelada) {
+      toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar.");
+      return;
+    }
     if (temCamposInvalidos) {
       toast.error("Corrija os campos em vermelho antes de salvar a ficha.");
       return;
@@ -302,10 +318,24 @@ function BpaI() {
     merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3), numero: migrarNumero(s.numero) }));
     setState(merged);
     persistFicha(id, titulo ?? "Ficha BPA-I");
+    refreshStatus(id);
   };
   const novaFicha = () => {
     setState(initialState());
     limparFichaPersistida();
+    setFicStatus(null);
+  };
+  // Retificação: cria uma nova versão (produção corrente) e abre-a p/ edição.
+  const retificar = async () => {
+    if (!fichaIdRef.current) return;
+    setRetificando(true);
+    try {
+      const nova = await retificarFicha(fichaIdRef.current);
+      toast.success("Retificação criada. Abrindo a nova versão para edição.");
+      window.location.href = `/bpa-i-v3?ficha=${nova}`;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao retificar.");
+    } finally { setRetificando(false); }
   };
   useEffect(() => {
     if (!hydrated) return;
@@ -529,9 +559,9 @@ function BpaI() {
               <div className="group relative flex">
                 <button
                   onClick={salvarClique}
-                  disabled={salvandoDireto}
-                  title={temCamposInvalidos ? "Corrija os campos em vermelho antes de salvar" : fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
-                  className={`rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60${temCamposInvalidos ? " opacity-50" : ""}`}
+                  disabled={salvandoDireto || congelada}
+                  title={congelada ? "Ficha congelada — reabra a produção ou retifique" : temCamposInvalidos ? "Corrija os campos em vermelho antes de salvar" : fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
+                  className={`rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60${temCamposInvalidos || congelada ? " opacity-50" : ""}`}
                 >
                   {salvandoDireto ? "Salvando…" : `💾 Salvar${fichaTituloRef.current ? "" : " ficha"}`}
                 </button>
@@ -656,6 +686,21 @@ function BpaI() {
       />
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
+        {substituidaPor ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <GitBranch className="size-4 shrink-0" />
+            Esta ficha foi <strong>substituída por uma versão mais nova</strong> (retificação). Ela permanece só como histórico.
+            <a href={`/bpa-i-v3?ficha=${substituidaPor}`} className="font-semibold text-primary hover:underline">Abrir a versão vigente →</a>
+          </div>
+        ) : congelada ? (
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+            <Snowflake className="size-4 shrink-0" />
+            <span><strong>Ficha congelada</strong> — a produção deste mês foi fechada. Para corrigir: reabra a produção (em Fechamento) ou emita uma <strong>retificação</strong> (nova versão).</span>
+            <button onClick={retificar} disabled={retificando} className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-400 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-60">
+              <GitBranch className="size-3.5" /> {retificando ? "Retificando…" : "Retificar (nova versão)"}
+            </button>
+          </div>
+        ) : null}
         <div ref={sheetRef} className={`form-sheet ${printing ? "form-sheet--print" : ""}`} style={{ aspectRatio: "1653 / 2339" }}>
           <img src={bpaiBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
