@@ -105,6 +105,22 @@ export async function salvarOrganizacao(o: {
   if (error) throw new Error(error.message);
 }
 
+// Cadastra/atualiza um estabelecimento (CNES) numa prefeitura. Fallback enquanto não há a
+// base pública do CNES por município. Após cadastrar, o app puxa os profissionais (cache).
+export async function adicionarEstabelecimento(
+  orgId: string,
+  cnes: string,
+  nome: string,
+): Promise<void> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { error } = await supabase.rpc("admin_adicionar_estabelecimento", {
+    _org: orgId,
+    _cnes: cnes,
+    _nome: nome,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function salvarGestao(
   orgId: string,
   gestaoId: string | null,

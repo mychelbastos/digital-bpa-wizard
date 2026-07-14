@@ -49,8 +49,12 @@ export function idadeAnos(dataNasc: string[], dataAtend: string[]): number {
   const n = dig(dataNasc);
   const a = dig(dataAtend);
   if (n.length !== 8 || a.length !== 8) return 0;
-  const ny = +n.slice(4, 8), nm = +n.slice(2, 4), nd = +n.slice(0, 2);
-  const ay = +a.slice(4, 8), am = +a.slice(2, 4), ad = +a.slice(0, 2);
+  const ny = +n.slice(4, 8),
+    nm = +n.slice(2, 4),
+    nd = +n.slice(0, 2);
+  const ay = +a.slice(4, 8),
+    am = +a.slice(2, 4),
+    ad = +a.slice(0, 2);
   let idade = ay - ny;
   if (am < nm || (am === nm && ad < nd)) idade--;
   return idade >= 0 && idade <= 130 ? idade : 0;
@@ -71,7 +75,9 @@ export const seqPreenchida = (s: SeqData) => dig(s.codProc).length > 0;
 
 // Campo de controle do header: 1111 + (Σ(procedimento + quantidade) mod 1111).
 export function campoControle(seqs: SeqData[]): number {
-  return campoControleDe(seqs.filter(seqPreenchida).map((s) => ({ proc: dig(s.codProc), qtde: dig(s.qtde) })));
+  return campoControleDe(
+    seqs.filter(seqPreenchida).map((s) => ({ proc: dig(s.codProc), qtde: dig(s.qtde) })),
+  );
 }
 
 // Versão genérica do campo de controle — soma procedimento+quantidade de QUALQUER
@@ -85,7 +91,9 @@ export function campoControleDe(itens: { proc: string; qtde: string }[]): number
 // Concatena campos garantindo o comprimento total esperado (a formatação por campo
 // já foi feita pelos helpers; aqui só corrigimos tamanho e validamos o total).
 export function montar(campos: [number, string][], total: number): string {
-  const linha = campos.map(([n, v]) => (v.length === n ? v : v.slice(0, n).padEnd(n, " "))).join("");
+  const linha = campos
+    .map(([n, v]) => (v.length === n ? v : v.slice(0, n).padEnd(n, " ")))
+    .join("");
   if (linha.length !== total) throw new Error(`Linha com ${linha.length} chars, esperado ${total}`);
   return linha;
 }
@@ -96,7 +104,9 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
   // o cálculo (anos completos na data de atendimento — a regra que mais acerta). Nunca
   // sobrescreve a captura: erros humanos de idade no papel devem sair fiéis ao papel.
   const idadeCap = dig(s.idade ?? []);
-  const idade = idadeCap.length ? numF(idadeCap, 3) : numF(String(idadeAnos(s.dataNasc, s.dataAtend)), 3);
+  const idade = idadeCap.length
+    ? numF(idadeCap, 3)
+    : numF(String(idadeAnos(s.dataNasc, s.dataAtend)), 3);
   const campos: [number, string][] = [
     [2, "03"],
     [7, numF(d.cnes, 7)],
@@ -136,7 +146,7 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     [10, alfaF(s.complemento, 10)],
     [5, alfaF(s.numero.join(""), 5)],
     [30, alfaF(s.bairro, 30)],
-    [11, ((dig(s.ddd) + dig(s.telefone)) || "").padEnd(11, " ").slice(0, 11)],
+    [11, (dig(s.ddd) + dig(s.telefone) || "").padEnd(11, " ").slice(0, 11)],
     [40, alfaF(s.email, 40)],
     [10, " ".repeat(10)], // INE (não coletado)
     // Cauda do v04.11 (12 chars). HIPÓTESE (a confirmar por import): CPF do paciente (11)
@@ -149,11 +159,31 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
   return montar(campos, 350);
 }
 
-// Header (registro 01) = 126 chars no layout v04.11. Confirmado byte a byte contra
-// PA292720.MAR: a cauda é destino(1) + versão(6) = "MD04.11"; a contagem de linhas
-// INCLUI o próprio header (nLinhas de dados + 1). `nLinhas` recebido = só as linhas de
-// dados; somamos 1 aqui.
-export function header(cfg: ConfigOrgao, comp: string, nLinhas: number, nFolhas: number, controle: number): string {
+// Header (registro 01) = 126 chars no layout v04.11. Offsets 0-indexed CONFIRMADOS byte a
+// byte contra PA292720.MAR (arquivo aceito pelo DATASUS) — soma 126 exata:
+//   tipo           [0:2]     "01"
+//   identificador  [2:7]     "#BPA#"
+//   competência    [7:13]    AAAAMM (ex.: 202603)
+//   qtd linhas     [13:19]   6 díg. — INCLUI o próprio header (linhas de dados + 1)
+//   qtd folhas     [19:25]   6 díg.
+//   campo controle [25:29]   4 díg. — 1111 + (Σ(procedimento+quantidade) mod 1111)
+//   órgão origem   [29:59]   30 chars
+//   sigla          [59:65]   6 chars
+//   CNPJ/CPF       [65:79]   14 chars
+//   órgão destino  [79:119]  40 chars
+//   tipo destino   [119]     1 char  (M/E)
+//   versão         [120:126] 6 chars (v04.11 = "D04.11")
+//
+// ⚠️ ARMADILHA (não "corrigir"): no arquivo real o órgão de destino é a Secretaria do
+// ESTADO da Bahia e o tipo de destino é "M" — parece inconsistente, MAS é exatamente o
+// que o DATASUS aceitou. Não troque para "E" sem um novo arquivo de referência confirmando.
+export function header(
+  cfg: ConfigOrgao,
+  comp: string,
+  nLinhas: number,
+  nFolhas: number,
+  controle: number,
+): string {
   const campos: [number, string][] = [
     [2, "01"],
     [5, "#BPA#"],
@@ -187,9 +217,7 @@ export function gerarArquivoBpa(d: DadosBpa, cfg: ConfigOrgao): ArquivoBpa {
   const controle = campoControle(preenchidas);
 
   const CRLF = "\r\n";
-  const linhas = preenchidas.map((s, i) =>
-    linhaBpaI(d, s, base + Math.floor(i / 3), (i % 3) + 1),
-  );
+  const linhas = preenchidas.map((s, i) => linhaBpaI(d, s, base + Math.floor(i / 3), (i % 3) + 1));
   const nFolhas = Math.max(1, Math.ceil(linhas.length / 3));
   const head = header(cfg, comp, linhas.length, nFolhas, controle);
 

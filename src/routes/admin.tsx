@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { souSuperAdmin } from "@/lib/permissoes";
+import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
 import {
   ShieldCheck,
   Loader2,
@@ -29,6 +30,7 @@ import {
   salvarOrganizacao,
   salvarGestao,
   criarOrganizacao,
+  adicionarEstabelecimento,
   leiturasRecentes,
   type VinculoAdmin,
   type PessoaAdmin,
@@ -105,8 +107,13 @@ function Admin() {
       setCargoDefaults(cd as Record<string, string[]>);
       setOrganizacoes(orgs as OrganizacaoAdmin[]);
       setLeituras(l as LeituraLog[]);
-      // Estabelecimentos por organização (para o seletor "adicionar unidade").
-      const orgIds = [...new Set((pe as PessoaAdmin[]).map((x) => x.organizacao_id))];
+      // Estabelecimentos de TODAS as orgs geridas (inclui prefeituras ainda sem pessoas).
+      const orgIds = [
+        ...new Set([
+          ...(orgs as OrganizacaoAdmin[]).map((o) => o.id),
+          ...(pe as PessoaAdmin[]).map((x) => x.organizacao_id),
+        ]),
+      ];
       const listas = await Promise.all(orgIds.map((o) => estabelecimentosOrg(o)));
       setEstabPorOrg(Object.fromEntries(orgIds.map((o, i) => [o, listas[i]])));
     });
@@ -281,6 +288,23 @@ function Admin() {
     }
   };
 
+  const adicionarCnes = async (org: OrganizacaoAdmin, cnes: string, nome: string) => {
+    setSalvando(`estab:${org.id}`);
+    try {
+      await adicionarEstabelecimento(org.id, cnes, nome);
+      // Puxa os profissionais do CNES (cache) pela integração que já existe.
+      await sincronizarProfissionais(cnes);
+      await recarregar();
+      toast.success(`CNES ${cnes} cadastrado.`);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao cadastrar CNES.");
+      return false;
+    } finally {
+      setSalvando(null);
+    }
+  };
+
   const criarPrefeitura = async (nome: string, ibge: string, uf: string) => {
     setSalvando("criar-prefeitura");
     try {
@@ -353,10 +377,13 @@ function Admin() {
                     <OrgCard
                       key={o.id}
                       org={o}
+                      estabelecimentos={estabPorOrg[o.id] ?? []}
                       salvandoOrg={salvando === `org:${o.id}`}
                       salvandoGestao={salvando === `gestao:${o.id}`}
+                      salvandoCnes={salvando === `estab:${o.id}`}
                       onSalvarOrg={gravarOrganizacao}
                       onSalvarGestao={gravarGestao}
+                      onAddCnes={adicionarCnes}
                     />
                   ))}
                 </div>
@@ -570,21 +597,30 @@ function CriarPrefeituraForm({
 
 function OrgCard({
   org,
+  estabelecimentos,
   salvandoOrg,
   salvandoGestao,
+  salvandoCnes,
   onSalvarOrg,
   onSalvarGestao,
+  onAddCnes,
 }: {
   org: OrganizacaoAdmin;
+  estabelecimentos: EstabelecimentoOrg[];
   salvandoOrg: boolean;
   salvandoGestao: boolean;
+  salvandoCnes: boolean;
   onSalvarOrg: (o: OrganizacaoAdmin) => void;
   onSalvarGestao: (
     o: OrganizacaoAdmin,
     g: { id: string | null; nome: string; inicio: string; fim: string },
   ) => void;
+  onAddCnes: (o: OrganizacaoAdmin, cnes: string, nome: string) => Promise<boolean>;
 }) {
   const [o, setO] = useState<OrganizacaoAdmin>(org);
+  const [addCnesAberto, setAddCnesAberto] = useState(false);
+  const [novoCnes, setNovoCnes] = useState("");
+  const [novoNome, setNovoNome] = useState("");
   const [g, setG] = useState({
     id: org.gestao_id,
     nome: org.gestao_nome ?? "",
@@ -595,6 +631,16 @@ function OrgCard({
     setO((prev) => ({ ...prev, [k]: v }));
   const campo = "rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground";
   const rotulo = "flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground";
+
+  const confirmarAddCnes = async () => {
+    if (!/^[0-9]{7}$/.test(novoCnes)) return;
+    const ok = await onAddCnes(org, novoCnes, novoNome);
+    if (ok) {
+      setNovoCnes("");
+      setNovoNome("");
+      setAddCnesAberto(false);
+    }
+  };
 
   return (
     <div className="rounded-xl border border-border p-4">
@@ -697,6 +743,11 @@ function OrgCard({
           </label>
         </div>
       </div>
+      <p className="mt-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">
+        ⚠️ No arquivo aceito pelo DATASUS, o destino pode ser a Secretaria do{" "}
+        <strong>Estado</strong> com o tipo <strong>“Municipal”</strong> — parece errado, mas é o
+        valor observado. Não altere sem um novo arquivo de referência.
+      </p>
       <div className="mt-2">
         <button
           onClick={() => onSalvarOrg(o)}
@@ -758,6 +809,76 @@ function OrgCard({
             </button>
           )}
         </div>
+      </div>
+
+      <div className="mt-4 border-t border-border pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[11px] font-medium text-muted-foreground">
+            Unidades (CNES) — {estabelecimentos.length}
+          </div>
+          {!addCnesAberto && (
+            <button
+              onClick={() => setAddCnesAberto(true)}
+              className="inline-flex items-center gap-0.5 rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Plus className="size-3" /> Adicionar CNES
+            </button>
+          )}
+        </div>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          Ao cadastrar um CNES, o sistema puxa os profissionais dele pela API do CNES. (A busca
+          automática por município virá da base pública do DATASUS.)
+        </p>
+        {estabelecimentos.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {estabelecimentos.map((e) => (
+              <span
+                key={e.cnes}
+                title={e.nome}
+                className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[11px] text-foreground"
+              >
+                <span className="font-mono">{e.cnes}</span> · {e.nome}
+              </span>
+            ))}
+          </div>
+        )}
+        {addCnesAberto && (
+          <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-2">
+            <label className={rotulo}>
+              CNES (7 dígitos)
+              <input
+                className={`${campo} w-28`}
+                inputMode="numeric"
+                maxLength={7}
+                value={novoCnes}
+                onChange={(e) => setNovoCnes(e.target.value.replace(/\D/g, ""))}
+                placeholder="2510332"
+              />
+            </label>
+            <label className={`${rotulo} flex-1`}>
+              Nome da unidade (opcional)
+              <input
+                className={campo}
+                value={novoNome}
+                onChange={(e) => setNovoNome(e.target.value)}
+                placeholder="Ex.: HOSPITAL REGIONAL"
+              />
+            </label>
+            <button
+              onClick={confirmarAddCnes}
+              disabled={!/^[0-9]{7}$/.test(novoCnes) || salvandoCnes}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+            >
+              {salvandoCnes ? <Loader2 className="size-3.5 animate-spin" /> : null} Cadastrar
+            </button>
+            <button
+              onClick={() => setAddCnesAberto(false)}
+              className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
