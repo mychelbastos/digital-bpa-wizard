@@ -64,6 +64,17 @@ export async function listarProducoes(): Promise<Producao[]> {
   }
 }
 
+// LGPD (Fase 4): registra que o usuário ABRIU uma ficha BPA-I (acesso a PII do paciente).
+// Silenciosa — nunca quebra a tela. O banco ignora BPA-C (sem PII de paciente).
+export async function registrarLeituraFicha(fichaId: string): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.rpc("registrar_leitura_ficha", { _ficha_id: fichaId });
+  } catch {
+    /* auditoria não deve interromper o uso */
+  }
+}
+
 export interface FichaStatus {
   congelada: boolean;
   substituida_por: string | null;

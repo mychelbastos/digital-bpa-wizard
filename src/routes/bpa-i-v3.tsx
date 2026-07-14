@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { statusDaFicha, retificarFicha, type FichaStatus } from "@/lib/producoes";
+import { statusDaFicha, retificarFicha, registrarLeituraFicha, type FichaStatus } from "@/lib/producoes";
 import { Snowflake, GitBranch } from "lucide-react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
@@ -319,6 +319,8 @@ function BpaI() {
     setState(merged);
     persistFicha(id, titulo ?? "Ficha BPA-I");
     refreshStatus(id);
+    // LGPD: abrir uma ficha BPA-I expõe PII do paciente — registra o acesso.
+    registrarLeituraFicha(id);
   };
   const novaFicha = () => {
     setState(initialState());
