@@ -6,7 +6,7 @@ import { exportSheetPdf } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
-import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
+import { sincronizarProfissionais, buscarCbosVinculo, buscarNomePorCns, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAutocomplete";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
@@ -182,6 +182,13 @@ function BpaI() {
   const temCamposInvalidos = motivosInvalidos.length > 0;
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Impressão a partir de "Minhas fichas" (?print=1): carrega, renderiza e gera o PDF
+  // sozinho. autoPrintRef marca o modo; prontoImprimir dispara após a ficha carregar.
+  const autoPrintRef = useRef(false);
+  const [prontoImprimir, setProntoImprimir] = useState(false);
+  // Último CNS já resolvido p/ nome/CBO — evita reconsultar a cada render e não repete o
+  // que o onPick do autocomplete já fez.
+  const cnsResolvidoRef = useRef("");
   const cells = (s: string, n: number) => Array.from({ length: n }, (_, i) => s[i] ?? "");
   // Guarda o CNES que gerou o Nome do Estabelecimento auto-preenchido. Serve p/ a
   // validação cruzada CNES <-> Nome: se o CNES mudar, o nome auto vira inconsistente.
@@ -198,7 +205,9 @@ function BpaI() {
   const competencia = () => state.profAno.join("") + state.profMes.join("");
 
   useEffect(() => {
-    const fichaParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ficha") : null;
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const fichaParam = params?.get("ficha") ?? null;
+    autoPrintRef.current = params?.get("print") === "1";
     if (fichaParam) {
       // Aberta a partir de "Minhas fichas" (?ficha=<id>) — carrega direto do Supabase.
       carregarFichaSalva(fichaParam);
@@ -321,6 +330,8 @@ function BpaI() {
     refreshStatus(id);
     // LGPD: abrir uma ficha BPA-I expõe PII do paciente — registra o acesso.
     registrarLeituraFicha(id);
+    // Aberta só p/ imprimir (?print=1): dispara o PDF depois que a folha renderizar.
+    if (autoPrintRef.current) setProntoImprimir(true);
   };
   const novaFicha = () => {
     setState(initialState());
@@ -368,6 +379,27 @@ function BpaI() {
     sincronizarProfissionais(cnesEstab);
     return () => { cancelled = true; };
   }, [cnesEstab, hydrated]);
+
+  // Sentido CNS -> nome: quando o CNS do profissional fica completo (15 díg. válidos) e ainda
+  // não foi resolvido para este CNES, busca o nome no cache (e, se preciso, no DATASUS) e
+  // preenche — SEM sobrescrever nome digitado à mão. Também traz o CBO do vínculo (mesmo
+  // comportamento do onPick do autocomplete, que resolve o sentido nome -> CNS).
+  useEffect(() => {
+    if (!hydrated) return;
+    const cns = state.profCns.join("");
+    if (cns.length !== 15 || cnsInvalido(cns) || cnesEstab.length !== 7) return;
+    const chave = `${cnesEstab}:${cns}`;
+    if (cnsResolvidoRef.current === chave) return;
+    cnsResolvidoRef.current = chave;
+    buscarNomePorCns(cnesEstab, cns).then((nome) => {
+      if (nome) setState((p) => (p.profNome.trim() ? p : { ...p, profNome: nome }));
+    });
+    buscarCbosVinculo(cns, cnesEstab).then((cbos) => {
+      if (cbos.length === 1) setState((p) => (p.profCbo.some(Boolean) ? p : { ...p, profCbo: cells(cbos[0].codigo, 6) }));
+      else if (cbos.length > 1) setCboOpcoes(cbos);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.profCns, cnesEstab, hydrated]);
 
   // Fonte cursiva (Caveat) para a "assinatura" eletrônica do Responsável — injetada
   // uma vez (mantém isolado no v2, sem mexer no HTML global).
@@ -444,12 +476,27 @@ function BpaI() {
       await document.fonts?.ready; // garante a fonte cursiva carregada antes da captura
       await exportSheetPdf(sheetRef.current, "BPA-I.pdf");
       setPdfPendente(false); // PDF gerado p/ o estado atual
+      // LGPD: gerar o PDF é o dado do paciente saindo pro papel — registra a impressão
+      // no MESMO log da leitura (motivo='impressao'). Só faz sentido p/ ficha já salva.
+      if (fichaIdRef.current) registrarLeituraFicha(fichaIdRef.current, "impressao");
       await registrarExportacao();
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Falha ao gerar PDF. Veja o console.");
     } finally { setPrinting(false); }
   };
+
+  // Auto-impressão (?print=1): quando a ficha terminou de carregar, espera a folha pintar
+  // e a fonte carregar, e gera o PDF. O exportPdf já registra motivo='impressao' no log F4.
+  useEffect(() => {
+    if (!prontoImprimir) return;
+    setProntoImprimir(false);
+    (async () => {
+      await new Promise((r) => setTimeout(r, 350));
+      await exportPdf();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prontoImprimir]);
 
   // Ao exportar, registra no histórico o CBO do profissional e os procedimentos
   // preenchidos em cada sequência (alimenta o autocomplete). Só registra o código do
@@ -737,6 +784,9 @@ function BpaI() {
             nome={state.profNome}
             onChangeNome={(v) => set("profNome", v)}
             onPick={(p) => {
+              // Nome -> CNS: escolher no autocomplete preenche o CNS. Marca como resolvido p/
+              // o efeito CNS->nome não repetir a busca de CBO abaixo.
+              cnsResolvidoRef.current = `${cnesEstab}:${p.cns}`;
               setState((prev) => ({ ...prev, profNome: p.nome, profCns: cells(p.cns, 15) }));
               setCboOpcoes([]);
               // CBO do vínculo NESTE estabelecimento (CNS + CNES).

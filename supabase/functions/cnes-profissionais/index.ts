@@ -1,11 +1,16 @@
 // Edge Function CNES:
-//  - { cnes }        -> lista de profissionais do estabelecimento (Nome/CNS/CPF). SOAP 1.1.
+//  - { cnes }        -> lista de profissionais do estabelecimento (Nome/CNS). SOAP 1.1.
 //  - { cns, cnes }   -> CBO(s) do profissional NAQUELE estabelecimento (vínculo). SOAP 1.2.
 // O CBO depende do vínculo (CNS+CNES): um profissional pode ter CBOs diferentes por
 // estabelecimento e mais de um no mesmo. Fonte: VinculacaoProfissionalService (pareia
 // CBO ao estabelecimento; exige varrer os tipos de vínculo 1..9). Cache nas tabelas
 // `profissionais` (lista) e `profissional_vinculos` (CBO por CNS+CNES).
 // Endpoint/credencial por env vars (homolog agora; produção = trocar as envs).
+//
+// LGPD: a base (mesmo em HOMOLOGAÇÃO) retorna PII real. Por isso: (a) NÃO logamos as
+// respostas da API (nome/CNS) em lugar nenhum além da tabela `profissionais`; (b) NÃO
+// guardamos o CPF do profissional — não é usado em nada. Proveniência: gravamos o
+// `ambiente` (homolog/producao) derivado da URL, p/ revalidar quando virar produção.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SOAP_URL = Deno.env.get("CNES_SOAP_URL")!; // .../ProfissionalSaudeService/v1r0
@@ -14,6 +19,8 @@ const SOAP_PASS = Deno.env.get("CNES_SOAP_PASS")!;
 const TTL_MS = Number(Deno.env.get("CNES_CACHE_TTL_DIAS") ?? "7") * 86_400_000;
 // O serviço de vínculos é outro path no mesmo host.
 const VINC_URL = SOAP_URL.replace("ProfissionalSaudeService", "VinculacaoProfissionalService");
+// Proveniência: derivada da URL (host de homologação do DATASUS = servicoshm).
+const AMBIENTE = SOAP_URL.includes("servicoshm") ? "homolog" : "producao";
 const NONE = "__NONE__"; // sentinela: consultado e sem vínculo
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -39,13 +46,13 @@ const envelopeVinculo = (cns: string, cnes: string, tipo: string) => `<?xml vers
 <env:Header>${wsseHeader("", "env:")}</env:Header>
 <env:Body><vin:RequestVinculacao><fil:FiltroPesquisaVinculacao><fil:IdentificacaoProfissional><fil:cns><cns:numeroCNS>${cns}</cns:numeroCNS></fil:cns></fil:IdentificacaoProfissional><fil:IdentificacaoEstabelecimento><fil:cnes><cod:codigo>${cnes}</cod:codigo></fil:cnes></fil:IdentificacaoEstabelecimento><fil:IdentificacaoVinculacao><fil:tipoVinculacao>${tipo}</fil:tipoVinculacao></fil:IdentificacaoVinculacao></fil:FiltroPesquisaVinculacao></vin:RequestVinculacao></env:Body></env:Envelope>`;
 
+// Só Nome+CNS: o CPF do profissional não é usado em nada e não é guardado (LGPD).
 function parseProfs(xml: string) {
-  const out: { cns: string; nome: string; cpf: string | null }[] = [];
+  const out: { cns: string; nome: string }[] = [];
   for (const b of xml.match(/<[a-zA-Z0-9]+:ProfissionalSaude\b[\s\S]*?<\/[a-zA-Z0-9]+:ProfissionalSaude>/g) ?? []) {
     const nome = b.match(/:Nome[^>]*>([^<]+)<\/[a-zA-Z0-9]+:Nome>/)?.[1]?.trim();
     const cns = b.match(/numeroCNS[^>]*>([^<]+)</)?.[1]?.trim();
-    const cpf = b.match(/numeroCPF[^>]*>([^<]+)</)?.[1]?.trim() ?? null;
-    if (cns && nome) out.push({ cns, nome, cpf });
+    if (cns && nome) out.push({ cns, nome });
   }
   return out;
 }
@@ -98,9 +105,10 @@ Deno.serve(async (req) => {
     // ===== Modo lista (CNES) =====
     const cnes = body.cnes;
     if (!/^[0-9]{7}$/.test(cnes ?? "")) return json({ erro: "CNES inválido (7 dígitos)" }, 400);
+    const forcar = body.forcar === true; // ignora o TTL e reconsulta a API
     const { data: recente } = await supabase.from("profissionais").select("atualizado_em").eq("cnes", cnes).order("atualizado_em", { ascending: false }).limit(1);
     const countCache = async () => (await supabase.from("profissionais").select("*", { count: "exact", head: true }).eq("cnes", cnes)).count ?? 0;
-    if (recente?.[0] && Date.now() - new Date(recente[0].atualizado_em).getTime() < TTL_MS) {
+    if (!forcar && recente?.[0] && Date.now() - new Date(recente[0].atualizado_em).getTime() < TTL_MS) {
       return json({ fonte: "cache", total: await countCache() });
     }
     let xml: string;
@@ -113,7 +121,7 @@ Deno.serve(async (req) => {
     }
     const profs = parseProfs(xml);
     if (profs.length) {
-      const rows = profs.map((p) => ({ cnes, cns: p.cns, nome: p.nome, cpf: p.cpf, atualizado_em: new Date().toISOString() }));
+      const rows = profs.map((p) => ({ cnes, cns: p.cns, nome: p.nome, ambiente: AMBIENTE, atualizado_em: new Date().toISOString() }));
       const { error } = await supabase.from("profissionais").upsert(rows, { onConflict: "cnes,cns" });
       if (error) return json({ erro: `upsert: ${error.message}`, total: profs.length }, 500);
     }

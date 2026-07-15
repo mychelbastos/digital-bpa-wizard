@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { FolderOpen, Pencil, Check, Loader2, FileText } from "lucide-react";
+import { FolderOpen, Pencil, Check, Loader2, FileText, Printer } from "lucide-react";
 import { listarFichas, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
 
 export const Route = createFileRoute("/minhas-fichas")({
@@ -83,6 +83,14 @@ function MinhasFichasPage() {
                           <div className="text-xs text-muted-foreground">Atualizada {new Date(f.updated_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</div>
                         </a>
                         <a href={rotaDoTipo(f.tipo, f.id)} className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"><FileText className="mr-1 inline size-3.5" />Abrir</a>
+                        <a
+                          href={`${rotaDoTipo(f.tipo, f.id)}&print=1`}
+                          target="_blank"
+                          rel="noopener"
+                          aria-label="Imprimir / gerar PDF"
+                          title="Imprimir / gerar PDF (abre em nova aba)"
+                          className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                        ><Printer className="mr-1 inline size-3.5" />Imprimir</a>
                         <button aria-label="Renomear" onClick={() => { setEditandoId(f.id); setNovoNome(f.titulo || ""); }} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-4" /></button>
                       </>
                     )}

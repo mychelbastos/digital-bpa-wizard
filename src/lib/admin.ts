@@ -77,6 +77,23 @@ export async function listarOrganizacoes(): Promise<OrganizacaoAdmin[]> {
   }
 }
 
+export interface DonoSistema {
+  user_id: string;
+  email: string;
+}
+
+// "Donos do sistema" (super-admins): escopo Global, só para auditoria na tela. Não é
+// atribuível — vive na tabela super_admins. Visível a quem já é admin (sou_admin).
+export async function listarDonosSistema(): Promise<DonoSistema[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.rpc("donos_do_sistema");
+    return error || !data ? [] : (data as DonoSistema[]);
+  } catch {
+    return [];
+  }
+}
+
 export async function salvarOrganizacao(o: {
   id: string;
   nome: string;

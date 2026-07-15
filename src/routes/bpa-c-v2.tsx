@@ -107,6 +107,10 @@ function BpaCV2() {
   const [hydrated, setHydrated] = useState(false);
   const [printing, setPrinting] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Impressão a partir de "Minhas fichas" (?print=1): carrega, renderiza e gera o PDF sozinho.
+  // BPA-C é consolidado (sem PII de paciente), então não passa pelo log F4.
+  const autoPrintRef = useRef(false);
+  const [prontoImprimir, setProntoImprimir] = useState(false);
   const fichaIdRef = useRef<string | null>(null);
   const fichaTituloRef = useRef<string | null>(null);
   const FICHA_ID_KEY = "bpa-c-v2-ficha-id";
@@ -138,7 +142,9 @@ function BpaCV2() {
   const temCamposInvalidos = motivosInvalidos.length > 0;
 
   useEffect(() => {
-    const fichaParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ficha") : null;
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const fichaParam = params?.get("ficha") ?? null;
+    autoPrintRef.current = params?.get("print") === "1";
     if (fichaParam) {
       carregarFichaSalva(fichaParam);
     } else {
@@ -298,7 +304,18 @@ function BpaCV2() {
     setState({ ...initialState(), ...(dados as Partial<State>) });
     persistFicha(id, titulo ?? "Ficha BPA-C");
     refreshStatus(id);
+    if (autoPrintRef.current) setProntoImprimir(true);
   };
+  // Auto-impressão (?print=1): quando a ficha carregou, espera a folha pintar e gera o PDF.
+  useEffect(() => {
+    if (!prontoImprimir) return;
+    setProntoImprimir(false);
+    (async () => {
+      await new Promise((r) => setTimeout(r, 350));
+      await exportPdf();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prontoImprimir]);
   const novaFicha = () => { setState(initialState()); limparFichaPersistida(); setFicStatus(null); };
   const retificar = async () => {
     if (!fichaIdRef.current) return;

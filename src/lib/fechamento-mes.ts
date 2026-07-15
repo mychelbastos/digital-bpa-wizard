@@ -1,6 +1,18 @@
 // Fechamento do mês: agrega TODAS as fichas de um mês de APRESENTAÇÃO (+ CNES) num
 // único arquivo magnético combinado — header (01) + linhas BPA-C (02) + linhas BPA-I
-// (03). As folhas são renumeradas em sequência no arquivo. A competência de cada linha
+// (03). As folhas são renumeradas em sequência no arquivo.
+//
+// DECISÃO (folha/seq é DERIVADA de propósito — não capturada): analisando os arquivos reais,
+// a folha/seq NÃO é lida do papel por ninguém — é um ALGORITMO DE EMPACOTAMENTO do BPA
+// Magnético na exportação (uma folha entrelaça vários profissionais; cada profissional tem
+// seu contador de seq rolando até 99; ao estourar, abre folha nova). O digitador nunca vê
+// esse número. O princípio "não derivar o que se captura" vale para o que o HUMANO lê do papel
+// (competência, idade, CID, quantidade) — a folha/seq não é nada disso. Além disso, nosso .txt
+// é IMPORTADO de volta no BPA Magnético, que reempacota tudo — o número que geramos é
+// descartado. Por isso: derivamos, e o round-trip byte-idêntico via /fechamento NÃO é meta; a
+// prova de correção é o harness por-linha (971/971 + 1250/1250, cada CAMPO byte a byte).
+//
+// A competência de cada linha
 // (BPA-C e BPA-I) vem do CABEÇALHO DA FICHA (a competência que o digitador leu da folha
 // física — profMes/profAno no BPA-I, ano/mes no BPA-C), NÃO é derivada da data de
 // atendimento. Isso reproduz faturamento retroativo (atendimento fora do mês da

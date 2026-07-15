@@ -32,12 +32,14 @@ import {
   criarOrganizacao,
   adicionarEstabelecimento,
   leiturasRecentes,
+  listarDonosSistema,
   type VinculoAdmin,
   type PessoaAdmin,
   type PermissaoCat,
   type EstabelecimentoOrg,
   type OrganizacaoAdmin,
   type LeituraLog,
+  type DonoSistema,
 } from "@/lib/admin";
 
 export const Route = createFileRoute("/admin")({
@@ -47,12 +49,48 @@ export const Route = createFileRoute("/admin")({
 
 const LABEL_CARGO: Record<string, string> = {
   digitador: "Digitador",
-  operador_remessa: "Operador de remessa",
   coordenador: "Coordenador",
-  admin_org: "Administrador de vínculos",
-  administrador_geral: "Administrador geral",
+  operador_remessa: "Operador de remessa",
+  secretario_municipal: "Secretário municipal",
 };
 const nomeCargo = (p: string) => LABEL_CARGO[p] ?? p;
+
+// Descrição curta do que o cargo FAZ (o nome diz o que ele É). Ex.: Coordenador "só visualiza".
+const DESC_CARGO: Record<string, string> = {
+  coordenador: "só visualiza",
+};
+
+// Escopo de cada cargo, mostrado como etiqueta na tela. O "Dono do sistema" (super-admin)
+// não é um papel de papel_permissoes — é Global e não atribuível pela tela.
+type Escopo = "cnes" | "organizacao" | "global";
+const ESCOPO_CARGO: Record<string, Escopo> = {
+  digitador: "cnes",
+  coordenador: "cnes",
+  operador_remessa: "cnes",
+  secretario_municipal: "organizacao",
+};
+const LABEL_ESCOPO: Record<Escopo, string> = {
+  cnes: "CNES",
+  organizacao: "Organização",
+  global: "Global",
+};
+const escopoDoCargo = (p: string): Escopo => ESCOPO_CARGO[p] ?? "cnes";
+
+// Rótulos curtos e legíveis das permissões (o código cru vai no tooltip, p/ suporte).
+// Fallback: se surgir uma permissão nova no catálogo sem rótulo aqui, usa a descrição
+// do banco e, na falta dela, o próprio código — nunca fica em branco.
+const LABEL_PERM: Record<string, string> = {
+  criar_ficha: "Criar ficha",
+  editar_ficha_propria: "Editar a própria ficha",
+  conferir_ficha: "Conferir/assinar ficha",
+  ver_fichas_da_unidade: "Ver fichas da unidade",
+  gerar_producao: "Fechar e gerar produção",
+  reabrir_producao: "Reabrir produção",
+  retificar_ficha_exportada: "Retificar ficha exportada",
+  gerenciar_vinculos: "Gerenciar usuários e acessos",
+  ver_fichas_do_municipio: "Ver fichas do município",
+};
+const nomePerm = (p: PermissaoCat) => LABEL_PERM[p.codigo] ?? p.descricao ?? p.codigo;
 
 // Estado de uma permissão numa pessoa, derivado de quantos vínculos a têm vs. o total.
 type EstadoPerm = {
@@ -84,6 +122,7 @@ function Admin() {
   const [estabPorOrg, setEstabPorOrg] = useState<Record<string, EstabelecimentoOrg[]>>({});
   const [organizacoes, setOrganizacoes] = useState<OrganizacaoAdmin[]>([]);
   const [leituras, setLeituras] = useState<LeituraLog[]>([]);
+  const [donos, setDonos] = useState<DonoSistema[]>([]);
   const [superAdmin, setSuperAdmin] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -100,13 +139,15 @@ function Admin() {
       listarPapelPermissoes(),
       listarOrganizacoes(),
       leiturasRecentes(50),
-    ]).then(async ([pe, v, p, cd, orgs, l]) => {
+      listarDonosSistema(),
+    ]).then(async ([pe, v, p, cd, orgs, l, dn]) => {
       setPessoas(pe as PessoaAdmin[]);
       setVinculos(v as VinculoAdmin[]);
       setPerms(p as PermissaoCat[]);
       setCargoDefaults(cd as Record<string, string[]>);
       setOrganizacoes(orgs as OrganizacaoAdmin[]);
       setLeituras(l as LeituraLog[]);
+      setDonos(dn as DonoSistema[]);
       // Estabelecimentos de TODAS as orgs geridas (inclui prefeituras ainda sem pessoas).
       const orgIds = [
         ...new Set([
@@ -409,11 +450,25 @@ function Admin() {
                 permissões de unidade valem para todas as unidades da pessoa (personalize por
                 unidade no rodapé de cada cartão).
               </p>
+              {donos.length > 0 && (
+                <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+                  <span className="font-semibold">Donos do sistema</span>
+                  <span className="ml-1 rounded bg-violet-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-900">
+                    {LABEL_ESCOPO.global}
+                  </span>
+                  <span className="ml-2">{donos.map((d) => d.email).join(", ")}</span>
+                  <span className="ml-1 text-violet-700">
+                    — administram qualquer prefeitura; para ver ficha ainda precisam de vínculo no
+                    CNES. Não atribuível pela tela.
+                  </span>
+                </div>
+              )}
               <div className="mt-4 space-y-4">
                 {pessoas.map((pessoa) => (
                   <PessoaCard
                     key={`${pessoa.user_id}:${pessoa.organizacao_id}`}
                     pessoa={pessoa}
+                    ehDono={donos.some((d) => d.user_id === pessoa.user_id)}
                     permsOrg={permsOrg}
                     permsCnes={permsCnes}
                     defaults={defaultsDaPessoa(pessoa)}
@@ -1038,6 +1093,7 @@ function CriarContaForm({
 
 function PessoaCard({
   pessoa,
+  ehDono,
   permsOrg,
   permsCnes,
   defaults,
@@ -1053,6 +1109,7 @@ function PessoaCard({
   onDesvincular,
 }: {
   pessoa: PessoaAdmin;
+  ehDono: boolean;
   permsOrg: PermissaoCat[];
   permsCnes: PermissaoCat[];
   defaults: Set<string>;
@@ -1086,7 +1143,17 @@ function PessoaCard({
     <div className="rounded-xl border border-border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-foreground">{pessoa.email}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-foreground">{pessoa.email}</span>
+            {ehDono && (
+              <span
+                title="Super-admin: administra qualquer prefeitura. Não atribuível pela tela."
+                className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-800"
+              >
+                Dono do sistema · {LABEL_ESCOPO.global}
+              </span>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground">{pessoa.org_nome}</div>
         </div>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1107,8 +1174,19 @@ function PessoaCard({
             </select>
             <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
+          {cargoAtual !== "" && (
+            <span
+              title={`Escopo do cargo: ${LABEL_ESCOPO[escopoDoCargo(cargoAtual)]}`}
+              className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground"
+            >
+              {LABEL_ESCOPO[escopoDoCargo(cargoAtual)]}
+            </span>
+          )}
         </label>
       </div>
+      {cargoAtual !== "" && DESC_CARGO[cargoAtual] && (
+        <div className="mt-0.5 text-right text-[11px] text-muted-foreground">{DESC_CARGO[cargoAtual]}</div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
@@ -1205,8 +1283,8 @@ function PessoaCard({
               return (
                 <PermPill
                   key={p.codigo}
-                  label={p.codigo}
-                  title={p.descricao}
+                  label={nomePerm(p)}
+                  title={p.codigo}
                   est={est}
                   loading={salvando === `${pessoa.user_id}:${p.codigo}`}
                   onClick={() => onTogglePessoa(pessoa, p, est)}
@@ -1227,8 +1305,8 @@ function PessoaCard({
             return (
               <PermPill
                 key={p.codigo}
-                label={p.codigo}
-                title={p.descricao}
+                label={nomePerm(p)}
+                title={p.codigo}
                 est={est}
                 loading={salvando === `${pessoa.user_id}:${p.codigo}`}
                 onClick={() => onTogglePessoa(pessoa, p, est)}
@@ -1270,8 +1348,8 @@ function PessoaCard({
                       return (
                         <PermPill
                           key={p.codigo}
-                          label={p.codigo}
-                          title={p.descricao}
+                          label={nomePerm(p)}
+                          title={p.codigo}
                           est={est}
                           loading={salvando === `${v.vinculo_id}:${p.codigo}`}
                           onClick={() => onToggleVinculo(v, p)}
