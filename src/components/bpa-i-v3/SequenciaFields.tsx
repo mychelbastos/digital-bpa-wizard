@@ -133,13 +133,20 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     return () => { cancel = true; };
   }, [servico, classProc]);
 
-  // Nome/descrição do CID — só existe se o código estiver na tabela do SIGTAP importada.
+  // Nome/descrição do CID — só existe se o código estiver na tabela CID-10 (SIGTAP) importada.
+  // Quando o código digitado (>=3) NÃO consta na tabela, marca cidNaoEncontrado = aviso
+  // (não bloqueia): pega diagnóstico digitado errado antes de gerar o .txt.
   const cidTxt = s.cid.join("").trim();
   const [nomeCid, setNomeCid] = useState<string | null>(null);
+  const [cidNaoEncontrado, setCidNaoEncontrado] = useState(false);
   useEffect(() => {
-    if (cidTxt.length < 3) { setNomeCid(null); return; }
+    if (cidTxt.length < 3) { setNomeCid(null); setCidNaoEncontrado(false); return; }
     let cancel = false;
-    buscarNomeCid(cidTxt).then((nome) => { if (!cancel) setNomeCid(nome); });
+    buscarNomeCid(cidTxt).then((nome) => {
+      if (cancel) return;
+      setNomeCid(nome);
+      setCidNaoEncontrado(nome === null); // consultou e não achou na CID-10
+    });
     return () => { cancel = true; };
   }, [cidTxt]);
 
@@ -281,9 +288,13 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       <NomeAoFocarPopover top={seqTop + R.procRow2} left={R.servico[0].left} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-srv`, `s${si}-cls`)} texto={val.servicoMotivo ?? nomeServicoClasse} />
       <DigitBoxes id={`s${si}-cid`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.cid}
-        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} uppercase registerRefs={regBox(`s${si}-cid`)} invalid={hydrated && val.cidInvalido} title={val.cidMotivo} compact />
+        values={s.cid} onChange={(v) => u("cid", v)} numeric={false} uppercase registerRefs={regBox(`s${si}-cid`)}
+        invalid={hydrated && val.cidInvalido}
+        warn={hydrated && cidNaoEncontrado && !val.cidInvalido}
+        title={val.cidMotivo ?? (cidNaoEncontrado ? `CID ${cidTxt} não consta na tabela CID-10 — confira o diagnóstico.` : undefined)} compact />
       <NomeAoFocarPopover top={seqTop + R.procRow2} left={R.cid[0].left} height={L.DIGIT_H}
-        getInputs={() => inputsOf(`s${si}-cid`)} texto={val.cidMotivo ?? nomeCid} />
+        getInputs={() => inputsOf(`s${si}-cid`)}
+        texto={val.cidMotivo ?? (cidNaoEncontrado ? `⚠ CID ${cidTxt} não consta na tabela CID-10 — confira o diagnóstico.` : nomeCid)} />
       <ComboField top={seqTop + R.procRow2} left={R.carater[0].left}
         width={R.carater[R.carater.length - 1].left + R.carater[R.carater.length - 1].width - R.carater[0].left}
         height={L.DIGIT_H} options={CARATERES} display="code"

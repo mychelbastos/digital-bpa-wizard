@@ -9,6 +9,8 @@ import {
   Users,
   Eye,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Building2,
   Plus,
   X,
@@ -124,6 +126,8 @@ function Admin() {
   const [leituras, setLeituras] = useState<LeituraLog[]>([]);
   const [donos, setDonos] = useState<DonoSistema[]>([]);
   const [superAdmin, setSuperAdmin] = useState(false);
+  // Master-detail: null = lista de prefeituras; id = detalhe daquela prefeitura.
+  const [prefSel, setPrefSel] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
 
@@ -361,13 +365,6 @@ function Admin() {
     }
   };
 
-  // Organizações que o admin gerencia (derivadas das pessoas listadas), com nome.
-  const orgs = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of pessoas) m.set(p.organizacao_id, p.org_nome);
-    return [...m].map(([id, nome]) => ({ id, nome }));
-  }, [pessoas]);
-
   const hojeISO = new Date().toISOString().slice(0, 10);
   const semAcesso = !carregando && pessoas.length === 0 && organizacoes.length === 0 && !superAdmin;
 
@@ -393,106 +390,177 @@ function Admin() {
           <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Você não administra nenhuma organização (precisa da permissão “gerenciar vínculos”).
           </p>
-        ) : (
-          <>
-            {(organizacoes.length > 0 || superAdmin) && (
-              <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+        ) : prefSel ? (
+          (() => {
+            const org = organizacoes.find((o) => o.id === prefSel);
+            if (!org) {
+              return (
+                <button
+                  onClick={() => setPrefSel(null)}
+                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  <ChevronLeft className="size-4" /> Voltar para prefeituras
+                </button>
+              );
+            }
+            const pessoasOrg = pessoas.filter((p) => p.organizacao_id === prefSel);
+            return (
+              <>
+                <button
+                  onClick={() => setPrefSel(null)}
+                  className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft className="size-4" /> Todas as prefeituras
+                </button>
+
+                {/* Gestão, cabeçalho magnético e unidades desta prefeitura */}
+                <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
                   <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Landmark className="size-4" /> Prefeitura e gestão ({organizacoes.length})
+                    <Landmark className="size-4" /> {org.nome}
                   </h2>
-                  {superAdmin && (
-                    <CriarPrefeituraForm
-                      criando={salvando === "criar-prefeitura"}
-                      onCriar={criarPrefeitura}
-                    />
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Dados do município e o <strong>cabeçalho do arquivo magnético</strong> (registro
-                  01). Isto vale para toda a organização — não é mais por usuário.
-                  {superAdmin && " Como super-admin, você vê e administra todas as prefeituras."}
-                </p>
-                <div className="mt-4 space-y-4">
-                  {organizacoes.map((o) => (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Dados do município, gestão e o <strong>cabeçalho do arquivo magnético</strong>{" "}
+                    (registro 01), além das unidades (CNES) da prefeitura.
+                  </p>
+                  <div className="mt-4">
                     <OrgCard
-                      key={o.id}
-                      org={o}
-                      estabelecimentos={estabPorOrg[o.id] ?? []}
-                      salvandoOrg={salvando === `org:${o.id}`}
-                      salvandoGestao={salvando === `gestao:${o.id}`}
-                      salvandoCnes={salvando === `estab:${o.id}`}
+                      org={org}
+                      estabelecimentos={estabPorOrg[org.id] ?? []}
+                      salvandoOrg={salvando === `org:${org.id}`}
+                      salvandoGestao={salvando === `gestao:${org.id}`}
+                      salvandoCnes={salvando === `estab:${org.id}`}
                       onSalvarOrg={gravarOrganizacao}
                       onSalvarGestao={gravarGestao}
                       onAddCnes={adicionarCnes}
                     />
-                  ))}
-                </div>
+                  </div>
+                </section>
+
+                {/* Usuários desta prefeitura */}
+                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Users className="size-4" /> Usuários ({pessoasOrg.length})
+                    </h2>
+                    <CriarContaForm
+                      orgs={[{ id: org.id, nome: org.nome }]}
+                      cargos={Object.keys(cargoDefaults).sort()}
+                      estabPorOrg={estabPorOrg}
+                      criando={salvando === "criar-conta"}
+                      onCriar={criarContaNova}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Uma pessoa por cartão. O <strong>cargo</strong> traz o pacote-padrão de
+                    permissões; ajustes ficam marcados como{" "}
+                    <span className="text-amber-700">≠ padrão</span>. As permissões de unidade valem
+                    para todas as unidades da pessoa (personalize por unidade no rodapé de cada
+                    cartão).
+                  </p>
+                  <div className="mt-4 space-y-4">
+                    {pessoasOrg.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum usuário nesta prefeitura ainda.
+                      </p>
+                    ) : (
+                      pessoasOrg.map((pessoa) => (
+                        <PessoaCard
+                          key={`${pessoa.user_id}:${pessoa.organizacao_id}`}
+                          pessoa={pessoa}
+                          ehDono={donos.some((d) => d.user_id === pessoa.user_id)}
+                          permsOrg={permsOrg}
+                          permsCnes={permsCnes}
+                          defaults={defaultsDaPessoa(pessoa)}
+                          cargos={Object.keys(cargoDefaults).sort()}
+                          vinculos={vinculos.filter(
+                            (v) =>
+                              v.user_id === pessoa.user_id &&
+                              v.organizacao_id === pessoa.organizacao_id &&
+                              (v.fim === null || v.fim >= hojeISO),
+                          )}
+                          estabelecimentos={estabPorOrg[pessoa.organizacao_id] ?? []}
+                          cargoDefaults={cargoDefaults}
+                          salvando={salvando}
+                          onTogglePessoa={togglePessoa}
+                          onTrocarCargo={trocarCargo}
+                          onToggleVinculo={toggleVinculo}
+                          onVincular={vincular}
+                          onDesvincular={desvincular}
+                        />
+                      ))
+                    )}
+                  </div>
+                </section>
+              </>
+            );
+          })()
+        ) : (
+          <>
+            {/* Dono do sistema — escopo global, não atribuível pela tela */}
+            {donos.length > 0 && (
+              <section className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 p-5 shadow-sm">
+                <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-violet-900">
+                  <ShieldCheck className="size-4" /> Dono do sistema
+                  <span className="rounded bg-violet-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-900">
+                    {LABEL_ESCOPO.global}
+                  </span>
+                </h2>
+                <p className="mt-1 text-xs text-violet-800">
+                  {donos.map((d) => d.email).join(", ")} — administra qualquer prefeitura; para ver
+                  ficha ainda precisa de vínculo no CNES. Não atribuível pela tela.
+                </p>
               </section>
             )}
 
-            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            {/* Lista de prefeituras — clique para configurar gestão, unidades e usuários */}
+            <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Users className="size-4" /> Pessoas ({pessoas.length})
+                  <Landmark className="size-4" /> Prefeituras ({organizacoes.length})
                 </h2>
-                <CriarContaForm
-                  orgs={orgs}
-                  cargos={Object.keys(cargoDefaults).sort()}
-                  estabPorOrg={estabPorOrg}
-                  criando={salvando === "criar-conta"}
-                  onCriar={criarContaNova}
-                />
+                {superAdmin && (
+                  <CriarPrefeituraForm
+                    criando={salvando === "criar-prefeitura"}
+                    onCriar={criarPrefeitura}
+                  />
+                )}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Uma pessoa por cartão. O <strong>cargo</strong> traz o pacote-padrão de permissões;
-                ajustes ficam marcados como <span className="text-amber-700">≠ padrão</span>. As
-                permissões de unidade valem para todas as unidades da pessoa (personalize por
-                unidade no rodapé de cada cartão).
+                Abra uma prefeitura para ver e editar sua gestão, unidades e usuários.
+                {superAdmin && " Como super-admin, você vê todas as prefeituras."}
               </p>
-              {donos.length > 0 && (
-                <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
-                  <span className="font-semibold">Donos do sistema</span>
-                  <span className="ml-1 rounded bg-violet-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-900">
-                    {LABEL_ESCOPO.global}
-                  </span>
-                  <span className="ml-2">{donos.map((d) => d.email).join(", ")}</span>
-                  <span className="ml-1 text-violet-700">
-                    — administram qualquer prefeitura; para ver ficha ainda precisam de vínculo no
-                    CNES. Não atribuível pela tela.
-                  </span>
-                </div>
-              )}
-              <div className="mt-4 space-y-4">
-                {pessoas.map((pessoa) => (
-                  <PessoaCard
-                    key={`${pessoa.user_id}:${pessoa.organizacao_id}`}
-                    pessoa={pessoa}
-                    ehDono={donos.some((d) => d.user_id === pessoa.user_id)}
-                    permsOrg={permsOrg}
-                    permsCnes={permsCnes}
-                    defaults={defaultsDaPessoa(pessoa)}
-                    cargos={Object.keys(cargoDefaults).sort()}
-                    vinculos={vinculos.filter(
-                      (v) =>
-                        v.user_id === pessoa.user_id &&
-                        v.organizacao_id === pessoa.organizacao_id &&
-                        (v.fim === null || v.fim >= hojeISO),
-                    )}
-                    estabelecimentos={estabPorOrg[pessoa.organizacao_id] ?? []}
-                    cargoDefaults={cargoDefaults}
-                    salvando={salvando}
-                    onTogglePessoa={togglePessoa}
-                    onTrocarCargo={trocarCargo}
-                    onToggleVinculo={toggleVinculo}
-                    onVincular={vincular}
-                    onDesvincular={desvincular}
-                  />
-                ))}
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {organizacoes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma prefeitura cadastrada.</p>
+                ) : (
+                  organizacoes.map((o) => {
+                    const nUnid = (estabPorOrg[o.id] ?? []).length;
+                    const nPess = pessoas.filter((p) => p.organizacao_id === o.id).length;
+                    return (
+                      <button
+                        key={o.id}
+                        onClick={() => setPrefSel(o.id)}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary/50 hover:bg-muted"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-foreground">
+                            {o.nome}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {nUnid} unidade{nUnid === 1 ? "" : "s"} · {nPess} usuário
+                            {nPess === 1 ? "" : "s"}
+                          </div>
+                        </div>
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </section>
 
-            <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+            {/* Logs de acesso (LGPD) */}
+            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Eye className="size-4" /> Acessos a fichas BPA-I (LGPD) — {leituras.length}{" "}
                 recentes

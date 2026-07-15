@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import {
-  carregarVinculosUsuario, carregarNomesProcedimentos, carregarProducaoDashboard,
+  carregarVinculosUsuario, carregarNomesProcedimentos, carregarDescricoesCid, carregarProducaoDashboard,
   type VinculoResumo, type ProducaoBpaRow,
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
@@ -66,6 +66,7 @@ function Home() {
   const [loading, setLoading] = useState(true);
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const [nomesProc, setNomesProc] = useState<Record<string, string>>({});
+  const [nomesCid, setNomesCid] = useState<Record<string, string>>({});
   const [profDetalhe, setProfDetalhe] = useState<string | null>(null);
 
   const carregar = async () => {
@@ -77,11 +78,19 @@ function Home() {
     setVinculos(vincs);
     setRows(producao);
     setNomesProc(await carregarNomesProcedimentos(producao.map((r) => r.procedimento)));
+    setNomesCid(await carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)));
     setAtualizadoEm(new Date());
     setLoading(false);
   };
 
   const nomeProc = (codigo: string) => nomesProc[codigo] || null;
+  // CID: "código — descrição" quando existe na tabela CID-10; senão só o código (fallback,
+  // nunca inventa descrição).
+  const rotuloCid = (cid: string | null) => {
+    if (!cid) return "Sem CID";
+    const d = nomesCid[cid];
+    return d ? `${cid} — ${d}` : cid;
+  };
 
   useEffect(() => { carregar(); }, [competencia]);
   useEffect(() => { setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
@@ -112,7 +121,7 @@ function Home() {
   const topUnidades = useMemo(() => agrupar(filtradas, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)).slice(0, 8), [filtradas]);
   const topProfissionais = useMemo(() => agrupar(filtradas, (r) => r.profissional_cns || r.cbo || "sem-profissional", (r) => nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo)).slice(0, 8), [filtradas]);
   const topProcedimentos = useMemo(() => agrupar(filtradas, (r) => r.procedimento, (r) => nomeProc(r.procedimento) || r.procedimento).slice(0, 10), [filtradas, nomesProc]);
-  const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => r.cid || "Sem CID").slice(0, 8), [filtradas]);
+  const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => rotuloCid(r.cid)).slice(0, 8), [filtradas, nomesCid]);
   const porCarater = useMemo(() => agrupar(filtradas.filter((r) => r.carater), (r) => r.carater || "sem-carater", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`).slice(0, 6), [filtradas]);
 
   // Escopo exibido, derivado dos VÍNCULOS (não de um "papel" na conta). É só rótulo — o
@@ -271,6 +280,7 @@ function Home() {
             chave={profDetalhe}
             rows={filtradas.filter((r) => (r.profissional_cns || r.cbo || "sem-profissional") === profDetalhe)}
             nomeProc={nomeProc}
+            rotuloCid={rotuloCid}
             onClose={() => setProfDetalhe(null)}
           />
         )}
@@ -359,10 +369,11 @@ function Ranking({ title, rows, empty = "Sem dados", detailFor, onRowClick, hint
   );
 }
 
-function ProfissionalDetalhe({ chave, rows, nomeProc, onClose }: {
+function ProfissionalDetalhe({ chave, rows, nomeProc, rotuloCid, onClose }: {
   chave: string;
   rows: ProducaoBpaRow[];
   nomeProc: (codigo: string) => string | null;
+  rotuloCid: (cid: string | null) => string;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -380,7 +391,7 @@ function ProfissionalDetalhe({ chave, rows, nomeProc, onClose }: {
   const bpaI = rows.filter((r) => r.tipo === "BPA-I").reduce((s, r) => s + r.quantidade, 0);
   const unidades = agrupar(rows, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes));
   const procedimentos = agrupar(rows, (r) => r.procedimento, (r) => nomeProc(r.procedimento) || r.procedimento);
-  const cids = agrupar(rows.filter((r) => r.cid), (r) => r.cid || "?", (r) => r.cid || "?");
+  const cids = agrupar(rows.filter((r) => r.cid), (r) => r.cid || "?", (r) => rotuloCid(r.cid));
   const carateres = agrupar(rows.filter((r) => r.carater), (r) => r.carater || "?", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`);
 
   return (

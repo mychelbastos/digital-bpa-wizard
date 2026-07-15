@@ -63,6 +63,27 @@ export async function carregarVinculosUsuario(): Promise<VinculoResumo[]> {
   }
 }
 
+// Descrição oficial (CID-10 / SIGTAP) de vários CIDs de uma vez. Mapa código→descrição;
+// códigos ausentes na tabela ficam de fora (o dashboard cai no código puro). Nunca lança.
+export async function carregarDescricoesCid(codigos: string[]): Promise<Record<string, string>> {
+  const unicos = [...new Set(codigos.filter((c) => c && c.length >= 3))];
+  if (!supabase || unicos.length === 0) return {};
+  try {
+    const { data, error } = await supabase
+      .from("cid_sigtap")
+      .select("codigo, nome")
+      .in("codigo", unicos);
+    if (error || !data) return {};
+    const mapa: Record<string, string> = {};
+    for (const row of data as { codigo: string; nome: string }[]) {
+      if (!mapa[row.codigo]) mapa[row.codigo] = row.nome;
+    }
+    return mapa;
+  } catch {
+    return {};
+  }
+}
+
 // Nome oficial (SIGTAP) de vários procedimentos de uma vez. Retorna um mapa
 // código→nome; códigos não encontrados simplesmente ficam de fora. Nunca lança.
 export async function carregarNomesProcedimentos(codigos: string[]): Promise<Record<string, string>> {

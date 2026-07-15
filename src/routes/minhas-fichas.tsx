@@ -22,6 +22,8 @@ function MinhasFichasPage() {
   const [carregando, setCarregando] = useState(true);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [novoNome, setNovoNome] = useState("");
+  // Mês selecionado no menu ("todos" = geral; null = ainda não escolheu → cai no mais recente).
+  const [mesSel, setMesSel] = useState<string | null>(null);
 
   useEffect(() => {
     listarFichas().then((f) => { setFichas(f); setCarregando(false); });
@@ -45,6 +47,17 @@ function MinhasFichasPage() {
   }
   grupos.sort((a, b) => (b.comp ?? "").localeCompare(a.comp ?? ""));
 
+  // Chave estável de cada mês no menu (competência ou "sem"); "todos" = visão geral.
+  const chaveMes = (comp: string | null) => comp ?? "sem";
+  // Default: o mês mais recente (grupos[0]); a pessoa troca no menu ou escolhe "Geral".
+  const mesAtivo = mesSel ?? (grupos[0] ? chaveMes(grupos[0].comp) : "todos");
+  const gruposVisiveis = mesAtivo === "todos" ? grupos : grupos.filter((g) => chaveMes(g.comp) === mesAtivo);
+
+  const pill = (ativo: boolean) =>
+    `shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+      ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-muted"
+    }`;
+
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
       <header className="border-b bg-background/95 px-4 py-3 backdrop-blur">
@@ -62,7 +75,20 @@ function MinhasFichasPage() {
         ) : fichas.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">Nenhuma ficha salva ainda. Preencha um formulário e clique em “Salvar ficha”.</p>
         ) : (
-          grupos.map((g) => (
+          <>
+            {/* Menu por mês/ano — abre no mais recente; "Geral" mostra todos os meses. */}
+            <div className="mb-5 flex flex-wrap items-center gap-1.5">
+              <button onClick={() => setMesSel("todos")} className={pill(mesAtivo === "todos")}>
+                Geral <span className="opacity-70">({fichas.length})</span>
+              </button>
+              <span className="mx-1 h-4 w-px bg-border" />
+              {grupos.map((g) => (
+                <button key={chaveMes(g.comp)} onClick={() => setMesSel(chaveMes(g.comp))} className={`${pill(mesAtivo === chaveMes(g.comp))} capitalize`}>
+                  {labelComp(g.comp)} <span className="opacity-70">({g.itens.length})</span>
+                </button>
+              ))}
+            </div>
+            {gruposVisiveis.map((g) => (
             <section key={g.comp ?? "sem"} className="mb-6">
               <h2 className="mb-2 text-sm font-semibold capitalize text-foreground">{labelComp(g.comp)} <span className="text-xs font-normal text-muted-foreground">· {g.itens.length} ficha{g.itens.length > 1 ? "s" : ""}</span></h2>
               <div className="space-y-1.5">
@@ -98,7 +124,8 @@ function MinhasFichasPage() {
                 ))}
               </div>
             </section>
-          ))
+            ))}
+          </>
         )}
       </main>
     </div>
