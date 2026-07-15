@@ -145,3 +145,11 @@ if (existsSync(FIXTURE)) validar("fixture anonimizado", readFileSync(FIXTURE, "l
 
 // (2) Arquivo .MAR REAL — só roda localmente com MAR_PATH apontando pro arquivo (fora do repo).
 if (existsSync(MAR_PATH)) validar(".MAR real", readFileSync(MAR_PATH, "latin1"));
+
+// (3) 2º arquivo REAL: PA292720.JUN (jun/2026, D04.14, 1250 linhas, 3 CNES, 3 competências).
+// Prova que o gerador é GENÉRICO (não ajustado a um arquivo só). Fora do repo (PII):
+//   JUN_PATH="/caminho/PA292720.JUN" npx vitest run bpa-magnetico-mar
+const JUN_PATH =
+  process.env.JUN_PATH ||
+  "/Users/mychelbastos/Downloads/06 EXPORTA BPA RB JUN 2026/PA292720.JUN";
+if (existsSync(JUN_PATH)) validar(".JUN real", readFileSync(JUN_PATH, "latin1"));
