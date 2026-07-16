@@ -75,8 +75,11 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
   const idadeInvalida = Boolean(proc) && idadeForaDaFaixa(proc!.idadeMinimaMeses, proc!.idadeMaximaMeses, idadeMeses);
   const qtdeInvalida = Boolean(proc) && quantidadeExcedida(proc!.qtMaximaExecucao, qtde);
 
-  const servico = s.servico.join("");
-  const classProc = s.classProc.join("");
+  // Só os dígitos: um campo importado em branco vem como "   " (3 espaços) e NÃO pode
+  // ser tratado como um código de 3 caracteres (senão o crivo o considera combinação
+  // inválida). Espelha o `.trim()` que o CID já faz logo abaixo.
+  const servico = s.servico.join("").replace(/\D/g, "");
+  const classProc = s.classProc.join("").replace(/\D/g, "");
   const [servicoValido, setServicoValido] = useState<boolean | null>(null);
   useEffect(() => {
     if (!procCompleto || servico.length !== 3 || classProc.length !== 3) { setServicoValido(null); return; }
