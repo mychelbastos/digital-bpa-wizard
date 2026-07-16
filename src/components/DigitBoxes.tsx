@@ -143,7 +143,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
       const atual = values.filter((v) => v && v.trim() !== "").join("");
       if (/^[0-9]$/.test(e.key)) {
         e.preventDefault();
-        setRightAligned(atual + e.key); // acumula à direita
+        if (atual.length < boxes.length) setRightAligned(atual + e.key); // trava aos n dígitos (não empurra)
       } else if (e.key === "Backspace") {
         e.preventDefault();
         setRightAligned(atual.slice(0, -1)); // remove o último dígito
