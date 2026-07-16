@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpacBg from "@/assets/bpa-c.png";
 import { DigitBoxes, DigitBoxesClearableContext } from "@/components/DigitBoxes";
+import { ancorarDigitosDireita } from "@/lib/digitos-direita";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
@@ -80,17 +81,10 @@ const initialState = (): State => ({
   respData: hojeDigits(),
 });
 
-// Re-ancora à direita (estilo calculadora) um campo de dígitos: mantém os últimos n
-// dígitos e preenche o começo com vazio. Idempotente — normaliza quantidades salvas
-// no formato antigo (à esquerda) para o novo (à direita). Espaços contam como vazio.
-function ancorarDireita(arr: string[] | undefined, n: number): string[] {
-  const d = (arr ?? []).join("").replace(/\D/g, "").slice(-n);
-  return [...Array(Math.max(0, n - d.length)).fill(""), ...d.split("")];
-}
-
-// Normaliza a Quantidade de todas as linhas para ancorada à direita.
+// Normaliza a Quantidade de todas as linhas para ancorada à direita (estilo calculadora),
+// convertendo quantidades salvas no formato antigo (à esquerda). Idempotente.
 function normalizarQuantidades(s: State): State {
-  return { ...s, rows: s.rows.map((r) => ({ ...r, quantidade: ancorarDireita(r.quantidade, 5) })) };
+  return { ...s, rows: s.rows.map((r) => ({ ...r, quantidade: ancorarDigitosDireita((r.quantidade ?? []).join(""), 5) })) };
 }
 
 function loadState(): State {

@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useContext, createContext } from "react";
 import { Trash2, ArrowUp } from "lucide-react";
+import { ancorarDigitosDireita } from "@/lib/digitos-direita";
 
 // Habilita a lixeira de "limpar campo" em todos os DigitBoxes descendentes (usado só nas
 // versões v2). Fora de um Provider fica `false` -> os formulários originais não mudam.
@@ -109,8 +110,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
 
   // Aplica um número justificado à direita nas caixinhas e foca a última.
   const setRightAligned = (digits: string) => {
-    const d = digits.slice(-boxes.length);
-    onChange([...Array(boxes.length - d.length).fill(""), ...d.split("")]);
+    onChange(ancorarDigitosDireita(digits, boxes.length));
     focusEnd(refs.current[boxes.length - 1]);
   };
 
@@ -137,9 +137,16 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
       return;
     }
     if (rightAlign) {
-      if (e.key === "Backspace") {
+      // Digitação estilo calculadora tratada AQUI (keydown), não no onChange: como cada
+      // caixinha tem maxLength=1 e o foco fica sempre na caixa cheia da direita, o onChange
+      // não dispararia no 2º dígito. Capturamos a tecla e montamos o número nós mesmos.
+      const atual = values.filter((v) => v && v.trim() !== "").join("");
+      if (/^[0-9]$/.test(e.key)) {
         e.preventDefault();
-        setRightAligned(values.filter(Boolean).join("").slice(0, -1)); // remove o último dígito
+        setRightAligned(atual + e.key); // acumula à direita
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        setRightAligned(atual.slice(0, -1)); // remove o último dígito
       }
       return;
     }
