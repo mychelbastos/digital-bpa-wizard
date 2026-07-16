@@ -81,10 +81,17 @@ const initialState = (): State => ({
   respData: hojeDigits(),
 });
 
-// Normaliza a Quantidade de todas as linhas para ancorada à direita (estilo calculadora),
-// convertendo quantidades salvas no formato antigo (à esquerda). Idempotente.
+// Normaliza Quantidade e Idade de todas as linhas para ancoradas à direita (estilo
+// calculadora), convertendo valores salvos no formato antigo (à esquerda). Idempotente.
 function normalizarQuantidades(s: State): State {
-  return { ...s, rows: s.rows.map((r) => ({ ...r, quantidade: ancorarDigitosDireita((r.quantidade ?? []).join(""), 5) })) };
+  return {
+    ...s,
+    rows: s.rows.map((r) => ({
+      ...r,
+      quantidade: ancorarDigitosDireita((r.quantidade ?? []).join(""), 5),
+      idade: ancorarDigitosDireita((r.idade ?? []).join(""), 3),
+    })),
+  };
 }
 
 function loadState(): State {

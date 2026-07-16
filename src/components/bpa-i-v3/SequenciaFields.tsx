@@ -243,7 +243,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       <TextField top={seqTop + R.row3} left={R.endereco.left} width={R.endereco.width} height={L.DIGIT_H}
         value={s.endereco} onChange={(v) => u("endereco", v)} uppercase />
       <DigitBoxes id={`s${si}-num`} top={seqTop + R.row3} height={L.DIGIT_H} boxes={R.numero}
-        values={s.numero} onChange={(v) => u("numero", v)} numeric={false} clearable compact />
+        values={s.numero} onChange={(v) => u("numero", v)} numeric={false} rightAlign clearable compact />
       <TextField top={seqTop + R.row3} left={R.complemento.left} width={R.complemento.width} height={L.DIGIT_H}
         value={s.complemento} onChange={(v) => u("complemento", v)} uppercase />
 
@@ -276,7 +276,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         values={s.codProc} onChange={(v) => u("codProc", v)} clearable
         naoEncontrado={hydrated && val.procNaoEncontrado} nomeEncontrado={val.proc?.nome ?? null} />
       <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
-        values={s.qtde} onChange={(v) => u("qtde", v)} invalid={hydrated && val.qtdeInvalida} title={val.qtdeMotivo} clearable compact separated />
+        values={s.qtde} onChange={(v) => u("qtde", v)} rightAlign invalid={hydrated && val.qtdeInvalida} title={val.qtdeMotivo} clearable compact separated />
       <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
         values={s.cnpj} onChange={(v) => u("cnpj", v)} clearable compact />
 

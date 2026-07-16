@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useContext, createContext } from "react";
 import { Trash2, ArrowUp } from "lucide-react";
-import { ancorarDigitosDireita } from "@/lib/digitos-direita";
+import { ancorarDigitosDireita, ancorarCharsDireita } from "@/lib/digitos-direita";
 
 // Habilita a lixeira de "limpar campo" em todos os DigitBoxes descendentes (usado só nas
 // versões v2). Fora de um Provider fica `false` -> os formulários originais não mudam.
@@ -108,9 +108,10 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
 
   const rightEdge = boxes.reduce((m, b) => Math.max(m, b.left + b.width), 0);
 
-  // Aplica um número justificado à direita nas caixinhas e foca a última.
-  const setRightAligned = (digits: string) => {
-    onChange(ancorarDigitosDireita(digits, boxes.length));
+  // Aplica um valor justificado à direita nas caixinhas e foca a última. Campos numéricos
+  // descartam não-dígitos; alfanuméricos (ex.: Número "S/N") preservam os caracteres.
+  const setRightAligned = (raw: string) => {
+    onChange(numeric ? ancorarDigitosDireita(raw, boxes.length) : ancorarCharsDireita(raw, boxes.length));
     focusEnd(refs.current[boxes.length - 1]);
   };
 
@@ -141,9 +142,12 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
       // caixinha tem maxLength=1 e o foco fica sempre na caixa cheia da direita, o onChange
       // não dispararia no 2º dígito. Capturamos a tecla e montamos o número nós mesmos.
       const atual = values.filter((v) => v && v.trim() !== "").join("");
-      if (/^[0-9]$/.test(e.key)) {
+      // Aceita 1 dígito (numérico) ou 1 caractere não-branco (alfanumérico, ex.: "S/N").
+      const ehEntrada = e.key.length === 1 && (numeric ? /[0-9]/.test(e.key) : !/\s/.test(e.key));
+      if (ehEntrada) {
         e.preventDefault();
-        if (atual.length < boxes.length) setRightAligned(atual + e.key); // trava aos n dígitos (não empurra)
+        const ch = uppercase ? e.key.toUpperCase() : e.key;
+        if (atual.length < boxes.length) setRightAligned(atual + ch); // trava aos n caracteres (não empurra)
       } else if (e.key === "Backspace") {
         e.preventDefault();
         setRightAligned(atual.slice(0, -1)); // remove o último dígito

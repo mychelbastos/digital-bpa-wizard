@@ -27,6 +27,7 @@ import { registrarUso } from "@/lib/bpa-i-v2/historico";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
+import { ancorarCharsDireita } from "@/lib/digitos-direita";
 import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
 
 export const Route = createFileRoute("/bpa-i-v3")({
@@ -102,12 +103,12 @@ function rjust(arr: string[] | undefined, n: number): string[] {
   return [...Array(Math.max(0, n - digs.length)).fill(""), ...digs];
 }
 
-// Migração: campo Número (endereço) passou de texto livre para 4 caixinhas — aceita
-// letras também (ex.: "SN" de "sem número"), então preserva tudo, só corta p/ 4.
+// Migração: campo Número (endereço) — 4 caixinhas alfanuméricas ("SN" de "sem número"),
+// ancoradas à DIREITA (estilo calculadora). Aceita array antigo (à esquerda ou com
+// espaços de importação) ou texto livre; remove espaços e mantém os últimos 4 caracteres.
 function migrarNumero(v: unknown): string[] {
-  if (Array.isArray(v)) return v as string[];
-  const chars = String(v ?? "").trim().slice(0, 4);
-  return [...chars.split(""), ...Array(4 - chars.length).fill("")];
+  const raw = Array.isArray(v) ? (v as string[]).join("") : String(v ?? "");
+  return ancorarCharsDireita(raw.replace(/\s/g, ""), 4);
 }
 
 function loadState(): State {
