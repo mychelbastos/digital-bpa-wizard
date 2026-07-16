@@ -94,7 +94,7 @@ function MinhasFichasPage() {
               <div className="space-y-1.5">
                 {g.itens.map((f) => (
                   <div key={f.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${f.tipo === "BPA-C" ? "bg-amber-100 text-amber-800" : "bg-primary/10 text-primary"}`}>{f.tipo}</span>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${f.tipo === "BPA-C" ? "bg-teal-100 text-teal-700" : "bg-sky-100 text-sky-700"}`}>{f.tipo}</span>
                     {editandoId === f.id ? (
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)}

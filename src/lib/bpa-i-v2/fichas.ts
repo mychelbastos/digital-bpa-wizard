@@ -138,11 +138,13 @@ export async function fichasDoMes(mesProducao: string, cnes?: string): Promise<F
   }
 }
 
-export async function carregarFicha(id: string): Promise<unknown | null> {
+export async function carregarFicha(id: string): Promise<{ dados: unknown; titulo: string } | null> {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase.from("fichas").select("dados").eq("id", id).maybeSingle();
-    return error || !data ? null : (data as { dados: unknown }).dados;
+    const { data, error } = await supabase.from("fichas").select("dados, titulo").eq("id", id).maybeSingle();
+    if (error || !data) return null;
+    const d = data as { dados: unknown; titulo: string };
+    return { dados: d.dados, titulo: d.titulo };
   } catch {
     return null;
   }

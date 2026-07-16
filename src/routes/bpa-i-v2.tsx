@@ -283,12 +283,12 @@ function BpaI() {
 
   // Carrega uma ficha salva; começa uma nova (limpa e desvincula da ficha atual).
   const carregarFichaSalva = async (id: string, titulo?: string) => {
-    const dados = await carregarFicha(id);
-    if (!dados) return;
-    const merged = { ...initialState(), ...(dados as Partial<State>) };
+    const ficha = await carregarFicha(id);
+    if (!ficha) return;
+    const merged = { ...initialState(), ...(ficha.dados as Partial<State>) };
     merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3), numero: migrarNumero(s.numero) }));
     setState(merged);
-    persistFicha(id, titulo ?? "Ficha BPA-I");
+    persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-I");
   };
   const novaFicha = () => {
     setState(initialState());

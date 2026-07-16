@@ -304,10 +304,10 @@ function BpaCV2() {
   };
   const salvarComoClique = () => { setSalvarComoNovo(true); setSalvarOpen(true); setSalvarMenuOpen(false); };
   const carregarFichaSalva = async (id: string, titulo?: string) => {
-    const dados = await carregarFicha(id);
-    if (!dados) return;
-    setState({ ...initialState(), ...(dados as Partial<State>) });
-    persistFicha(id, titulo ?? "Ficha BPA-C");
+    const ficha = await carregarFicha(id);
+    if (!ficha) return;
+    setState({ ...initialState(), ...(ficha.dados as Partial<State>) });
+    persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-C");
     refreshStatus(id);
     if (autoPrintRef.current) setProntoImprimir(true);
   };
@@ -389,7 +389,7 @@ function BpaCV2() {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-bold tracking-wide text-amber-800">BPA-C</span>
+            <span className="rounded-md bg-teal-100 px-2 py-1 text-xs font-bold tracking-wide text-teal-700">BPA-C</span>
             <LoginControl user={user} />
             {user && (
               <div className="group relative flex">

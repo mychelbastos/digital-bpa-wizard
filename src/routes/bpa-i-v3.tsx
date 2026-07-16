@@ -326,12 +326,12 @@ function BpaI() {
 
   // Carrega uma ficha salva; começa uma nova (limpa e desvincula da ficha atual).
   const carregarFichaSalva = async (id: string, titulo?: string) => {
-    const dados = await carregarFicha(id);
-    if (!dados) return;
-    const merged = { ...initialState(), ...(dados as Partial<State>) };
+    const ficha = await carregarFicha(id);
+    if (!ficha) return;
+    const merged = { ...initialState(), ...(ficha.dados as Partial<State>) };
     merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3), numero: migrarNumero(s.numero) }));
     setState(merged);
-    persistFicha(id, titulo ?? "Ficha BPA-I");
+    persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-I");
     refreshStatus(id);
     // LGPD: abrir uma ficha BPA-I expõe PII do paciente — registra o acesso.
     registrarLeituraFicha(id);
@@ -610,7 +610,7 @@ function BpaI() {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold tracking-wide text-primary">BPA-I</span>
+            <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-bold tracking-wide text-sky-700">BPA-I</span>
             <LoginControl user={user} />
             {user && (
               <div className="group relative flex">
