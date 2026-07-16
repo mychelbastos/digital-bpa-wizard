@@ -40,14 +40,19 @@ export function useValidacaoLinhaBpaC(row: RowData, competencia: string | null):
   const codProc = row.procedimento.join("");
   const procCompleto = codProc.length === 10;
 
-  const [proc, setProc] = useState<ProcedimentoSigtap | null>(null);
+  // Guarda o resultado JUNTO do código que o gerou. Assim distinguimos "ainda buscando"
+  // (sem resultado p/ o código atual) de "buscou e não achou" — senão o aviso de
+  // "não encontrado" pisca durante o meio-segundo da busca assíncrona.
+  const [resultado, setResultado] = useState<{ cod: string; proc: ProcedimentoSigtap | null } | null>(null);
   useEffect(() => {
-    if (!procCompleto) { setProc(null); return; }
+    if (!procCompleto) { setResultado(null); return; }
     let cancel = false;
-    buscarProcedimentoSigtap(codProc, competencia).then((p) => { if (!cancel) setProc(p); });
+    buscarProcedimentoSigtap(codProc, competencia).then((p) => { if (!cancel) setResultado({ cod: codProc, proc: p }); });
     return () => { cancel = true; };
   }, [codProc, procCompleto, competencia]);
-  const naoEncontrado = procCompleto && proc === null;
+  const resolvido = resultado?.cod === codProc; // a busca terminou para o código atual?
+  const proc = resolvido ? resultado!.proc : null;
+  const naoEncontrado = procCompleto && resolvido && proc === null;
 
   // BPA-C guarda a idade em ANOS; o SIGTAP compara em meses (aprox.: anos × 12).
   const idadeAnos = Number(row.idade.join("")) || 0;

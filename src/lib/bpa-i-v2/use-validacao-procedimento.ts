@@ -53,15 +53,20 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
   // SIGTAP, o crivo cai na mais recente (ver resolverCompetencia).
   const competencia = competenciaDoAtendimento(s.dataAtend);
 
-  const [proc, setProc] = useState<ProcedimentoSigtap | null>(null);
+  // Guarda o resultado JUNTO do código que o gerou. Assim distinguimos "ainda buscando"
+  // (sem resultado p/ o código atual) de "buscou e não achou" — senão o aviso de
+  // "não encontrado" pisca durante o meio-segundo da busca assíncrona.
+  const [resultado, setResultado] = useState<{ cod: string; proc: ProcedimentoSigtap | null } | null>(null);
   useEffect(() => {
-    if (!procCompleto) { setProc(null); return; }
+    if (!procCompleto) { setResultado(null); return; }
     let cancel = false;
-    buscarProcedimentoSigtap(codProc, competencia).then((p) => { if (!cancel) setProc(p); });
+    buscarProcedimentoSigtap(codProc, competencia).then((p) => { if (!cancel) setResultado({ cod: codProc, proc: p }); });
     return () => { cancel = true; };
   }, [codProc, procCompleto, competencia]);
+  const resolvido = resultado?.cod === codProc; // a busca terminou para o código atual?
+  const proc = resolvido ? resultado!.proc : null;
 
-  const procNaoEncontrado = procCompleto && proc === null;
+  const procNaoEncontrado = procCompleto && resolvido && proc === null;
 
   const qtde = Number(s.qtde.join("")) || 0;
   const idadeMeses = idadeEmMeses(s.dataNasc, s.dataAtend);
