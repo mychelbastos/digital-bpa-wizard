@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import {
-  carregarVinculosUsuario, carregarNomesProcedimentos, carregarDescricoesCid, carregarProducaoDashboard,
+  carregarVinculosUsuario, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo, carregarProducaoDashboard,
   type VinculoResumo, type ProducaoBpaRow,
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
@@ -43,6 +43,42 @@ const nomeOuCodigo = (nome: string | null, codigo: string | null) => nome?.trim(
 const chaveProfissional = (r: ProducaoBpaRow) => r.profissional_cns || r.profissional_nome || r.cbo || "sem-profissional";
 const CHART_COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
 
+// Tick do eixo X do gráfico de unidades: nomes de estabelecimento são longos e se
+// sobrepõem. Quebra em até 2 linhas (~18 chars cada) e trunca com reticências o excedente,
+// centralizado sob a barra. O nome completo continua no tooltip da barra.
+function TickUnidade({ x, y, payload }: { x?: number; y?: number; payload?: { value?: string } }) {
+  const full = payload?.value ?? "";
+  const MAX_LINHA = 18;
+  const palavras = full.split(/\s+/);
+  const linhas: string[] = [];
+  let atual = "";
+  for (const w of palavras) {
+    const tentativa = atual ? `${atual} ${w}` : w;
+    if (tentativa.length > MAX_LINHA && atual) {
+      linhas.push(atual);
+      atual = w;
+    } else {
+      atual = tentativa;
+    }
+    if (linhas.length === 2) break; // no máximo 2 linhas
+  }
+  if (atual && linhas.length < 2) linhas.push(atual);
+  // Se sobrou texto (mais de 2 linhas), sinaliza corte com reticências na 2ª linha.
+  const usadas = linhas.join(" ");
+  if (usadas.length < full.replace(/\s+/g, " ").length && linhas.length === 2) {
+    linhas[1] = `${linhas[1].slice(0, MAX_LINHA - 1)}…`;
+  }
+  return (
+    <g transform={`translate(${x},${y})`}>
+      {linhas.map((l, i) => (
+        <text key={i} x={0} y={0} dy={12 + i * 11} textAnchor="middle" className="fill-muted-foreground" fontSize={10}>
+          {l}
+        </text>
+      ))}
+    </g>
+  );
+}
+
 const selectCls =
   "mt-1 h-9 w-full rounded-lg border border-border bg-background px-2.5 text-sm outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20";
 
@@ -69,6 +105,7 @@ function Home() {
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const [nomesProc, setNomesProc] = useState<Record<string, string>>({});
   const [nomesCid, setNomesCid] = useState<Record<string, string>>({});
+  const [nomesCbo, setNomesCbo] = useState<Record<string, string>>({});
   const [profDetalhe, setProfDetalhe] = useState<string | null>(null);
   // Detalhes (Top procedimentos, Ranking, CID, Caráter) ocultos por padrão; "Ver mais" expande.
   const [verMais, setVerMais] = useState(false);
@@ -83,11 +120,18 @@ function Home() {
     setRows(producao);
     setNomesProc(await carregarNomesProcedimentos(producao.map((r) => r.procedimento)));
     setNomesCid(await carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)));
+    setNomesCbo(await carregarDescricoesCbo(producao.map((r) => r.cbo).filter((c): c is string => !!c)));
     setAtualizadoEm(new Date());
     setLoading(false);
   };
 
   const nomeProc = (codigo: string) => nomesProc[codigo] || null;
+  const nomeCbo = (cbo: string | null) => (cbo ? nomesCbo[cbo] || null : null);
+  // Rótulo do profissional no ranking/filtros: nome (BPA-I/BPA-C v3) → descrição do CBO
+  // (ocupação, p/ fichas antigas sem nome) → CNS → código do CBO. Assim o destaque é o
+  // NOME DA OCUPAÇÃO e o código aparece pequeno ao lado (via detailFor), como nos procedimentos.
+  const rotuloProfissional = (r: ProducaoBpaRow) =>
+    nomeOuCodigo(r.profissional_nome, nomeCbo(r.cbo) || r.profissional_cns || r.cbo);
   // CID: "código — descrição" quando existe na tabela CID-10; senão só o código (fallback,
   // nunca inventa descrição).
   const rotuloCid = (cid: string | null) => {
@@ -100,7 +144,7 @@ function Home() {
   useEffect(() => { setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
 
   const unidades = useMemo(() => agrupar(rows, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)), [rows]);
-  const profissionais = useMemo(() => agrupar(rows, (r) => chaveProfissional(r), (r) => nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo)), [rows]);
+  const profissionais = useMemo(() => agrupar(rows, (r) => chaveProfissional(r), rotuloProfissional), [rows, nomesCbo]);
   const procedimentos = useMemo(() => agrupar(rows, (r) => r.procedimento, (r) => r.procedimento), [rows]);
 
   const filtradas = useMemo(() => rows.filter((r) =>
@@ -125,7 +169,7 @@ function Home() {
   const topUnidades = useMemo(() => agrupar(filtradas, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)).slice(0, 8), [filtradas]);
   // Sem corte fixo: o ranking lista TODOS os profissionais do período (antes só top 8, o
   // que divergia do KPI "profissionais ativos"). A chave é a mesma do KPI (chaveProfissional).
-  const topProfissionais = useMemo(() => agrupar(filtradas, (r) => chaveProfissional(r), (r) => nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo)), [filtradas]);
+  const topProfissionais = useMemo(() => agrupar(filtradas, (r) => chaveProfissional(r), rotuloProfissional), [filtradas, nomesCbo]);
   const topProcedimentos = useMemo(() => agrupar(filtradas, (r) => r.procedimento, (r) => nomeProc(r.procedimento) || r.procedimento).slice(0, 10), [filtradas, nomesProc]);
   const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => rotuloCid(r.cid)).slice(0, 8), [filtradas, nomesCid]);
   const porCarater = useMemo(() => agrupar(filtradas.filter((r) => r.carater), (r) => r.carater || "sem-carater", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`).slice(0, 6), [filtradas]);
@@ -234,10 +278,12 @@ function Home() {
               <ChartContainer config={{ quantidade: { label: "Quantidade", color: "var(--color-chart-1)" } }} className="h-72 w-full">
                 <BarChart data={topUnidades} margin={{ left: 0, right: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} height={58} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="name" interval={0} height={44} tickLine={false} axisLine={false} tick={<TickUnidade />} />
                   <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="quantidade" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="quantidade" radius={[6, 6, 0, 0]}>
+                    {topUnidades.map((u, i) => <Cell key={u.key} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                  </Bar>
                 </BarChart>
               </ChartContainer>
             </ChartBox>
@@ -264,7 +310,7 @@ function Home() {
             {verMais && (
               <>
                 <Ranking title="Top procedimentos" rows={topProcedimentos} detailFor={(k) => k} />
-                <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} hint="Toque num profissional para ver os detalhes" />
+                <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} detailFor={(k) => k} hint="Toque num profissional para ver os detalhes" />
                 <Ranking title="CID mais frequentes" rows={topCid} empty="Sem CID informado" />
                 <Ranking title="Caráter de atendimento" rows={porCarater} detailFor={(k) => k} empty="Sem caráter informado" />
               </>
