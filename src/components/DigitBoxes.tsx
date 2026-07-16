@@ -1,25 +1,18 @@
 import { useRef, useEffect, useState, useContext, createContext } from "react";
 import { Trash2, ArrowUp } from "lucide-react";
 import { ancorarDigitosDireita, ancorarCharsDireita } from "@/lib/digitos-direita";
+import { focarProximoCampo } from "@/lib/foco-campos";
 
 // Habilita a lixeira de "limpar campo" em todos os DigitBoxes descendentes (usado só nas
 // versões v2). Fora de um Provider fica `false` -> os formulários originais não mudam.
 export const DigitBoxesClearableContext = createContext(false);
 
 // Enter: pula para o PRÓXIMO campo (não a próxima caixinha), ignorando as demais
-// caixinhas do grupo atual. Usa a ordem do DOM (= ordem visual de leitura), então
-// funciona em qualquer folha sem precisar encadear refs manualmente.
+// caixinhas do grupo atual (salta o grupo inteiro de uma vez).
 function pularProximoCampo(ownBoxes: (HTMLInputElement | null)[]) {
   const mine = ownBoxes.filter((el): el is HTMLInputElement => !!el);
   const last = mine[mine.length - 1];
-  if (!last) return;
-  const focusaveis = Array.from(
-    document.querySelectorAll<HTMLElement>("input:not([readonly]), select, textarea"),
-  ).filter((el) => el.tabIndex !== -1 && !(el as HTMLInputElement).disabled);
-  const start = focusaveis.indexOf(last);
-  if (start === -1) return;
-  const proximo = focusaveis.slice(start + 1).find((el) => !mine.includes(el as HTMLInputElement));
-  proximo?.focus();
+  focarProximoCampo(last, mine);
 }
 
 interface Box {
@@ -303,6 +296,13 @@ export function TextField({ top, left, width, height, value, onChange, align = "
       id={id}
       value={value}
       onChange={(e) => onChange(uppercase ? e.target.value.toUpperCase() : e.target.value)}
+      onKeyDown={(e) => {
+        // Enter pula para o próximo campo (mesma regra dos DigitBoxes/ComboField).
+        if (e.key === "Enter") {
+          e.preventDefault();
+          focarProximoCampo(e.currentTarget);
+        }
+      }}
       title={invalid ? title : undefined}
       className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}`}
       style={{

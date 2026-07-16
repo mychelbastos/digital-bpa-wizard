@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ComboOption } from "@/lib/bpa-i-v2/racas";
+import { focarProximoCampo } from "@/lib/foco-campos";
 
 interface Props {
   value: string; // código armazenado (ex.: "03") ou ""
@@ -149,11 +150,14 @@ export function ComboField({ value, onChange, options, top, left, width, height,
           } else if (e.key === "ArrowUp") {
             setHi((h) => Math.max(h - 1, 0));
             e.preventDefault();
-          } else if (e.key === "Enter" || e.key === "Tab") {
-            if (open && list[hi]) {
-              pick(list[hi]);
-              if (e.key === "Enter") e.preventDefault();
-            }
+          } else if (e.key === "Enter") {
+            // Confirma a opção destacada (se a lista estiver aberta) e SEMPRE pula para o
+            // próximo campo — mesmo quando o valor já estava escolhido (lista fechada).
+            if (open && list[hi]) pick(list[hi]);
+            e.preventDefault();
+            focarProximoCampo(e.currentTarget);
+          } else if (e.key === "Tab") {
+            if (open && list[hi]) pick(list[hi]);
           } else if (e.key === "Escape") {
             revert();
           }
