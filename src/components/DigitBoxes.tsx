@@ -165,6 +165,19 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     }
   };
 
+  // Ao SAIR do campo (foco vai para fora do grupo), completa as casas vazias à esquerda
+  // com zero — ex.: digitou "1" em Quantidade (5 casas) e pulou -> vira "00001". Só para
+  // campos numéricos ancorados à direita (Quantidade/Idade). Campo totalmente vazio
+  // permanece vazio; já cheio não muda. Basta um padStart no número acumulado.
+  const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (!rightAlign || !numeric) return;
+    const next = e.relatedTarget as HTMLInputElement | null;
+    if (next && refs.current.includes(next)) return; // ainda navegando dentro do grupo
+    const atual = values.filter((v) => v && v.trim() !== "").join("");
+    if (atual.length === 0 || atual.length >= boxes.length) return; // vazio ou já completo
+    onChange(atual.padStart(boxes.length, "0").split(""));
+  };
+
   const onPaste = (i: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData("text").replace(/\s/g, "");
     if (!text) return;
@@ -194,6 +207,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           value={values[i] || ""}
           onChange={(e) => handle(i, e.target.value)}
           onKeyDown={(e) => onKey(i, e)}
+          onBlur={onBlur}
           onPaste={(e) => onPaste(i, e)}
           inputMode={numeric ? "numeric" : "text"}
           pattern={numeric ? "[0-9]" : undefined}

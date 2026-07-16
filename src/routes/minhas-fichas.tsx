@@ -15,7 +15,7 @@ function labelComp(comp: string | null): string {
   return `${meses[Number(comp.slice(4, 6)) - 1]}/${comp.slice(0, 4)}`;
 }
 
-const rotaDoTipo = (tipo: FichaResumo["tipo"], id: string) => (tipo === "BPA-C" ? `/bpa-c-v2?ficha=${id}` : `/bpa-i-v3?ficha=${id}`);
+const rotaDoTipo = (tipo: FichaResumo["tipo"], id: string) => (tipo === "BPA-C" ? `/bpa-c-v3?ficha=${id}` : `/bpa-i-v3?ficha=${id}`);
 
 function MinhasFichasPage() {
   const [fichas, setFichas] = useState<FichaResumo[]>([]);

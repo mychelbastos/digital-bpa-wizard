@@ -37,6 +37,10 @@ const mesLabel = (comp: string) => {
   return `${mes}/${comp.slice(0, 4)}`;
 };
 const nomeOuCodigo = (nome: string | null, codigo: string | null) => nome?.trim() || codigo || "Não informado";
+// Chave de agrupamento de "profissional": CNS (BPA-I) → nome (BPA-C v3, controle interno do
+// painel) → CBO (fallback p/ fichas BPA-C antigas sem nome). Mantém profissionais distintos
+// separados mesmo quando compartilham o CBO.
+const chaveProfissional = (r: ProducaoBpaRow) => r.profissional_cns || r.profissional_nome || r.cbo || "sem-profissional";
 const CHART_COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
 
 const selectCls =
@@ -96,12 +100,12 @@ function Home() {
   useEffect(() => { setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
 
   const unidades = useMemo(() => agrupar(rows, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)), [rows]);
-  const profissionais = useMemo(() => agrupar(rows, (r) => r.profissional_cns || r.cbo || "sem-profissional", (r) => nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo)), [rows]);
+  const profissionais = useMemo(() => agrupar(rows, (r) => chaveProfissional(r), (r) => nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo)), [rows]);
   const procedimentos = useMemo(() => agrupar(rows, (r) => r.procedimento, (r) => r.procedimento), [rows]);
 
   const filtradas = useMemo(() => rows.filter((r) =>
     (cnes === "todos" || (r.cnes || "sem-cnes") === cnes) &&
-    (profissional === "todos" || (r.profissional_cns || r.cbo || "sem-profissional") === profissional) &&
+    (profissional === "todos" || (chaveProfissional(r)) === profissional) &&
     (procedimento === "todos" || r.procedimento === procedimento)
   ), [rows, cnes, profissional, procedimento]);
 
@@ -110,7 +114,7 @@ function Home() {
     const bpaC = filtradas.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
     const bpaI = filtradas.filter((r) => r.tipo === "BPA-I").reduce((s, r) => s + r.quantidade, 0);
     const unidadesAtivas = new Set(filtradas.map((r) => r.cnes).filter(Boolean)).size;
-    const profissionaisAtivos = new Set(filtradas.map((r) => r.profissional_cns || r.cbo).filter(Boolean)).size;
+    const profissionaisAtivos = new Set(filtradas.map((r) => r.profissional_cns || r.profissional_nome || r.cbo).filter(Boolean)).size;
     return { total, bpaC, bpaI, unidadesAtivas, profissionaisAtivos };
   }, [filtradas]);
 
@@ -119,7 +123,9 @@ function Home() {
     { name: "BPA-I", value: kpis.bpaI },
   ].filter((r) => r.value > 0), [kpis]);
   const topUnidades = useMemo(() => agrupar(filtradas, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)).slice(0, 8), [filtradas]);
-  const topProfissionais = useMemo(() => agrupar(filtradas, (r) => r.profissional_cns || r.cbo || "sem-profissional", (r) => nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo)).slice(0, 8), [filtradas]);
+  // Sem corte fixo: o ranking lista TODOS os profissionais do período (antes só top 8, o
+  // que divergia do KPI "profissionais ativos"). A chave é a mesma do KPI (chaveProfissional).
+  const topProfissionais = useMemo(() => agrupar(filtradas, (r) => chaveProfissional(r), (r) => nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo)), [filtradas]);
   const topProcedimentos = useMemo(() => agrupar(filtradas, (r) => r.procedimento, (r) => nomeProc(r.procedimento) || r.procedimento).slice(0, 10), [filtradas, nomesProc]);
   const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => rotuloCid(r.cid)).slice(0, 8), [filtradas, nomesCid]);
   const porCarater = useMemo(() => agrupar(filtradas.filter((r) => r.carater), (r) => r.carater || "sem-carater", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`).slice(0, 6), [filtradas]);
@@ -159,7 +165,7 @@ function Home() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link to="/bpa-c-v2" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+            <Link to="/bpa-c-v3" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
               <FileText className="size-4" /> BPA-C
             </Link>
             <Link to="/bpa-i-v3" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
@@ -281,7 +287,7 @@ function Home() {
         {profDetalhe && (
           <ProfissionalDetalhe
             chave={profDetalhe}
-            rows={filtradas.filter((r) => (r.profissional_cns || r.cbo || "sem-profissional") === profDetalhe)}
+            rows={filtradas.filter((r) => (chaveProfissional(r)) === profDetalhe)}
             nomeProc={nomeProc}
             rotuloCid={rotuloCid}
             onClose={() => setProfDetalhe(null)}

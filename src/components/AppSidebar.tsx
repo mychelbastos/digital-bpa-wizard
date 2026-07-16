@@ -16,7 +16,7 @@ import { souAdmin } from "@/lib/permissoes";
 
 const formularios = [
   { to: "/bpa-i-v3", label: "BPA-I" },
-  { to: "/bpa-c-v2", label: "BPA-C" },
+  { to: "/bpa-c-v3", label: "BPA-C" },
 ] as const;
 
 // Iniciais do nome (até 2 letras) para o avatar quando não há foto.

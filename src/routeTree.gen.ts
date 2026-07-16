@@ -14,6 +14,7 @@ import { Route as MinhasFichasRouteImport } from './routes/minhas-fichas'
 import { Route as FechamentoRouteImport } from './routes/fechamento'
 import { Route as BpaIV3RouteImport } from './routes/bpa-i-v3'
 import { Route as BpaIV2RouteImport } from './routes/bpa-i-v2'
+import { Route as BpaCV3RouteImport } from './routes/bpa-c-v3'
 import { Route as BpaCV2RouteImport } from './routes/bpa-c-v2'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -43,6 +44,11 @@ const BpaIV2Route = BpaIV2RouteImport.update({
   path: '/bpa-i-v2',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BpaCV3Route = BpaCV3RouteImport.update({
+  id: '/bpa-c-v3',
+  path: '/bpa-c-v3',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BpaCV2Route = BpaCV2RouteImport.update({
   id: '/bpa-c-v2',
   path: '/bpa-c-v2',
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/bpa-c-v2': typeof BpaCV2Route
+  '/bpa-c-v3': typeof BpaCV3Route
   '/bpa-i-v2': typeof BpaIV2Route
   '/bpa-i-v3': typeof BpaIV3Route
   '/fechamento': typeof FechamentoRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/bpa-c-v2': typeof BpaCV2Route
+  '/bpa-c-v3': typeof BpaCV3Route
   '/bpa-i-v2': typeof BpaIV2Route
   '/bpa-i-v3': typeof BpaIV3Route
   '/fechamento': typeof FechamentoRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/bpa-c-v2': typeof BpaCV2Route
+  '/bpa-c-v3': typeof BpaCV3Route
   '/bpa-i-v2': typeof BpaIV2Route
   '/bpa-i-v3': typeof BpaIV3Route
   '/fechamento': typeof FechamentoRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/bpa-c-v2'
+    | '/bpa-c-v3'
     | '/bpa-i-v2'
     | '/bpa-i-v3'
     | '/fechamento'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/bpa-c-v2'
+    | '/bpa-c-v3'
     | '/bpa-i-v2'
     | '/bpa-i-v3'
     | '/fechamento'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/bpa-c-v2'
+    | '/bpa-c-v3'
     | '/bpa-i-v2'
     | '/bpa-i-v3'
     | '/fechamento'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   BpaCV2Route: typeof BpaCV2Route
+  BpaCV3Route: typeof BpaCV3Route
   BpaIV2Route: typeof BpaIV2Route
   BpaIV3Route: typeof BpaIV3Route
   FechamentoRoute: typeof FechamentoRoute
@@ -171,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BpaIV2RouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bpa-c-v3': {
+      id: '/bpa-c-v3'
+      path: '/bpa-c-v3'
+      fullPath: '/bpa-c-v3'
+      preLoaderRoute: typeof BpaCV3RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bpa-c-v2': {
       id: '/bpa-c-v2'
       path: '/bpa-c-v2'
@@ -199,6 +219,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   BpaCV2Route: BpaCV2Route,
+  BpaCV3Route: BpaCV3Route,
   BpaIV2Route: BpaIV2Route,
   BpaIV3Route: BpaIV3Route,
   FechamentoRoute: FechamentoRoute,
