@@ -204,7 +204,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           ref={(el) => {
             refs.current[i] = el;
           }}
-          value={values[i] || ""}
+          value={(uppercase ? (values[i] || "").toUpperCase() : values[i]) || ""}
           onChange={(e) => handle(i, e.target.value)}
           onKeyDown={(e) => onKey(i, e)}
           onBlur={onBlur}

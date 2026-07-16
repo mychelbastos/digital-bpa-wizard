@@ -528,7 +528,7 @@ function BpaCV3() {
               setState((prev) => ({ ...prev, nome: e.nome, cnes: cells(e.cnes, 7) }));
             }}
           />
-          <DigitBoxes id="uf" top={UF_TOP} height={UF_HEIGHT} boxes={UF_BOXES} values={state.uf} onChange={(v) => set("uf", v)} numeric={false} compact />
+          <DigitBoxes id="uf" top={UF_TOP} height={UF_HEIGHT} boxes={UF_BOXES} values={state.uf} onChange={(v) => set("uf", v)} numeric={false} uppercase compact />
           <DigitBoxes id="mes" top={UF_TOP} height={UF_HEIGHT} boxes={MES_BOXES} values={state.mes} onChange={(v) => set("mes", v)} compact />
           <DigitBoxes id="ano" top={UF_TOP} height={UF_HEIGHT} boxes={ANO_BOXES} values={state.ano} onChange={(v) => set("ano", v)} compact />
           {/* NOME DO PROFISSIONAL — autocomplete no cache de profissionais da unidade

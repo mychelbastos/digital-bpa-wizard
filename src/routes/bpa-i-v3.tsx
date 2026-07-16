@@ -42,6 +42,15 @@ export const Route = createFileRoute("/bpa-i-v3")({
 
 const STORAGE_KEY = "bpa-i-v3-state-v1";
 
+// Campos de IDENTIFICAÇÃO DO PACIENTE (não os do procedimento/atendimento) — usados pelo
+// botão "repetir paciente" da sequência seguinte, quando o mesmo paciente tem mais de um
+// procedimento na folha.
+const CAMPOS_PACIENTE: (keyof SeqData)[] = [
+  "cnsPac", "nomePac", "sexo", "dataNasc", "nacionalidade", "racaCor", "etnia",
+  "cep", "ibge", "codLog", "endereco", "numero", "complemento", "bairro",
+  "ddd", "telefone", "email", "cpfPac", "situacaoRua",
+];
+
 interface State {
   nomeEstab: string;
   cnes: string[];
@@ -428,6 +437,30 @@ function BpaI() {
       seqs[i] = { ...seqs[i], [field]: value, ...desconfirmar };
       return { ...p, seqs };
     });
+  };
+
+  // Copia a IDENTIFICAÇÃO DO PACIENTE da sequência anterior (mesmo paciente, vários
+  // procedimentos). NÃO copia os campos do procedimento/atendimento (dataAtend, idade,
+  // codProc, qtde, cnpj, servico, classProc, cid, carater, autorizacao).
+  const repetirPaciente = (i: number) => {
+    if (i <= 0) return;
+    setState((p) => {
+      const seqs = [...p.seqs];
+      const prev = seqs[i - 1];
+      const copia: Partial<SeqData> = {};
+      for (const k of CAMPOS_PACIENTE) {
+        const v = prev[k];
+        (copia as Record<string, unknown>)[k] = Array.isArray(v) ? [...v] : v;
+      }
+      seqs[i] = { ...seqs[i], ...copia };
+      return { ...p, seqs };
+    });
+  };
+  // A seq. anterior tem identificação de paciente para copiar?
+  const prevTemPaciente = (i: number) => {
+    if (i <= 0) return false;
+    const prev = state.seqs[i - 1];
+    return prev.cnsPac.some(Boolean) || prev.nomePac.trim() !== "" || Boolean(prev.cpfPac?.some(Boolean));
   };
 
   const clearSeqs = () => {
@@ -836,7 +869,7 @@ function BpaI() {
             getInputs={() => inputsOf("pmes", "pano")}
             onClear={() => setState((p) => ({ ...p, profMes: Array(2).fill(""), profAno: Array(4).fill("") }))} />
           <TextField {...L.PROF_EQUIPE} value={state.profEquipe} onChange={(v) => set("profEquipe", v)} uppercase />
-          <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} compact />
+          <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} rightAlign compact />
 
           {/* 3 Sequências */}
           {L.SEQ_TOPS.map((seqTop, si) => (
@@ -854,6 +887,7 @@ function BpaI() {
               inputsOf={inputsOf}
               endOf={endOf}
               onValidacaoChange={onValidacaoChangeSeq}
+              onRepetirPaciente={prevTemPaciente(si) ? () => repetirPaciente(si) : undefined}
             />
           ))}
 

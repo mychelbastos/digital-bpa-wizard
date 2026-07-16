@@ -126,7 +126,9 @@ function Home() {
   };
 
   const nomeProc = (codigo: string) => nomesProc[codigo] || null;
-  const nomeCbo = (cbo: string | null) => (cbo ? nomesCbo[cbo] || null : null);
+  // Descrição do CBO em MAIÚSCULAS, p/ casar com os nomes dos profissionais (também
+  // gravados em maiúsculas) e manter o design uniforme no ranking.
+  const nomeCbo = (cbo: string | null) => (cbo ? (nomesCbo[cbo] ? nomesCbo[cbo].toUpperCase() : null) : null);
   // Rótulo do profissional no ranking/filtros: nome (BPA-I/BPA-C v3) → descrição do CBO
   // (ocupação, p/ fichas antigas sem nome) → CNS → código do CBO. Assim o destaque é o
   // NOME DA OCUPAÇÃO e o código aparece pequeno ao lado (via detailFor), como nos procedimentos.

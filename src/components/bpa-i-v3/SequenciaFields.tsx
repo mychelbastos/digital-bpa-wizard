@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ClipboardCopy } from "lucide-react";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import { ComboField } from "@/components/bpa-i-v2/ComboField";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
@@ -41,6 +42,10 @@ interface Props {
   // Reporta ao componente pai a lista de motivos de erro desta sequência (undefined/[]
   // = tudo ok). O pai agrega as 3 sequências p/ bloquear Salvar/Gerar enquanto houver erro.
   onValidacaoChange?: (si: number, motivos: string[]) => void;
+  // Quando fornecido (seq. 2/3 com paciente preenchido na anterior), mostra um botão para
+  // copiar a IDENTIFICAÇÃO DO PACIENTE da sequência de cima (mesmo paciente, vários
+  // procedimentos). Não copia dados do procedimento/atendimento.
+  onRepetirPaciente?: () => void;
 }
 
 // v3: identificação do paciente aceita CPF (11 díg.) OU CNS (15 díg.) no mesmo campo.
@@ -52,8 +57,11 @@ const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês da competência
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
 // (não dá pra chamar hooks dentro do .map() do componente pai).
-export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange }: Props) {
+export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente }: Props) {
   const R = L.REL;
+  // Identificação do paciente ainda vazia? (mostra o botão "repetir paciente" só aí, p/
+  // não poluir; some assim que começa a digitar/copiar).
+  const pacienteVazio = !s.cnsPac.some(Boolean) && !s.nomePac.trim() && !(s.cpfPac?.some(Boolean));
   const focarNome = () => setTimeout(() => document.getElementById(`s${si}-nome`)?.focus(), 0);
   // Ao completar um CPF válido (11 díg.), alinha os números à DIREITA (folgas à esquerda,
   // terminando na borda como o CNS) e pula direto para o Nome — sem obrigar Tab nas
@@ -177,6 +185,23 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       {/* Paciente row 1: CPF/CNS (inteligente) + Nome */}
       <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
         values={s.cnsPac} onChange={onChangeIdent} onComplete={focarNome} invalid={identInvalida || identBloqueio || identParcial} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} dimEmpty={ident.tipo === "CPF" && ident.valido} clearable compact />
+      {/* Botão "repetir paciente" (só na tela; ignorado no PDF): copia a identificação do
+          paciente da sequência de cima. Aparece na SEQ 2/3 enquanto a identificação está
+          vazia; some ao começar a preencher (dá lugar ao selo CPF/CNS). */}
+      {onRepetirPaciente && pacienteVazio && (
+        <button
+          type="button"
+          tabIndex={-1}
+          data-html2canvas-ignore="true"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onRepetirPaciente}
+          title="Copiar a identificação do paciente da sequência de cima (mesmo paciente)"
+          className="absolute z-[60] inline-flex items-center gap-1 rounded bg-sky-600 px-1.5 py-px text-[9px] font-semibold leading-none text-white shadow-sm transition-colors hover:bg-sky-700"
+          style={{ top: `calc(${seqTop + R.cnsPac}% - 1.7%)`, left: `${R.cnsPacBoxes[0].left}%` }}
+        >
+          <ClipboardCopy style={{ width: 10, height: 10 }} /> Repetir paciente
+        </button>
+      )}
       {/* Selo do tipo detectado (só na tela; ignorado no PDF): CPF aos 11 díg., CNS aos 15. */}
       {ident.tipo && (
         <div
