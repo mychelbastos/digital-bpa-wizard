@@ -29,7 +29,7 @@ import {
 export const Route = createFileRoute("/bpa-c-v2")({
   head: () => ({
     meta: [
-      { title: "BPA-C v2 — Boletim de Produção Ambulatorial Consolidado" },
+      { title: "BPA-C — Boletim de Produção Ambulatorial Consolidado" },
       { name: "description", content: "BPA-C digital com total somado automaticamente em tempo real." },
     ],
   }),
@@ -113,6 +113,8 @@ function BpaCV2() {
   const [prontoImprimir, setProntoImprimir] = useState(false);
   const fichaIdRef = useRef<string | null>(null);
   const fichaTituloRef = useRef<string | null>(null);
+  // Espelho reativo do título (o ref não re-renderiza) — usado no cabeçalho.
+  const [fichaTitulo, setFichaTitulo] = useState<string | null>(null);
   const FICHA_ID_KEY = "bpa-c-v2-ficha-id";
   const FICHA_TITULO_KEY = "bpa-c-v2-ficha-titulo";
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
@@ -152,6 +154,7 @@ function BpaCV2() {
       try {
         fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
         fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
+        setFichaTitulo(fichaTituloRef.current);
       } catch { /* noop */ }
       refreshStatus(fichaIdRef.current);
     }
@@ -243,6 +246,7 @@ function BpaCV2() {
   const persistFicha = (id: string, titulo: string) => {
     fichaIdRef.current = id;
     fichaTituloRef.current = titulo;
+    setFichaTitulo(titulo);
     try {
       localStorage.setItem(FICHA_ID_KEY, id);
       localStorage.setItem(FICHA_TITULO_KEY, titulo);
@@ -251,6 +255,7 @@ function BpaCV2() {
   const limparFichaPersistida = () => {
     fichaIdRef.current = null;
     fichaTituloRef.current = null;
+    setFichaTitulo(null);
     try {
       localStorage.removeItem(FICHA_ID_KEY);
       localStorage.removeItem(FICHA_TITULO_KEY);
@@ -379,10 +384,12 @@ function BpaCV2() {
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-            <h1 className="text-base font-semibold">BPA-C v2 — Boletim Consolidado</h1>
-            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800">total automático</span>
+            <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
+              {fichaTitulo || "Nova ficha"}
+            </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-bold tracking-wide text-amber-800">BPA-C</span>
             <LoginControl user={user} />
             {user && (
               <div className="group relative flex">

@@ -33,7 +33,7 @@ import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
 export const Route = createFileRoute("/bpa-i-v3")({
   head: () => ({
     meta: [
-      { title: "BPA-I v3 (beta) — Boletim Individualizado com CPF/CNS inteligente" },
+      { title: "BPA-I — Boletim Individualizado" },
       { name: "description", content: "Versão de teste do BPA-I com campo inteligente CPF/CNS (layout DATASUS 04.00). Mesma estrutura do BPA-I v2." },
     ],
   }),
@@ -159,6 +159,8 @@ function BpaI() {
   const fichaIdRef = useRef<string | null>(null);
   // Título da ficha atual (quando já salva/carregada), p/ pré-preencher o "Salvar".
   const fichaTituloRef = useRef<string | null>(null);
+  // Espelho reativo do título (o ref não re-renderiza) — usado no cabeçalho.
+  const [fichaTitulo, setFichaTitulo] = useState<string | null>(null);
   const FICHA_ID_KEY = "bpa-i-v3-ficha-id";
   const FICHA_TITULO_KEY = "bpa-i-v3-ficha-titulo";
   // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
@@ -216,6 +218,7 @@ function BpaI() {
       try {
         fichaIdRef.current = localStorage.getItem(FICHA_ID_KEY);
         fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
+        setFichaTitulo(fichaTituloRef.current);
       } catch { /* noop */ }
       refreshStatus(fichaIdRef.current);
     }
@@ -239,6 +242,7 @@ function BpaI() {
   const persistFicha = (id: string, titulo: string) => {
     fichaIdRef.current = id;
     fichaTituloRef.current = titulo;
+    setFichaTitulo(titulo);
     try {
       localStorage.setItem(FICHA_ID_KEY, id);
       localStorage.setItem(FICHA_TITULO_KEY, titulo);
@@ -247,6 +251,7 @@ function BpaI() {
   const limparFichaPersistida = () => {
     fichaIdRef.current = null;
     fichaTituloRef.current = null;
+    setFichaTitulo(null);
     try {
       localStorage.removeItem(FICHA_ID_KEY);
       localStorage.removeItem(FICHA_TITULO_KEY);
@@ -600,9 +605,12 @@ function BpaI() {
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-            <h1 className="text-base font-semibold">BPA-I v3 (beta) — Boletim Individualizado (CPF/CNS)</h1>
+            <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
+              {fichaTitulo || "Nova ficha"}
+            </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold tracking-wide text-primary">BPA-I</span>
             <LoginControl user={user} />
             {user && (
               <div className="group relative flex">
