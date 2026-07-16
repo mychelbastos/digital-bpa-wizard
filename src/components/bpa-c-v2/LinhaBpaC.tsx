@@ -50,6 +50,7 @@ export function LinhaBpaC({ i, top, height, row, prevRow, competencia, onUpdate,
         invalid={v.idadeInvalida} title={v.idadeMotivo} />
       <DigitBoxes id={`q-${i}`} top={top} height={height} boxes={qtdBoxes}
         values={row.quantidade} onChange={(vv) => onUpdate("quantidade", vv)}
+        rightAlign
         invalid={v.qtdeInvalida} title={v.qtdeMotivo} />
     </div>
   );

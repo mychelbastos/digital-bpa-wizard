@@ -80,13 +80,26 @@ const initialState = (): State => ({
   respData: hojeDigits(),
 });
 
+// Re-ancora à direita (estilo calculadora) um campo de dígitos: mantém os últimos n
+// dígitos e preenche o começo com vazio. Idempotente — normaliza quantidades salvas
+// no formato antigo (à esquerda) para o novo (à direita). Espaços contam como vazio.
+function ancorarDireita(arr: string[] | undefined, n: number): string[] {
+  const d = (arr ?? []).join("").replace(/\D/g, "").slice(-n);
+  return [...Array(Math.max(0, n - d.length)).fill(""), ...d.split("")];
+}
+
+// Normaliza a Quantidade de todas as linhas para ancorada à direita.
+function normalizarQuantidades(s: State): State {
+  return { ...s, rows: s.rows.map((r) => ({ ...r, quantidade: ancorarDireita(r.quantidade, 5) })) };
+}
+
 function loadState(): State {
   if (typeof window === "undefined") return initialState();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState();
     const parsed = JSON.parse(raw) as Partial<State>;
-    return { ...initialState(), ...parsed };
+    return normalizarQuantidades({ ...initialState(), ...parsed });
   } catch {
     return initialState();
   }
@@ -305,7 +318,7 @@ function BpaCV2() {
   const carregarFichaSalva = async (id: string, titulo?: string) => {
     const ficha = await carregarFicha(id);
     if (!ficha) return;
-    setState({ ...initialState(), ...(ficha.dados as Partial<State>) });
+    setState(normalizarQuantidades({ ...initialState(), ...(ficha.dados as Partial<State>) }));
     persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-C");
     refreshStatus(id);
     if (autoPrintRef.current) setProntoImprimir(true);
