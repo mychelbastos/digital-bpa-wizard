@@ -105,23 +105,21 @@ export async function carregarNomesProcedimentos(codigos: string[]): Promise<Rec
   }
 }
 
-// Descrição (ocupação/CBO) de vários códigos de uma vez, a partir do cache de vínculos
-// (`profissional_vinculos`, populado quando os profissionais são sincronizados). Mapa
-// código→descrição; códigos ausentes ficam de fora (o dashboard cai no código puro). É
-// best-effort: a cobertura cresce à medida que os estabelecimentos sincronizam. Nunca lança.
+// Descrição (ocupação/CBO) de vários códigos de uma vez, da tabela oficial do SIGTAP
+// (`ocupacoes_sigtap`, tb_ocupacao). Mapa código→descrição; códigos ausentes ficam de fora
+// (o dashboard cai no código puro). Nunca lança.
 export async function carregarDescricoesCbo(codigos: string[]): Promise<Record<string, string>> {
   const unicos = [...new Set(codigos.filter((c) => c && c.length >= 4))];
   if (!supabase || unicos.length === 0) return {};
   try {
     const { data, error } = await supabase
-      .from("profissional_vinculos")
-      .select("cbo_codigo, cbo_descricao")
-      .in("cbo_codigo", unicos);
+      .from("ocupacoes_sigtap")
+      .select("codigo, nome")
+      .in("codigo", unicos);
     if (error || !data) return {};
     const mapa: Record<string, string> = {};
-    for (const row of data as { cbo_codigo: string; cbo_descricao: string | null }[]) {
-      const d = (row.cbo_descricao ?? "").trim();
-      if (d && !mapa[row.cbo_codigo]) mapa[row.cbo_codigo] = d;
+    for (const row of data as { codigo: string; nome: string }[]) {
+      if (!mapa[row.codigo]) mapa[row.codigo] = row.nome;
     }
     return mapa;
   } catch {
