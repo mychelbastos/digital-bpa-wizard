@@ -19,7 +19,6 @@ import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
-import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
@@ -611,7 +610,6 @@ function BpaI() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-bold tracking-wide text-sky-700">BPA-I</span>
-            <LoginControl user={user} />
             {user && (
               <div className="group relative flex">
                 <button
@@ -872,10 +870,6 @@ function BpaI() {
           <TextField {...L.GEST_RUBRICA} value={state.gestRubrica} onChange={(v) => set("gestRubrica", v)} uppercase />
           {renderData("gestData", L.GEST_DATA_DIA, L.GEST_DATA_MES, L.GEST_DATA_ANO)}
         </div>
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Dados salvos automaticamente neste navegador. Posições do BPA-I são uma primeira aproximação — me diga quais campos precisam de ajuste.
-        </p>
       </main>
     </div>
   );

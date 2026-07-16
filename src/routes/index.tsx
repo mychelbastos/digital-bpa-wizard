@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
-  Activity, Building2, FileText, IdCard, LogOut, MapPin, RefreshCw, Settings,
+  Activity, Building2, ChevronDown, FileText, IdCard, MapPin, RefreshCw,
   ShieldCheck, Stethoscope, TrendingUp, Users, X,
 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -11,7 +11,6 @@ import {
   type VinculoResumo, type ProducaoBpaRow,
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
-import { useAuthUser, signOut } from "@/lib/bpa-i-v2/auth";
 
 const CARATER_NOME = new Map(CARATERES.map((c) => [c.code, c.label]));
 const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? null : null);
@@ -56,7 +55,6 @@ function agrupar<T extends string>(rows: ProducaoBpaRow[], key: (r: ProducaoBpaR
 }
 
 function Home() {
-  const user = useAuthUser();
   const [rows, setRows] = useState<ProducaoBpaRow[]>([]);
   const [vinculos, setVinculos] = useState<VinculoResumo[]>([]);
   const [competencia, setCompetencia] = useState(competenciaAtual());
@@ -68,6 +66,8 @@ function Home() {
   const [nomesProc, setNomesProc] = useState<Record<string, string>>({});
   const [nomesCid, setNomesCid] = useState<Record<string, string>>({});
   const [profDetalhe, setProfDetalhe] = useState<string | null>(null);
+  // Detalhes (Top procedimentos, Ranking, CID, Caráter) ocultos por padrão; "Ver mais" expande.
+  const [verMais, setVerMais] = useState(false);
 
   const carregar = async () => {
     setLoading(true);
@@ -142,19 +142,6 @@ function Home() {
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">SIA / SUS</p>
             <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard BPA Digital</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {user && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary ring-1 ring-primary/20">
-                <Users className="size-3.5" /> {user.nome || user.email}
-              </span>
-            )}
-            <Link to="/perfil" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-              <Settings className="size-3.5" /> Perfil
-            </Link>
-            <button onClick={() => signOut()} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-              <LogOut className="size-3.5" /> Sair
-            </button>
           </div>
         </div>
       </header>
@@ -268,10 +255,26 @@ function Home() {
               </div>
             </ChartBox>
 
-            <Ranking title="Top procedimentos" rows={topProcedimentos} detailFor={(k) => k} />
-            <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} hint="Toque num profissional para ver os detalhes" />
-            <Ranking title="CID mais frequentes" rows={topCid} empty="Sem CID informado" />
-            <Ranking title="Caráter de atendimento" rows={porCarater} detailFor={(k) => k} empty="Sem caráter informado" />
+            {verMais && (
+              <>
+                <Ranking title="Top procedimentos" rows={topProcedimentos} detailFor={(k) => k} />
+                <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} hint="Toque num profissional para ver os detalhes" />
+                <Ranking title="CID mais frequentes" rows={topCid} empty="Sem CID informado" />
+                <Ranking title="Caráter de atendimento" rows={porCarater} detailFor={(k) => k} empty="Sem caráter informado" />
+              </>
+            )}
+          </div>
+        )}
+
+        {!loading && filtradas.length > 0 && (
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={() => setVerMais((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+            >
+              {verMais ? "Ver menos" : "Ver mais detalhes"}
+              <ChevronDown className={`size-4 transition-transform ${verMais ? "rotate-180" : ""}`} />
+            </button>
           </div>
         )}
 

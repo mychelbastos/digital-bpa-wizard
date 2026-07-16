@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
-import { LoginControl } from "@/components/bpa-i-v2/LoginControl";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
@@ -390,7 +389,6 @@ function BpaCV2() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-teal-100 px-2 py-1 text-xs font-bold tracking-wide text-teal-700">BPA-C</span>
-            <LoginControl user={user} />
             {user && (
               <div className="group relative flex">
                 <button

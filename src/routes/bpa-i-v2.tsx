@@ -752,10 +752,6 @@ function BpaI() {
           <TextField {...L.GEST_RUBRICA} value={state.gestRubrica} onChange={(v) => set("gestRubrica", v)} />
           {renderData("gestData", L.GEST_DATA_DIA, L.GEST_DATA_MES, L.GEST_DATA_ANO)}
         </div>
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Dados salvos automaticamente neste navegador. Posições do BPA-I são uma primeira aproximação — me diga quais campos precisam de ajuste.
-        </p>
       </main>
     </div>
   );

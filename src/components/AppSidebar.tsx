@@ -11,7 +11,7 @@ import {
   Files,
   ShieldCheck,
 } from "lucide-react";
-import { signOut } from "@/lib/bpa-i-v2/auth";
+import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { souAdmin } from "@/lib/permissoes";
 
 const formularios = [
@@ -19,12 +19,17 @@ const formularios = [
   { to: "/bpa-c-v2", label: "BPA-C" },
 ] as const;
 
+// Iniciais do nome (até 2 letras) para o avatar quando não há foto.
+const iniciais = (s: string) =>
+  s.trim().split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
+
 const linkCls = (active: boolean) =>
   `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${active ? "bg-primary/10 font-medium text-primary" : "text-foreground hover:bg-muted"}`;
 
 // Menu lateral do app (só no desktop; no mobile as páginas mantêm o "← Início").
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const user = useAuthUser();
   const [formOpen, setFormOpen] = useState(true);
   const [podeAdmin, setPodeAdmin] = useState(false);
   const formActive = formularios.some((f) => pathname.startsWith(f.to));
@@ -74,22 +79,41 @@ export function AppSidebar() {
         <Link to="/fechamento" className={linkCls(pathname.startsWith("/fechamento"))}>
           <CalendarCheck className="size-4 shrink-0" /> Fechamento do mês
         </Link>
-        <Link to="/perfil" className={linkCls(pathname.startsWith("/perfil"))}>
-          <UserCog className="size-4 shrink-0" /> Perfil
-        </Link>
         {podeAdmin && (
           <Link to="/admin" className={linkCls(pathname.startsWith("/admin"))}>
             <ShieldCheck className="size-4 shrink-0" /> Administração
           </Link>
         )}
       </nav>
-      <button
-        type="button"
-        onClick={() => signOut()}
-        className="m-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
-      >
-        <LogOut className="size-4" /> Sair
-      </button>
+
+      {/* Identidade + Perfil + Sair, agrupados no rodapé. */}
+      <div className="border-t border-border p-2">
+        <div className="mb-1 flex items-center gap-2 px-2 py-2">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {iniciais(user?.nome || user?.email || "")}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-foreground" title={user?.nome || user?.email || ""}>
+              {user?.nome || user?.email || "—"}
+            </div>
+            {user?.cns ? (
+              <div className="truncate text-[11px] text-muted-foreground">CNS {user.cns}</div>
+            ) : user?.email ? (
+              <div className="truncate text-[11px] text-muted-foreground">{user.email}</div>
+            ) : null}
+          </div>
+        </div>
+        <Link to="/perfil" className={linkCls(pathname.startsWith("/perfil"))}>
+          <UserCog className="size-4 shrink-0" /> Perfil
+        </Link>
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+        >
+          <LogOut className="size-4" /> Sair
+        </button>
+      </div>
     </aside>
   );
 }
