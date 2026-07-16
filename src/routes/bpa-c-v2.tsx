@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { exportSheetPdf } from "@/lib/export-pdf";
 import bpacBg from "@/assets/bpa-c.png";
-import { DigitBoxes } from "@/components/DigitBoxes";
+import { DigitBoxes, DigitBoxesClearableContext } from "@/components/DigitBoxes";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
@@ -488,10 +488,12 @@ function BpaCV2() {
         >
           <img src={bpacBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
+          <DigitBoxesClearableContext.Provider value={true}>
           {/* Header */}
           <DigitBoxes id="cnes" top={CNES_TOP} height={HEADER_HEIGHT_DIGIT} boxes={CNES_BOXES} values={state.cnes} onChange={(v) => set("cnes", v)} compact />
           <EstabelecimentoAutocomplete
             {...NAME_FIELD}
+            uppercase
             nome={state.nome}
             onChangeNome={(v) =>
               // Edição manual do Nome: se havia CNES, os dois divergem -> limpa o CNES.
@@ -539,6 +541,7 @@ function BpaCV2() {
             values={state.respData.slice(2, 4)} onChange={(v) => set("respData", [...state.respData.slice(0, 2), ...v, ...state.respData.slice(4)])} compact />
           <DigitBoxes id="rda" top={RESP_DATA_TOP} height={RESP_DATA_H} boxes={RESP_DATA_ANO}
             values={state.respData.slice(4, 8)} onChange={(v) => set("respData", [...state.respData.slice(0, 4), ...v])} compact />
+          </DigitBoxesClearableContext.Provider>
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
