@@ -516,7 +516,8 @@ function BpaCV2() {
           {/* 20 linhas — com Procedimento (SIGTAP) e CBO inteligentes */}
           {ROW_TOPS.map((top, i) => (
             <LinhaBpaC key={i} i={i} top={top} height={ROW_HEIGHTS[i]}
-              row={state.rows[i]} competencia={competencia()}
+              row={state.rows[i]} prevRow={i > 0 ? state.rows[i - 1] : undefined}
+              competencia={competencia()}
               onUpdate={(field, vals) => updateRow(i, field, vals)}
               onValidacao={onValidacaoLinha} />
           ))}

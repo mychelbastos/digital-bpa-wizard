@@ -14,6 +14,7 @@ interface Props {
   values: string[];
   onChange: (vals: string[]) => void;
   clearable?: boolean;
+  onRepeat?: () => void;
   // Resultado da busca no SIGTAP (calculado 1x por sequência em useValidacaoProcedimento
   // e compartilhado com as demais checagens — evita repetir a mesma consulta aqui).
   naoEncontrado: boolean;
@@ -24,7 +25,7 @@ interface Props {
 // HistoricoField) + indicador visual de validade contra o SIGTAP (borda vermelha
 // quando completo mas não encontrado — mesmo padrão do CNS inválido — e balão com o
 // nome oficial quando encontrado, como confirmação de que é o código certo).
-export function ProcedimentoField({ id, top, height, boxes, values, onChange, clearable, naoEncontrado, nomeEncontrado }: Props) {
+export function ProcedimentoField({ id, top, height, boxes, values, onChange, clearable, onRepeat, naoEncontrado, nomeEncontrado }: Props) {
   const code = values.join("");
   const completo = code.length === boxes.length;
   const [sugs, setSugs] = useState<SugestaoHistorico[]>([]);
@@ -73,6 +74,7 @@ export function ProcedimentoField({ id, top, height, boxes, values, onChange, cl
         onChange={onChange}
         registerRefs={(els) => { refsRef.current = els; }}
         clearable={clearable}
+        onRepeat={onRepeat}
         invalid={naoEncontrado}
         compact
       />

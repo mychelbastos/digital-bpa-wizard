@@ -10,6 +10,8 @@ interface Props {
   top: number;
   height: number;
   row: RowData;
+  // Linha anterior (i-1), para o botão "repetir de cima" de Procedimento/CBO.
+  prevRow?: RowData;
   // Competência do boletim (AAAAMM) — usada como competência da linha no crivo SIGTAP.
   competencia: string | null;
   onUpdate: (field: keyof RowData, vals: string[]) => void;
@@ -21,20 +23,27 @@ interface Props {
 // Uma linha do BPA-C com o crivo do SIGTAP: Procedimento (existe + nome no balão),
 // Idade (faixa etária), Quantidade (máximo) e CBO (compatível com o procedimento).
 // Extraído p/ chamar o hook de validação 1x por linha.
-export function LinhaBpaC({ i, top, height, row, competencia, onUpdate, onValidacao }: Props) {
+export function LinhaBpaC({ i, top, height, row, prevRow, competencia, onUpdate, onValidacao }: Props) {
   const v = useValidacaoLinhaBpaC(row, competencia);
   useEffect(() => {
     onValidacao?.(i, v.motivos);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v.motivos.join("|")]);
 
+  // "Repetir de cima": só oferece quando a linha anterior tem o valor preenchido.
+  const temValor = (arr?: string[]) => Boolean(arr?.some((x) => x && x.trim() !== ""));
+  const repetirProc = temValor(prevRow?.procedimento) ? () => onUpdate("procedimento", [...prevRow!.procedimento]) : undefined;
+  const repetirCbo = temValor(prevRow?.cbo) ? () => onUpdate("cbo", [...prevRow!.cbo]) : undefined;
+
   return (
     <div>
       <ProcedimentoField id={`p-${i}`} top={top} height={height} boxes={procBoxes}
         values={row.procedimento} onChange={(vv) => onUpdate("procedimento", vv)}
+        onRepeat={repetirProc}
         naoEncontrado={v.naoEncontrado} nomeEncontrado={v.procNome} />
       <CboField id={`c-${i}`} top={top} height={height} boxes={cboBoxes}
         values={row.cbo} onChange={(vv) => onUpdate("cbo", vv)}
+        onRepeat={repetirCbo}
         invalid={v.cboInvalido} title={v.cboMotivo} />
       <DigitBoxes id={`i-${i}`} top={top} height={height} boxes={idadeBoxes}
         values={row.idade} onChange={(vv) => onUpdate("idade", vv)}

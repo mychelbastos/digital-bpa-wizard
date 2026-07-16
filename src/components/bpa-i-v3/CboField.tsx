@@ -15,6 +15,7 @@ interface Props {
   values: string[];
   onChange: (vals: string[]) => void;
   clearable?: boolean;
+  onRepeat?: () => void;
   invalid?: boolean;
   title?: string;
 }
@@ -22,7 +23,7 @@ interface Props {
 // CBO (BPA-I v3): campo de dígitos com autocomplete por histórico (igual ao
 // HistoricoField) MAIS um balão com o nome/descrição do CBO quando o código está
 // completo — mesmo padrão do Código do Procedimento. O balão some do PDF.
-export function CboField({ id, top, height, boxes, values, onChange, clearable, invalid, title }: Props) {
+export function CboField({ id, top, height, boxes, values, onChange, clearable, onRepeat, invalid, title }: Props) {
   const code = values.join("");
   const completo = code.length === boxes.length;
   const [sugs, setSugs] = useState<SugestaoHistorico[]>([]);
@@ -83,6 +84,7 @@ export function CboField({ id, top, height, boxes, values, onChange, clearable, 
         onChange={onChange}
         registerRefs={(els) => { refsRef.current = els; }}
         clearable={clearable}
+        onRepeat={onRepeat}
         invalid={invalid}
         title={title}
         compact

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useContext, createContext } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, ArrowUp } from "lucide-react";
 
 // Habilita a lixeira de "limpar campo" em todos os DigitBoxes descendentes (usado só nas
 // versões v2). Fora de um Provider fica `false` -> os formulários originais não mudam.
@@ -64,28 +64,32 @@ interface Props {
   // Esmaece as células VAZIAS, sinalizando que não são usadas (ex.: as 4 folgas de um
   // CPF de 11 díg. num campo de 15 do CNS, alinhado à direita). Continuam editáveis. Opt-in.
   dimEmpty?: boolean;
+  // "Repetir de cima": quando fornecido, um botão ↑ aparece ao focar o campo VAZIO,
+  // copiando o valor da linha anterior (definido pelo pai). Some assim que há dígito.
+  onRepeat?: () => void;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title, uppercase = false, dimEmpty = false }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title, uppercase = false, dimEmpty = false, onRepeat }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
   const showClear = clearable ?? ctxClearable;
   const [focused, setFocused] = useState(false);
+  const vazio = !values.some((v) => v && v.trim() !== "");
 
   useEffect(() => {
     if (registerRefs) registerRefs(refs.current.filter(Boolean) as HTMLInputElement[]);
   });
 
-  // A lixeira só aparece com uma caixinha DESTE grupo focada (evita poluição visual).
+  // A lixeira/repetir só aparece com uma caixinha DESTE grupo focada (evita poluição visual).
   useEffect(() => {
-    if (!showClear) return;
+    if (!showClear && !onRepeat) return;
     const onFocusIn = (e: FocusEvent) => {
       setFocused(refs.current.includes(e.target as HTMLInputElement));
     };
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
-  }, [showClear]);
+  }, [showClear, onRepeat]);
 
   // Foca uma caixinha com o cursor no FINAL do dígito (não no início) — assim, ao
   // navegar com as setas em qualquer direção, o Backspace sempre apaga o que está ali,
@@ -196,7 +200,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           }}
         />
       ))}
-      {showClear && focused && (
+      {showClear && focused && !vazio && (
         <button
           type="button"
           tabIndex={-1}
@@ -219,6 +223,31 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           }}
         >
           <Trash2 style={{ width: "60%", height: "60%" }} />
+        </button>
+      )}
+      {onRepeat && focused && vazio && (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="Repetir valor da linha de cima"
+          title="Repetir o valor da linha de cima"
+          data-html2canvas-ignore="true"
+          onMouseDown={(e) => e.preventDefault()} // não rouba o foco antes do clique
+          onClick={onRepeat}
+          className="flex items-center justify-center rounded-full bg-sky-600 text-white shadow-md ring-2 ring-white transition-transform duration-150 hover:bg-sky-700 hover:scale-110 active:scale-90"
+          style={{
+            position: "absolute",
+            top: `${top}%`,
+            left: `${rightEdge + 0.5}%`,
+            height: `${height}%`,
+            aspectRatio: "1",
+            zIndex: 50,
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+          }}
+        >
+          <ArrowUp style={{ width: "60%", height: "60%" }} />
         </button>
       )}
     </>
