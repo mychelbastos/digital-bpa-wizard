@@ -412,9 +412,10 @@ function ResumoFpoTotal({ resumo, competencia, onVerDetalhes }: {
   onVerDetalhes: () => void;
 }) {
   const tot = resumo.reduce(
-    (a, u) => ({ tetoRS: a.tetoRS + u.tetoRS, prodRS: a.prodRS + u.produzidoRS, saldoRS: a.saldoRS + u.saldoRS }),
-    { tetoRS: 0, prodRS: 0, saldoRS: 0 },
+    (a, u) => ({ tetoRS: a.tetoRS + u.tetoRS, prodRS: a.prodRS + u.produzidoRS }),
+    { tetoRS: 0, prodRS: 0 },
   );
+  const saldoRS = tot.tetoRS - tot.prodRS;
   const pct = tot.tetoRS > 0 ? tot.prodRS / tot.tetoRS : 0;
   const over = pct > 1;
   const pctTxt = pct > 0 && pct < 0.1 ? (pct * 100).toFixed(1).replace(".", ",") : (pct * 100).toFixed(0);
@@ -441,7 +442,7 @@ function ResumoFpoTotal({ resumo, competencia, onVerDetalhes }: {
           </div>
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Saldo</p>
-            <p className={`mt-0.5 text-xl font-bold tabular-nums sm:text-2xl ${tot.saldoRS < 0 ? "text-rose-600" : "text-emerald-600"}`}>{brlFmt(tot.saldoRS)}</p>
+            <p className={`mt-0.5 text-xl font-bold tabular-nums sm:text-2xl ${saldoRS < 0 ? "text-rose-600" : "text-emerald-600"}`}>{brlFmt(saldoRS)}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
