@@ -96,7 +96,7 @@ function FpoPage() {
             <h1 className="flex items-center gap-2 text-base font-semibold"><FileSpreadsheet className="size-4" /> FPO — Ficha de Programação Orçamentária</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows })}
+            <button onClick={() => gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome })}
               disabled={rows.length === 0}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
               <FileDown className="size-4" /> Gerar relatório

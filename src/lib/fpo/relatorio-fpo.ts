@@ -33,6 +33,7 @@ export interface DadosRelatorioFpo {
   competencia: string;
   rows: FpoComparacaoRow[];
   geradoEm?: Date;
+  responsavel?: string | null; // nome impresso sob a linha de assinatura (ex.: usuário logado)
 }
 
 export function gerarRelatorioFpo(dados: DadosRelatorioFpo) {
@@ -41,7 +42,7 @@ export function gerarRelatorioFpo(dados: DadosRelatorioFpo) {
 }
 
 // Constrói o PDF (sem salvar) — separado p/ ser testável (contar páginas, etc.).
-export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date() }: DadosRelatorioFpo): jsPDF {
+export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date(), responsavel }: DadosRelatorioFpo): jsPDF {
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
@@ -193,7 +194,26 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
   if (pendencias) notas.push(`${pendencias} não casaram no SIGTAP (revisar).`);
   if (semTeto) notas.push(`${semTeto} produzido(s) sem teto.`);
   notas.push("Saldo negativo = produção acima do teto.");
-  if (y + 12 < rodapeLimite) pdf.text(notas.join("  ·  "), M, y);
+  if (y + 12 < rodapeLimite) { pdf.text(notas.join("  ·  "), M, y); y += 16; }
+
+  // Assinatura do responsável — no fim do relatório. Nova página se não couber.
+  if (y + 78 > H - 20) y = desenharCabecalhoPagina();
+  const sy = y + 48;
+  const cx = W / 2;
+  const lw = 300;
+  pdf.setDrawColor(...ESCURO);
+  pdf.setLineWidth(0.7);
+  pdf.line(cx - lw / 2, sy, cx + lw / 2, sy);
+  if (responsavel) {
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(10);
+    pdf.setTextColor(...ESCURO);
+    pdf.text(fit(responsavel, lw, 10), cx, sy + 14, { align: "center" });
+  }
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(...CINZA);
+  pdf.text("Assinatura do responsável", cx, sy + (responsavel ? 26 : 14), { align: "center" });
 
   return pdf;
 }
