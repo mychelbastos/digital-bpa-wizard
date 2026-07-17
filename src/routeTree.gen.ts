@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as MinhasFichasRouteImport } from './routes/minhas-fichas'
+import { Route as ImportarRouteImport } from './routes/importar'
 import { Route as FpoRouteImport } from './routes/fpo'
 import { Route as FechamentoRouteImport } from './routes/fechamento'
 import { Route as BpaIV3RouteImport } from './routes/bpa-i-v3'
@@ -28,6 +29,11 @@ const PerfilRoute = PerfilRouteImport.update({
 const MinhasFichasRoute = MinhasFichasRouteImport.update({
   id: '/minhas-fichas',
   path: '/minhas-fichas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportarRoute = ImportarRouteImport.update({
+  id: '/importar',
+  path: '/importar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FpoRoute = FpoRouteImport.update({
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/bpa-i-v3': typeof BpaIV3Route
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
+  '/importar': typeof ImportarRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
 }
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/bpa-i-v3': typeof BpaIV3Route
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
+  '/importar': typeof ImportarRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
 }
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/bpa-i-v3': typeof BpaIV3Route
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
+  '/importar': typeof ImportarRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
 }
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/bpa-i-v3'
     | '/fechamento'
     | '/fpo'
+    | '/importar'
     | '/minhas-fichas'
     | '/perfil'
   fileRoutesByTo: FileRoutesByTo
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/bpa-i-v3'
     | '/fechamento'
     | '/fpo'
+    | '/importar'
     | '/minhas-fichas'
     | '/perfil'
   id:
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/bpa-i-v3'
     | '/fechamento'
     | '/fpo'
+    | '/importar'
     | '/minhas-fichas'
     | '/perfil'
   fileRoutesById: FileRoutesById
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   BpaIV3Route: typeof BpaIV3Route
   FechamentoRoute: typeof FechamentoRoute
   FpoRoute: typeof FpoRoute
+  ImportarRoute: typeof ImportarRoute
   MinhasFichasRoute: typeof MinhasFichasRoute
   PerfilRoute: typeof PerfilRoute
 }
@@ -174,6 +187,13 @@ declare module '@tanstack/react-router' {
       path: '/minhas-fichas'
       fullPath: '/minhas-fichas'
       preLoaderRoute: typeof MinhasFichasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/importar': {
+      id: '/importar'
+      path: '/importar'
+      fullPath: '/importar'
+      preLoaderRoute: typeof ImportarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fpo': {
@@ -244,6 +264,7 @@ const rootRouteChildren: RootRouteChildren = {
   BpaIV3Route: BpaIV3Route,
   FechamentoRoute: FechamentoRoute,
   FpoRoute: FpoRoute,
+  ImportarRoute: ImportarRoute,
   MinhasFichasRoute: MinhasFichasRoute,
   PerfilRoute: PerfilRoute,
 }

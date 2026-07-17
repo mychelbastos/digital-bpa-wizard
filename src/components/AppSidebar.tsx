@@ -6,6 +6,7 @@ import {
   FolderOpen,
   CalendarCheck,
   FileSpreadsheet,
+  Database,
   UserCog,
   LogOut,
   ChevronDown,
@@ -82,6 +83,9 @@ export function AppSidebar() {
         </Link>
         <Link to="/fpo" className={linkCls(pathname.startsWith("/fpo"))}>
           <FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)
+        </Link>
+        <Link to="/importar" className={linkCls(pathname.startsWith("/importar"))}>
+          <Database className="size-4 shrink-0" /> Importar produção
         </Link>
         {podeAdmin && (
           <Link to="/admin" className={linkCls(pathname.startsWith("/admin"))}>
