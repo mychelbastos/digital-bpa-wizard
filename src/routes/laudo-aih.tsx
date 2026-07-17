@@ -288,7 +288,8 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos }:
 }) {
   const partes = (value || "").split("|");
   const vals = segmentos.map((_, i) => partes[i] ?? "");
-  const pos = segmentos.length === 3 ? [[0, 0.26], [0.37, 0.63], [0.68, 1.0]] : [[0, 0.42], [0.58, 1.0]];
+  // Frações da largura por segmento (ano ganha mais espaço p/ 4 dígitos; folga p/ as "/").
+  const pos = segmentos.length === 3 ? [[0, 0.21], [0.29, 0.50], [0.56, 1.0]] : [[0, 0.46], [0.54, 1.0]];
   const focar = (i: number) => (document.getElementById(`seg-${campo.key}-${i}`) as HTMLInputElement | null)?.focus();
   const onSeg = (i: number, digs: string) => {
     const nv = digs.replace(/\D/g, "").slice(0, segmentos[i]);
@@ -302,7 +303,7 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos }:
         <input key={i} id={`seg-${campo.key}-${i}`} value={vals[i]} inputMode="numeric"
           onChange={(e) => onSeg(i, e.target.value)}
           className={`form-text absolute ${contornoCls}`}
-          style={{ top: pctS(rect.top), left: pctS(rect.left + rect.width * pos[i][0]), width: pctS(rect.width * (pos[i][1] - pos[i][0])), height: pctS(rect.height), textAlign: "center" }} />
+          style={{ top: pctS(rect.top), left: pctS(rect.left + rect.width * pos[i][0]), width: pctS(rect.width * (pos[i][1] - pos[i][0])), height: pctS(rect.height), textAlign: "center", padding: "0 1px", fontSize: "clamp(6px, 0.95cqw, 11px)", lineHeight: 1 }} />
       ))}
     </>
   );
