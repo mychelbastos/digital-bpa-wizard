@@ -12,6 +12,7 @@ import {
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { carregarResumoFpo, type FpoResumoUnidade } from "@/lib/fpo/fpo";
+import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 
 const CARATER_NOME = new Map(CARATERES.map((c) => [c.code, c.label]));
 const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? null : null);
@@ -110,6 +111,7 @@ function Home() {
   const [profDetalhe, setProfDetalhe] = useState<string | null>(null);
   const [procModalOpen, setProcModalOpen] = useState(false);
   const [resumoFpo, setResumoFpo] = useState<FpoResumoUnidade[]>([]);
+  const [nomesEstabFpo, setNomesEstabFpo] = useState<Record<string, string>>({});
   // Detalhes (Top procedimentos, Ranking, FPO × Produção) ocultos por padrão; "Ver mais" expande.
   const [verMais, setVerMais] = useState(false);
 
@@ -187,13 +189,21 @@ function Home() {
   );
   useEffect(() => {
     let vivo = true;
-    carregarResumoFpo(cnesEscopo, competencia).then((r) => vivo && setResumoFpo(r));
+    (async () => {
+      const r = await carregarResumoFpo(cnesEscopo, competencia);
+      if (!vivo) return;
+      setResumoFpo(r);
+      // Unidades com teto mas sem produção no mês não estão em `rows` (nome desconhecido):
+      // busca o nome do cadastro para não exibir só o código.
+      const nomes = await Promise.all(r.map(async (u) => [u.cnes, (await buscarEstabelecimento(u.cnes)) || ""] as const));
+      if (vivo) setNomesEstabFpo((prev) => ({ ...prev, ...Object.fromEntries(nomes.filter(([, n]) => n)) }));
+    })();
     return () => { vivo = false; };
   }, [cnesEscopo, competencia]);
   const nomeCnes = useMemo(() => {
     const m = new Map(unidades.map((u) => [u.key, u.name]));
-    return (c: string) => m.get(c) || c;
-  }, [unidades]);
+    return (c: string) => m.get(c) || nomesEstabFpo[c] || c;
+  }, [unidades, nomesEstabFpo]);
 
   // Escopo exibido, derivado dos VÍNCULOS (não de um "papel" na conta). É só rótulo — o
   // acesso real é decidido pela RLS/permissão no banco.
@@ -428,7 +438,7 @@ function ResumoFpo({ resumo, nomeCnes, competencia }: {
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 lg:col-span-3">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-foreground">FPO × Produção · {mesLabel(competencia)}</h2>
-        <Link to="/fpo" className="shrink-0 text-[11px] font-semibold text-primary hover:underline">Abrir FPO</Link>
+        <Link to="/fpo" search={{ comp: competencia }} className="shrink-0 text-[11px] font-semibold text-primary hover:underline">Abrir FPO</Link>
       </div>
       {resumo.length === 0 ? (
         <p className="text-sm text-muted-foreground">Sem FPO cadastrada para as unidades vinculadas neste mês. Importe o teto na página FPO.</p>
@@ -453,19 +463,27 @@ function ResumoFpo({ resumo, nomeCnes, competencia }: {
           <ul className="space-y-3">
             {resumo.map((u) => {
               const p = u.tetoRS > 0 ? u.produzidoRS / u.tetoRS : 0;
+              const nome = nomeCnes(u.cnes);
               return (
-                <li key={u.cnes} className="text-sm">
-                  <div className="mb-1 flex items-center justify-between gap-3">
-                    <span className="min-w-0 truncate font-medium">{nomeCnes(u.cnes)}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{brlFmt(u.produzidoRS)} / {brlFmt(u.tetoRS)} · {(p * 100).toFixed(0)}%</span>
-                  </div>
-                  <Barra pct={p} />
-                  {(u.estourados > 0 || u.produzidoForaQtd > 0) && (
-                    <div className="mt-1 flex flex-wrap gap-2 text-[10px]">
-                      {u.estourados > 0 && <span className="rounded bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-700">{u.estourados} procedimento(s) acima do teto</span>}
-                      {u.produzidoForaQtd > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">{u.produzidoForaQtd} produzido(s) sem teto</span>}
+                <li key={u.cnes}>
+                  <Link to="/fpo" search={{ cnes: u.cnes, comp: competencia }}
+                    className="-mx-2 block rounded-lg px-2 py-1 text-sm transition-colors hover:bg-muted"
+                    title="Ver o FPO desta unidade">
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="min-w-0 truncate font-medium">{nome}</span>
+                        {nome !== u.cnes && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{u.cnes}</span>}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{brlFmt(u.produzidoRS)} / {brlFmt(u.tetoRS)} · {(p * 100).toFixed(0)}%</span>
                     </div>
-                  )}
+                    <Barra pct={p} />
+                    {(u.estourados > 0 || u.produzidoForaQtd > 0) && (
+                      <div className="mt-1 flex flex-wrap gap-2 text-[10px]">
+                        {u.estourados > 0 && <span className="rounded bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-700">{u.estourados} procedimento(s) acima do teto</span>}
+                        {u.produzidoForaQtd > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">{u.produzidoForaQtd} produzido(s) sem teto</span>}
+                      </div>
+                    )}
+                  </Link>
                 </li>
               );
             })}

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
@@ -10,8 +10,14 @@ import {
   carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, definirTetoVigente,
   cnesEditaveisFpo, type FpoComparacaoRow, type FpoItemResolvido,
 } from "@/lib/fpo/fpo";
+import { gerarRelatorioFpo } from "@/lib/fpo/relatorio-fpo";
 
 export const Route = createFileRoute("/fpo")({
+  // Aceita ?cnes=&comp= para abrir já numa unidade/competência (vindo do card da dashboard).
+  validateSearch: (s: Record<string, unknown>): { cnes?: string; comp?: string } => ({
+    cnes: typeof s.cnes === "string" ? s.cnes : undefined,
+    comp: typeof s.comp === "string" && /^\d{6}$/.test(s.comp) ? s.comp : undefined,
+  }),
   head: () => ({ meta: [{ title: "FPO — Ficha de Programação Orçamentária" }] }),
   component: FpoPage,
 });
@@ -26,10 +32,11 @@ const compLabel = (c: string) => `${c.slice(4, 6)}/${c.slice(0, 4)}`;
 
 function FpoPage() {
   const user = useAuthUser();
+  const search = Route.useSearch();
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
   const [editaveis, setEditaveis] = useState<Set<string>>(new Set());
-  const [cnes, setCnes] = useState("");
-  const [competencia, setCompetencia] = useState(competenciaAtual());
+  const [cnes, setCnes] = useState(search.cnes ?? "");
+  const [competencia, setCompetencia] = useState(search.comp ?? competenciaAtual());
   const [rows, setRows] = useState<FpoComparacaoRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -88,11 +95,18 @@ function FpoPage() {
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
             <h1 className="flex items-center gap-2 text-base font-semibold"><FileSpreadsheet className="size-4" /> FPO — Ficha de Programação Orçamentária</h1>
           </div>
-          {podeEditar && (
-            <button onClick={() => setImportOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-              <Upload className="size-4" /> Importar arquivo
+          <div className="flex items-center gap-2">
+            <button onClick={() => gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows })}
+              disabled={rows.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
+              <FileDown className="size-4" /> Gerar relatório
             </button>
-          )}
+            {podeEditar && (
+              <button onClick={() => setImportOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+                <Upload className="size-4" /> Importar arquivo
+              </button>
+            )}
+          </div>
         </div>
       </header>
 

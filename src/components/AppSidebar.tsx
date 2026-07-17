@@ -81,7 +81,7 @@ export function AppSidebar() {
         <Link to="/fechamento" className={linkCls(pathname.startsWith("/fechamento"))}>
           <CalendarCheck className="size-4 shrink-0" /> Fechamento do mês
         </Link>
-        <Link to="/fpo" className={linkCls(pathname.startsWith("/fpo"))}>
+        <Link to="/fpo" search={{}} className={linkCls(pathname.startsWith("/fpo"))}>
           <FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)
         </Link>
         <Link to="/importar" className={linkCls(pathname.startsWith("/importar"))}>
