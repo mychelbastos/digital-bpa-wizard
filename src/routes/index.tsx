@@ -402,10 +402,10 @@ function ChartBox({ title, className = "", children }: { title: string; classNam
 const brlFmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 // Barra de progresso produzido/teto: verde até 100%, vermelha quando estoura.
-function Barra({ pct }: { pct: number }) {
+function Barra({ pct, thick }: { pct: number; thick?: boolean }) {
   const over = pct > 1;
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+    <div className={`${thick ? "h-3" : "h-2"} w-full overflow-hidden rounded-full bg-muted`}>
       <div className={`h-full rounded-full ${over ? "bg-rose-500" : "bg-emerald-500"}`} style={{ width: `${Math.min(100, Math.max(0, pct * 100))}%` }} />
     </div>
   );
@@ -432,12 +432,23 @@ function ResumoFpo({ resumo, nomeCnes, competencia }: {
         <p className="text-sm text-muted-foreground">Sem FPO cadastrada para as unidades vinculadas neste mês. Importe o teto na página FPO.</p>
       ) : (
         <>
-          <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-            <span className="text-sm"><strong className="tabular-nums">{brlFmt(tot.prodRS)}</strong> produzido <span className="text-muted-foreground">de {brlFmt(tot.tetoRS)} orçado</span></span>
-            <span className={`text-sm font-semibold tabular-nums ${pct > 1 ? "text-rose-600" : "text-emerald-600"}`}>{(pct * 100).toFixed(0)}% do teto</span>
+          {/* Total geral: painel destacado, distinto das barras por unidade. */}
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4">
+            <div className="mb-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total das unidades</p>
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
+                  {brlFmt(tot.prodRS)} <span className="text-sm font-medium text-muted-foreground">de {brlFmt(tot.tetoRS)} orçado</span>
+                </p>
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-sm font-bold tabular-nums ${pct > 1 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
+                {(pct * 100).toFixed(0)}% do teto
+              </span>
+            </div>
+            <Barra pct={pct} thick />
           </div>
-          <Barra pct={pct} />
-          <ul className="mt-4 space-y-3">
+          <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Por unidade</p>
+          <ul className="space-y-3">
             {resumo.map((u) => {
               const p = u.tetoRS > 0 ? u.produzidoRS / u.tetoRS : 0;
               return (
