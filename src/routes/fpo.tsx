@@ -182,10 +182,10 @@ function FpoPage() {
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.procedimento} className={`border-b border-border/60 ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
+                    <tr key={r.procedimento} className={`border-b border-border/60 [&>td]:align-top ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
                       <td className="px-3 py-2">
-                        <div className="flex min-w-0 items-baseline gap-2">
-                          <span className="min-w-0 truncate" title={r.descricao}>{r.descricao}</span>
+                        <div className="truncate" title={r.descricao}>{r.descricao}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           <Badges r={r} />
                         </div>
                       </td>
