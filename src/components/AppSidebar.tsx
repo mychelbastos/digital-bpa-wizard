@@ -5,6 +5,7 @@ import {
   FileText,
   FolderOpen,
   CalendarCheck,
+  FileSpreadsheet,
   UserCog,
   LogOut,
   ChevronDown,
@@ -78,6 +79,9 @@ export function AppSidebar() {
         </Link>
         <Link to="/fechamento" className={linkCls(pathname.startsWith("/fechamento"))}>
           <CalendarCheck className="size-4 shrink-0" /> Fechamento do mês
+        </Link>
+        <Link to="/fpo" className={linkCls(pathname.startsWith("/fpo"))}>
+          <FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)
         </Link>
         {podeAdmin && (
           <Link to="/admin" className={linkCls(pathname.startsWith("/admin"))}>
