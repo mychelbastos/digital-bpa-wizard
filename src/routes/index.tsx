@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
   Activity, Building2, ChevronDown, FileText, IdCard, MapPin, RefreshCw,
@@ -112,6 +112,12 @@ function Home() {
   const [procModalOpen, setProcModalOpen] = useState(false);
   const [resumoFpo, setResumoFpo] = useState<FpoResumoUnidade[]>([]);
   const [nomesEstabFpo, setNomesEstabFpo] = useState<Record<string, string>>({});
+  const fpoDetalheRef = useRef<HTMLDivElement>(null);
+  // "Ver detalhes" do total: abre o "Ver mais" e rola até o detalhe por unidade.
+  const verDetalhesFpo = () => {
+    setVerMais(true);
+    setTimeout(() => fpoDetalheRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
   // Detalhes (Top procedimentos, Ranking, FPO × Produção) ocultos por padrão; "Ver mais" expande.
   const [verMais, setVerMais] = useState(false);
 
@@ -249,6 +255,11 @@ function Home() {
           </label>
         </section>
 
+        {/* Resumo FPO × Produção (total) — logo abaixo dos filtros. Detalhe fica no "Ver mais". */}
+        {resumoFpo.length > 0 && (
+          <ResumoFpoTotal resumo={resumoFpo} competencia={competencia} onVerDetalhes={verDetalhesFpo} />
+        )}
+
         {/* KPIs */}
         <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Kpi icon={<TrendingUp className="size-4" />} label={`Produção · ${mesLabel(competencia)}`} value={kpis.total} destaque />
@@ -314,7 +325,9 @@ function Home() {
                     onVerCompleto={procedimentosFull.length > 0 ? () => setProcModalOpen(true) : undefined} />
                   <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} detailFor={(k) => k} hint="Toque num profissional para ver os detalhes" />
                 </div>
-                <ResumoFpo resumo={resumoFpo} nomeCnes={nomeCnes} competencia={competencia} />
+                <div ref={fpoDetalheRef} className="scroll-mt-24 lg:col-span-3">
+                  <ResumoFpo resumo={resumoFpo} nomeCnes={nomeCnes} competencia={competencia} />
+                </div>
               </>
             )}
           </div>
@@ -392,43 +405,57 @@ function Barra({ pct, thick }: { pct: number; thick?: boolean }) {
 }
 
 // Card "FPO × Produção": teto orçado vs produzido no mês, por unidade vinculada.
+// Resumo do TOTAL (sempre visível, abaixo dos filtros). "Ver detalhes" rola até o detalhe por unidade.
+function ResumoFpoTotal({ resumo, competencia, onVerDetalhes }: {
+  resumo: FpoResumoUnidade[];
+  competencia: string;
+  onVerDetalhes: () => void;
+}) {
+  const tot = resumo.reduce(
+    (a, u) => ({ tetoRS: a.tetoRS + u.tetoRS, prodRS: a.prodRS + u.produzidoRS }),
+    { tetoRS: 0, prodRS: 0 },
+  );
+  const pct = tot.tetoRS > 0 ? tot.prodRS / tot.tetoRS : 0;
+  return (
+    <section className="mb-5 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-foreground">FPO × Produção · {mesLabel(competencia)}</h2>
+        <button onClick={onVerDetalhes} className="shrink-0 text-[11px] font-semibold text-primary hover:underline">Ver detalhes</button>
+      </div>
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4">
+        <div className="mb-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total das unidades</p>
+            <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
+              {brlFmt(tot.prodRS)} <span className="text-sm font-medium text-muted-foreground">de {brlFmt(tot.tetoRS)} orçado</span>
+            </p>
+          </div>
+          <span className={`rounded-full px-2.5 py-1 text-sm font-bold tabular-nums ${pct > 1 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
+            {(pct * 100).toFixed(0)}% do teto
+          </span>
+        </div>
+        <Barra pct={pct} thick />
+      </div>
+    </section>
+  );
+}
+
+// Detalhe por unidade (no "Ver mais detalhes"). Cada unidade abre o FPO da unidade.
 function ResumoFpo({ resumo, nomeCnes, competencia }: {
   resumo: FpoResumoUnidade[];
   nomeCnes: (c: string) => string;
   competencia: string;
 }) {
-  const tot = resumo.reduce(
-    (a, u) => ({ tetoRS: a.tetoRS + u.tetoRS, prodRS: a.prodRS + u.produzidoRS, estourados: a.estourados + u.estourados }),
-    { tetoRS: 0, prodRS: 0, estourados: 0 },
-  );
-  const pct = tot.tetoRS > 0 ? tot.prodRS / tot.tetoRS : 0;
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 lg:col-span-3">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">FPO × Produção · {mesLabel(competencia)}</h2>
+        <h2 className="text-sm font-semibold text-foreground">FPO × Produção · por unidade</h2>
         <Link to="/fpo" search={{ comp: competencia }} className="shrink-0 text-[11px] font-semibold text-primary hover:underline">Abrir FPO</Link>
       </div>
       {resumo.length === 0 ? (
         <p className="text-sm text-muted-foreground">Sem FPO cadastrada para as unidades vinculadas neste mês. Importe o teto na página FPO.</p>
       ) : (
-        <>
-          {/* Total geral: painel destacado, distinto das barras por unidade. */}
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4">
-            <div className="mb-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total das unidades</p>
-                <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
-                  {brlFmt(tot.prodRS)} <span className="text-sm font-medium text-muted-foreground">de {brlFmt(tot.tetoRS)} orçado</span>
-                </p>
-              </div>
-              <span className={`rounded-full px-2.5 py-1 text-sm font-bold tabular-nums ${pct > 1 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
-                {(pct * 100).toFixed(0)}% do teto
-              </span>
-            </div>
-            <Barra pct={pct} thick />
-          </div>
-          <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Por unidade</p>
-          <ul className="space-y-3">
+        <ul className="space-y-3">
             {resumo.map((u) => {
               const p = u.tetoRS > 0 ? u.produzidoRS / u.tetoRS : 0;
               const nome = nomeCnes(u.cnes);
@@ -456,7 +483,6 @@ function ResumoFpo({ resumo, nomeCnes, competencia }: {
               );
             })}
           </ul>
-        </>
       )}
     </div>
   );
