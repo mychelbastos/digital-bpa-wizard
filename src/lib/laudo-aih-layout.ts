@@ -18,6 +18,7 @@ export interface Campo {
   maxLen?: number;  // limite de caracteres/dígitos
   data?: boolean;   // dd/mm/aaaa — 3 sub-caixas numéricas com auto-avanço
   hora?: boolean;   // hh:mm — 2 sub-caixas numéricas
+  celulas?: number; // N casinhas de 1 dígito (ex.: código do caráter = 2), auto-avanço
 }
 
 export interface Check {
@@ -67,7 +68,7 @@ export const CAMPOS: Campo[] = [
   { key: "notif_compulsoria", top: 53.9, left: 77.7, width: 21, num: true },
   { key: "proc_descricao", top: 56.9, left: 1, width: 69.8, height: 1.5, upper: true },
   { key: "proc_codigo", top: 57, left: 71.4, width: 27.4, height: 1.4, num: true, maxLen: 10 },
-  { key: "carater_codigo", top: 59.4, left: 1.5, width: 3.4, num: true, maxLen: 2 },
+  { key: "carater_codigo", top: 59.4, left: 1.5, width: 3.4, celulas: 2 },
   { key: "clinica", top: 59.4, left: 21.5, width: 45.3, upper: true },
   { key: "leito_complementar", top: 59.4, left: 67.4, width: 31.3, height: 1.2, upper: true },
   { key: "equipamentos", top: 61.8, left: 1.1, width: 98, height: 1.5, upper: true },

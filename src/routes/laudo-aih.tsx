@@ -142,6 +142,7 @@ function LaudoAihPage() {
             const val = estado.txt[c.key] ?? "";
             if (c.data) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={[2, 2, 4]} />;
             if (c.hora) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={[2, 2]} />;
+            if (c.celulas) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={Array(c.celulas).fill(1)} uniforme />;
             if (c.area) return <textarea key={c.key} value={val} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute resize-none whitespace-pre-wrap ${contornoCls}`} style={{ ...style, textAlign: "left", lineHeight: 1.2 }} />;
             return <input key={c.key} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute ${contornoCls}`} style={style} />;
           })}
@@ -283,13 +284,19 @@ function filtrar(c: Campo, v: string): string {
 
 // Campo de data (dd/mm/aaaa) ou hora (hh:mm): sub-caixas numéricas com auto-avanço.
 // O valor é guardado como "seg1|seg2|..." (separador que nunca aparece na tela).
-function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos }: {
-  campo: Campo; rect: Rect; value: string; onChange: (v: string) => void; contornoCls: string; segmentos: number[];
+function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, uniforme }: {
+  campo: Campo; rect: Rect; value: string; onChange: (v: string) => void; contornoCls: string; segmentos: number[]; uniforme?: boolean;
 }) {
   const partes = (value || "").split("|");
   const vals = segmentos.map((_, i) => partes[i] ?? "");
-  // Frações da largura por segmento (ano ganha mais espaço p/ 4 dígitos; folga p/ as "/").
-  const pos = segmentos.length === 3 ? [[0, 0.21], [0.29, 0.50], [0.56, 1.0]] : [[0, 0.46], [0.54, 1.0]];
+  // Frações da largura por segmento. `uniforme` = células iguais de 1 dígito (ex.: código do
+  // caráter). Senão: data (ano ganha mais espaço p/ 4 dígitos) ou hora (2 iguais).
+  const uniformePos = (): number[][] => {
+    const n = segmentos.length, gap = 0.12;
+    const cw = (1 - gap * (n - 1)) / n;
+    return segmentos.map((_, i) => { const s = i * (cw + gap); return [s, s + cw]; });
+  };
+  const pos = uniforme ? uniformePos() : segmentos.length === 3 ? [[0, 0.21], [0.29, 0.50], [0.56, 1.0]] : [[0, 0.46], [0.54, 1.0]];
   const focar = (i: number) => (document.getElementById(`seg-${campo.key}-${i}`) as HTMLInputElement | null)?.focus();
   const onSeg = (i: number, digs: string) => {
     const nv = digs.replace(/\D/g, "").slice(0, segmentos[i]);
