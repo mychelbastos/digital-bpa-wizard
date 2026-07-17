@@ -107,6 +107,7 @@ function Home() {
   const [nomesCid, setNomesCid] = useState<Record<string, string>>({});
   const [nomesCbo, setNomesCbo] = useState<Record<string, string>>({});
   const [profDetalhe, setProfDetalhe] = useState<string | null>(null);
+  const [procModalOpen, setProcModalOpen] = useState(false);
   // Detalhes (Top procedimentos, Ranking, CID, Caráter) ocultos por padrão; "Ver mais" expande.
   const [verMais, setVerMais] = useState(false);
 
@@ -172,7 +173,10 @@ function Home() {
   // Sem corte fixo: o ranking lista TODOS os profissionais do período (antes só top 8, o
   // que divergia do KPI "profissionais ativos"). A chave é a mesma do KPI (chaveProfissional).
   const topProfissionais = useMemo(() => agrupar(filtradas, (r) => chaveProfissional(r), rotuloProfissional), [filtradas, nomesCbo]);
-  const topProcedimentos = useMemo(() => agrupar(filtradas, (r) => r.procedimento, (r) => nomeProc(r.procedimento) || r.procedimento).slice(0, 10), [filtradas, nomesProc]);
+  // Lista COMPLETA de procedimentos (todos), e o recorte top 10 exibido no card. O botão
+  // "Ver completo" abre o modal com a lista inteira e detalhada.
+  const procedimentosFull = useMemo(() => agrupar(filtradas, (r) => r.procedimento, (r) => nomeProc(r.procedimento) || r.procedimento), [filtradas, nomesProc]);
+  const topProcedimentos = useMemo(() => procedimentosFull.slice(0, 10), [procedimentosFull]);
   const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => rotuloCid(r.cid)).slice(0, 8), [filtradas, nomesCid]);
   const porCarater = useMemo(() => agrupar(filtradas.filter((r) => r.carater), (r) => r.carater || "sem-carater", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`).slice(0, 6), [filtradas]);
 
@@ -311,7 +315,9 @@ function Home() {
 
             {verMais && (
               <>
-                <Ranking title="Top procedimentos" rows={topProcedimentos} detailFor={(k) => k} />
+                <Ranking title="Top procedimentos" rows={topProcedimentos} detailFor={(k) => k}
+                  hint={`top 10 de ${procedimentosFull.length} procedimento${procedimentosFull.length === 1 ? "" : "s"}`}
+                  onVerCompleto={procedimentosFull.length > 0 ? () => setProcModalOpen(true) : undefined} />
                 <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} detailFor={(k) => k} hint="Toque num profissional para ver os detalhes" />
                 <Ranking title="CID mais frequentes" rows={topCid} empty="Sem CID informado" />
                 <Ranking title="Caráter de atendimento" rows={porCarater} detailFor={(k) => k} empty="Sem caráter informado" />
@@ -340,6 +346,10 @@ function Home() {
             rotuloCid={rotuloCid}
             onClose={() => setProfDetalhe(null)}
           />
+        )}
+
+        {procModalOpen && (
+          <ProcedimentosModal rows={procedimentosFull} onClose={() => setProcModalOpen(false)} />
         )}
 
         {atualizadoEm && (
@@ -375,20 +385,29 @@ function ChartBox({ title, className = "", children }: { title: string; classNam
   );
 }
 
-function Ranking({ title, rows, empty = "Sem dados", detailFor, onRowClick, hint }: {
+function Ranking({ title, rows, empty = "Sem dados", detailFor, onRowClick, hint, onVerCompleto }: {
   title: string;
   rows: { key: string; name: string; quantidade: number }[];
   empty?: string;
   detailFor?: (key: string) => string | null; // legenda secundária (ex.: código) mostrada só se diferir do nome
   onRowClick?: (key: string) => void;
   hint?: string;
+  // Quando fornecido, mostra um botão "Ver completo" no cabeçalho (abre o modal com a lista inteira).
+  onVerCompleto?: () => void;
 }) {
   const max = rows[0]?.quantidade || 1;
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        {hint && rows.length > 0 && <span className="text-[10px] text-muted-foreground">{hint}</span>}
+        <span className="flex items-baseline gap-2">
+          {hint && rows.length > 0 && <span className="text-[10px] text-muted-foreground">{hint}</span>}
+          {onVerCompleto && rows.length > 0 && (
+            <button type="button" onClick={onVerCompleto} className="shrink-0 text-[11px] font-semibold text-primary hover:underline">
+              Ver completo
+            </button>
+          )}
+        </span>
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">{empty}</p>
@@ -422,6 +441,66 @@ function Ranking({ title, rows, empty = "Sem dados", detailFor, onRowClick, hint
           })}
         </ol>
       )}
+    </div>
+  );
+}
+
+// Modal com a lista COMPLETA e detalhada de procedimentos (todos, não só o top 10).
+// Mostra posição, nome, código, nº de atendimentos (linhas) e quantidade, ordenado desc.
+function ProcedimentosModal({ rows, onClose }: {
+  rows: { key: string; name: string; quantidade: number; atendimentos: number }[];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [onClose]);
+  const max = rows[0]?.quantidade || 1;
+  const totalQtd = rows.reduce((s, r) => s + r.quantidade, 0);
+  const totalAtend = rows.reduce((s, r) => s + r.atendimentos, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-border bg-card shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <header className="sticky top-0 flex items-start justify-between gap-3 border-b border-border bg-card/95 px-5 py-4 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <FileText className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-foreground">Todos os procedimentos</h2>
+              <p className="text-xs text-muted-foreground">
+                {rows.length} procedimento{rows.length === 1 ? "" : "s"} · {totalQtd.toLocaleString("pt-BR")} quantidade · {totalAtend.toLocaleString("pt-BR")} atendimento{totalAtend === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg border border-border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </header>
+
+        <ol className="divide-y divide-border p-5">
+          {rows.map((r, i) => (
+            <li key={r.key} className="py-2.5">
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="w-6 shrink-0 text-right text-xs font-semibold text-muted-foreground">{i + 1}</span>
+                  <span className="min-w-0 truncate text-sm text-foreground">{r.name}</span>
+                  {r.name !== r.key && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{r.key}</span>}
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">{r.atendimentos} atend.</span>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">{r.quantidade.toLocaleString("pt-BR")}</span>
+                </span>
+              </div>
+              <div className="ml-8 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full" style={{ width: `${Math.max(4, (r.quantidade / max) * 100)}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
     </div>
   );
 }
