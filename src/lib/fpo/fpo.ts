@@ -178,3 +178,65 @@ export async function carregarComparacaoFpo(cnes: string, competencia: string): 
 export async function cnesEditaveisFpo(): Promise<string[]> {
   return cnesComPermissao("editar_fpo");
 }
+
+export interface FpoResumoUnidade {
+  cnes: string;
+  tetoQtd: number;
+  produzidoQtd: number;      // produção de procedimentos COM teto
+  produzidoForaQtd: number;  // produção de procedimentos SEM teto (fora do orçado)
+  tetoRS: number;
+  produzidoRS: number;       // produção (com teto) valorada pelo preço do teto
+  estourados: number;        // nº de procedimentos com produzido > teto
+}
+
+// Resumo FPO × produção por unidade, para um conjunto de CNES e a competência (mês de
+// apresentação). Usa o mesmo modelo de vigência (teto = última competência ≤ X). Retorna só
+// as unidades que têm FPO vigente. Nunca lança.
+export async function carregarResumoFpo(cnesList: string[], competencia: string): Promise<FpoResumoUnidade[]> {
+  const cnes = [...new Set(cnesList.filter(Boolean))];
+  if (!supabase || cnes.length === 0 || !competencia) return [];
+  const [{ data: tetos }, { data: prod }] = await Promise.all([
+    supabase.from("fpo_teto").select("cnes, procedimento, competencia, qtd_orcada, valor_unitario")
+      .in("cnes", cnes).lte("competencia", competencia),
+    supabase.from("producao_dashboard").select("cnes, procedimento, quantidade")
+      .in("cnes", cnes).eq("mes_producao", competencia),
+  ]);
+
+  // Teto vigente por (cnes, procedimento) = maior competência ≤ X.
+  type V = { competencia: string; qtd: number; valor: number };
+  const vig = new Map<string, V>();
+  for (const t of (tetos ?? []) as { cnes: string; procedimento: string; competencia: string; qtd_orcada: number; valor_unitario: number }[]) {
+    const k = `${t.cnes}|${t.procedimento}`;
+    const cur = vig.get(k);
+    if (!cur || t.competencia > cur.competencia) vig.set(k, { competencia: t.competencia, qtd: t.qtd_orcada, valor: Number(t.valor_unitario) });
+  }
+
+  // Produção somada por (cnes, procedimento).
+  const prodPor = new Map<string, number>();
+  for (const p of (prod ?? []) as { cnes: string; procedimento: string; quantidade: number }[]) {
+    const k = `${p.cnes}|${p.procedimento}`;
+    prodPor.set(k, (prodPor.get(k) ?? 0) + (p.quantidade || 0));
+  }
+
+  const porCnes = new Map<string, FpoResumoUnidade>();
+  const getU = (c: string) => {
+    let u = porCnes.get(c);
+    if (!u) { u = { cnes: c, tetoQtd: 0, produzidoQtd: 0, produzidoForaQtd: 0, tetoRS: 0, produzidoRS: 0, estourados: 0 }; porCnes.set(c, u); }
+    return u;
+  };
+  for (const [k, v] of vig) {
+    const [c] = k.split("|");
+    const u = getU(c);
+    const p = prodPor.get(k) ?? 0;
+    u.tetoQtd += v.qtd; u.tetoRS += v.qtd * v.valor;
+    u.produzidoQtd += p; u.produzidoRS += p * v.valor;
+    if (p > v.qtd) u.estourados++;
+  }
+  // Produção fora do teto (procedimento sem FPO), só nas unidades que já têm FPO.
+  for (const [k, p] of prodPor) {
+    if (vig.has(k)) continue;
+    const [c] = k.split("|");
+    if (porCnes.has(c)) getU(c).produzidoForaQtd += p;
+  }
+  return [...porCnes.values()].sort((a, b) => b.tetoRS - a.tetoRS);
+}

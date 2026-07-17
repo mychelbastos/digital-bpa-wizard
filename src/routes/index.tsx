@@ -11,6 +11,7 @@ import {
   type VinculoResumo, type ProducaoBpaRow,
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
+import { carregarResumoFpo, type FpoResumoUnidade } from "@/lib/fpo/fpo";
 
 const CARATER_NOME = new Map(CARATERES.map((c) => [c.code, c.label]));
 const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? null : null);
@@ -108,7 +109,8 @@ function Home() {
   const [nomesCbo, setNomesCbo] = useState<Record<string, string>>({});
   const [profDetalhe, setProfDetalhe] = useState<string | null>(null);
   const [procModalOpen, setProcModalOpen] = useState(false);
-  // Detalhes (Top procedimentos, Ranking, CID, Caráter) ocultos por padrão; "Ver mais" expande.
+  const [resumoFpo, setResumoFpo] = useState<FpoResumoUnidade[]>([]);
+  // Detalhes (Top procedimentos, Ranking, FPO × Produção) ocultos por padrão; "Ver mais" expande.
   const [verMais, setVerMais] = useState(false);
 
   const carregar = async () => {
@@ -177,8 +179,21 @@ function Home() {
   // "Ver completo" abre o modal com a lista inteira e detalhada.
   const procedimentosFull = useMemo(() => agrupar(filtradas, (r) => r.procedimento, (r) => nomeProc(r.procedimento) || r.procedimento), [filtradas, nomesProc]);
   const topProcedimentos = useMemo(() => procedimentosFull.slice(0, 10), [procedimentosFull]);
-  const topCid = useMemo(() => agrupar(filtradas.filter((r) => r.cid), (r) => r.cid || "sem-cid", (r) => rotuloCid(r.cid)).slice(0, 8), [filtradas, nomesCid]);
-  const porCarater = useMemo(() => agrupar(filtradas.filter((r) => r.carater), (r) => r.carater || "sem-carater", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`).slice(0, 6), [filtradas]);
+
+  // FPO × Produção: escopo = CNES vinculados (ou a unidade filtrada), no mês selecionado.
+  const cnesEscopo = useMemo(
+    () => (cnes === "todos" ? [...new Set(vinculos.map((v) => v.cnes).filter(Boolean))] : [cnes]),
+    [vinculos, cnes],
+  );
+  useEffect(() => {
+    let vivo = true;
+    carregarResumoFpo(cnesEscopo, competencia).then((r) => vivo && setResumoFpo(r));
+    return () => { vivo = false; };
+  }, [cnesEscopo, competencia]);
+  const nomeCnes = useMemo(() => {
+    const m = new Map(unidades.map((u) => [u.key, u.name]));
+    return (c: string) => m.get(c) || c;
+  }, [unidades]);
 
   // Escopo exibido, derivado dos VÍNCULOS (não de um "papel" na conta). É só rótulo — o
   // acesso real é decidido pela RLS/permissão no banco.
@@ -319,8 +334,7 @@ function Home() {
                   hint={`top 10 de ${procedimentosFull.length} procedimento${procedimentosFull.length === 1 ? "" : "s"}`}
                   onVerCompleto={procedimentosFull.length > 0 ? () => setProcModalOpen(true) : undefined} />
                 <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} detailFor={(k) => k} hint="Toque num profissional para ver os detalhes" />
-                <Ranking title="CID mais frequentes" rows={topCid} empty="Sem CID informado" />
-                <Ranking title="Caráter de atendimento" rows={porCarater} detailFor={(k) => k} empty="Sem caráter informado" />
+                <ResumoFpo resumo={resumoFpo} nomeCnes={nomeCnes} competencia={competencia} />
               </>
             )}
           </div>
@@ -381,6 +395,70 @@ function ChartBox({ title, className = "", children }: { title: string; classNam
     <div className={`rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 ${className}`}>
       <h2 className="mb-3 text-sm font-semibold text-foreground">{title}</h2>
       {children}
+    </div>
+  );
+}
+
+const brlFmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+// Barra de progresso produzido/teto: verde até 100%, vermelha quando estoura.
+function Barra({ pct }: { pct: number }) {
+  const over = pct > 1;
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+      <div className={`h-full rounded-full ${over ? "bg-rose-500" : "bg-emerald-500"}`} style={{ width: `${Math.min(100, Math.max(0, pct * 100))}%` }} />
+    </div>
+  );
+}
+
+// Card "FPO × Produção": teto orçado vs produzido no mês, por unidade vinculada.
+function ResumoFpo({ resumo, nomeCnes, competencia }: {
+  resumo: FpoResumoUnidade[];
+  nomeCnes: (c: string) => string;
+  competencia: string;
+}) {
+  const tot = resumo.reduce(
+    (a, u) => ({ tetoRS: a.tetoRS + u.tetoRS, prodRS: a.prodRS + u.produzidoRS, estourados: a.estourados + u.estourados }),
+    { tetoRS: 0, prodRS: 0, estourados: 0 },
+  );
+  const pct = tot.tetoRS > 0 ? tot.prodRS / tot.tetoRS : 0;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 lg:col-span-3">
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-foreground">FPO × Produção · {mesLabel(competencia)}</h2>
+        <Link to="/fpo" className="shrink-0 text-[11px] font-semibold text-primary hover:underline">Abrir FPO</Link>
+      </div>
+      {resumo.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Sem FPO cadastrada para as unidades vinculadas neste mês. Importe o teto na página FPO.</p>
+      ) : (
+        <>
+          <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <span className="text-sm"><strong className="tabular-nums">{brlFmt(tot.prodRS)}</strong> produzido <span className="text-muted-foreground">de {brlFmt(tot.tetoRS)} orçado</span></span>
+            <span className={`text-sm font-semibold tabular-nums ${pct > 1 ? "text-rose-600" : "text-emerald-600"}`}>{(pct * 100).toFixed(0)}% do teto</span>
+          </div>
+          <Barra pct={pct} />
+          <ul className="mt-4 space-y-3">
+            {resumo.map((u) => {
+              const p = u.tetoRS > 0 ? u.produzidoRS / u.tetoRS : 0;
+              return (
+                <li key={u.cnes} className="text-sm">
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium">{nomeCnes(u.cnes)}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{brlFmt(u.produzidoRS)} / {brlFmt(u.tetoRS)} · {(p * 100).toFixed(0)}%</span>
+                  </div>
+                  <Barra pct={p} />
+                  {(u.estourados > 0 || u.produzidoForaQtd > 0) && (
+                    <div className="mt-1 flex flex-wrap gap-2 text-[10px]">
+                      {u.estourados > 0 && <span className="rounded bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-700">{u.estourados} procedimento(s) acima do teto</span>}
+                      {u.produzidoForaQtd > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">{u.produzidoForaQtd} produzido(s) sem teto</span>}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
