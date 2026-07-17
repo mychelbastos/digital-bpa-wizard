@@ -49,7 +49,15 @@ function LaudoAihPage() {
   useEffect(() => { try { localStorage.setItem(RECTS_KEY, JSON.stringify(rects)); } catch { /* */ } }, [rects]);
 
   const setTxt = (key: string, v: string) => setEstado((e) => ({ ...e, txt: { ...e.txt, [key]: v } }));
-  const toggle = (key: string) => setEstado((e) => ({ ...e, chk: { ...e.chk, [key]: !e.chk[key] } }));
+  // Exclusão mútua: marcar um checkbox de um grupo desmarca os demais do mesmo grupo.
+  const toggle = (key: string) => setEstado((e) => {
+    const marcado = e.chk[key];
+    const grupo = CHECKS.find((c) => c.key === key)?.grupo;
+    const chk = { ...e.chk };
+    if (grupo && !marcado) CHECKS.forEach((c) => { if (c.grupo === grupo) chk[c.key] = false; });
+    chk[key] = !marcado;
+    return { ...e, chk };
+  });
 
   // Retângulo efetivo (override do usuário, se houver).
   const rectCampo = (c: Campo): Rect => rects[c.key] ?? baseRectCampo(c);
@@ -132,12 +140,10 @@ function LaudoAihPage() {
             const r = rectCampo(c);
             const style = { top: pct(r.top), left: pct(r.left), width: pct(r.width), height: pct(r.height) } as const;
             const val = estado.txt[c.key] ?? "";
-            const onChange = (v: string) => setTxt(c.key, c.upper ? v.toUpperCase() : v);
-            return c.area ? (
-              <textarea key={c.key} value={val} onChange={(e) => onChange(e.target.value)} className={`form-text absolute resize-none whitespace-pre-wrap ${contornoCls}`} style={{ ...style, textAlign: "left", lineHeight: 1.2 }} />
-            ) : (
-              <input key={c.key} value={val} onChange={(e) => onChange(e.target.value)} className={`form-text absolute ${contornoCls}`} style={style} />
-            );
+            if (c.data) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={[2, 2, 4]} />;
+            if (c.hora) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={[2, 2]} />;
+            if (c.area) return <textarea key={c.key} value={val} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute resize-none whitespace-pre-wrap ${contornoCls}`} style={{ ...style, textAlign: "left", lineHeight: 1.2 }} />;
+            return <input key={c.key} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute ${contornoCls}`} style={style} />;
           })}
           {!editar && CHECKS.map((c) => {
             const r = rectCheck(c.key, c.top, c.left);
@@ -264,5 +270,40 @@ function PainelAjuste({ chave, rect, check, onChange, onClose }: {
       </div>
       <p className="mt-2 text-[10px] text-muted-foreground">Setas = mover · Shift+setas = passo maior.</p>
     </div>
+  );
+}
+
+// Filtro de digitação por tipo do campo (só dígitos / só letras / limite).
+function filtrar(c: Campo, v: string): string {
+  if (c.num) { const s = v.replace(/\D/g, ""); return c.maxLen ? s.slice(0, c.maxLen) : s; }
+  if (c.letras) { const s = v.replace(/[^A-Za-zÀ-ÿ]/g, "").toUpperCase(); return c.maxLen ? s.slice(0, c.maxLen) : s; }
+  const s = c.upper ? v.toUpperCase() : v;
+  return c.maxLen ? s.slice(0, c.maxLen) : s;
+}
+
+// Campo de data (dd/mm/aaaa) ou hora (hh:mm): sub-caixas numéricas com auto-avanço.
+// O valor é guardado como "seg1|seg2|..." (separador que nunca aparece na tela).
+function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos }: {
+  campo: Campo; rect: Rect; value: string; onChange: (v: string) => void; contornoCls: string; segmentos: number[];
+}) {
+  const partes = (value || "").split("|");
+  const vals = segmentos.map((_, i) => partes[i] ?? "");
+  const pos = segmentos.length === 3 ? [[0, 0.26], [0.37, 0.63], [0.68, 1.0]] : [[0, 0.42], [0.58, 1.0]];
+  const focar = (i: number) => (document.getElementById(`seg-${campo.key}-${i}`) as HTMLInputElement | null)?.focus();
+  const onSeg = (i: number, digs: string) => {
+    const nv = digs.replace(/\D/g, "").slice(0, segmentos[i]);
+    const arr = segmentos.map((_, j) => (j === i ? nv : vals[j]));
+    onChange(arr.join("|"));
+    if (nv.length === segmentos[i] && nv.length > vals[i].length && i < segmentos.length - 1) focar(i + 1);
+  };
+  return (
+    <>
+      {segmentos.map((_, i) => (
+        <input key={i} id={`seg-${campo.key}-${i}`} value={vals[i]} inputMode="numeric"
+          onChange={(e) => onSeg(i, e.target.value)}
+          className={`form-text absolute ${contornoCls}`}
+          style={{ top: pctS(rect.top), left: pctS(rect.left + rect.width * pos[i][0]), width: pctS(rect.width * (pos[i][1] - pos[i][0])), height: pctS(rect.height), textAlign: "center" }} />
+      ))}
+    </>
   );
 }
