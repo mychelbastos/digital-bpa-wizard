@@ -330,10 +330,12 @@ function Home() {
 
             {verMais && (
               <>
-                <Ranking title="Top procedimentos" rows={topProcedimentos} detailFor={(k) => k}
-                  hint={`top 10 de ${procedimentosFull.length} procedimento${procedimentosFull.length === 1 ? "" : "s"}`}
-                  onVerCompleto={procedimentosFull.length > 0 ? () => setProcModalOpen(true) : undefined} />
-                <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} detailFor={(k) => k} hint="Toque num profissional para ver os detalhes" />
+                <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3">
+                  <Ranking title="Top procedimentos" rows={topProcedimentos} detailFor={(k) => k}
+                    hint={`top 10 de ${procedimentosFull.length} procedimento${procedimentosFull.length === 1 ? "" : "s"}`}
+                    onVerCompleto={procedimentosFull.length > 0 ? () => setProcModalOpen(true) : undefined} />
+                  <Ranking title="Ranking por profissional" rows={topProfissionais} onRowClick={setProfDetalhe} detailFor={(k) => k} hint="Toque num profissional para ver os detalhes" />
+                </div>
                 <ResumoFpo resumo={resumoFpo} nomeCnes={nomeCnes} competencia={competencia} />
               </>
             )}
