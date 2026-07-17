@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
   Activity, Building2, ChevronDown, FileText, IdCard, MapPin, RefreshCw,
-  ShieldCheck, Stethoscope, TrendingUp, Users, X,
+  Stethoscope, TrendingUp, Users, X,
 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import {
@@ -205,17 +205,6 @@ function Home() {
     return (c: string) => m.get(c) || nomesEstabFpo[c] || c;
   }, [unidades, nomesEstabFpo]);
 
-  // Escopo exibido, derivado dos VÍNCULOS (não de um "papel" na conta). É só rótulo — o
-  // acesso real é decidido pela RLS/permissão no banco.
-  const escopo = useMemo(() => {
-    const cnesSet = new Set(vinculos.map((v) => v.cnes));
-    const coordena = vinculos.some((v) => v.papel !== "digitador") || cnesSet.size > 1;
-    if (coordena) return { label: "Coordenação", desc: `Você vê a produção de ${cnesSet.size} unidade${cnesSet.size > 1 ? "s" : ""} vinculada${cnesSet.size > 1 ? "s" : ""}.`, icon: <ShieldCheck className="size-4" /> };
-    const cnes = [...cnesSet][0];
-    if (cnes) return { label: `Unidade ${cnes}`, desc: "Produção das suas fichas nesta unidade.", icon: <Building2 className="size-4" /> };
-    return { label: "Sem vínculo ativo", desc: "Você não tem vínculo ativo com nenhuma unidade.", icon: <Activity className="size-4" /> };
-  }, [vinculos]);
-
   return (
     <div className="min-h-screen bg-muted/40">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
@@ -224,34 +213,13 @@ function Home() {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">SIA / SUS</p>
             <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard BPA Digital</h1>
           </div>
+          <button onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60">
+            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Atualizar
+          </button>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        {/* Faixa de escopo + ações */}
-        <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
-              {escopo.icon}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">{escopo.label}</p>
-              <p className="text-xs text-muted-foreground">{escopo.desc} PDFs não são enviados para a nuvem, só os dados estruturados.</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link to="/bpa-c-v3" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-              <FileText className="size-4" /> BPA-C
-            </Link>
-            <Link to="/bpa-i-v3" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-              <FileText className="size-4" /> BPA-I
-            </Link>
-            <button onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60">
-              <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Atualizar
-            </button>
-          </div>
-        </section>
-
         {/* Filtros */}
         <section className="mb-5 grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 md:grid-cols-4">
           <label className="text-xs font-medium text-foreground">
