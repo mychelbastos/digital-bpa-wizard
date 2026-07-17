@@ -91,7 +91,7 @@ function LaudoAihPage() {
           <img src={laudoBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
           {CAMPOS.map((c) => {
-            const style = { top: pct(c.top), left: pct(c.left), width: pct(c.width), height: pct(c.height ?? 1.7) } as const;
+            const style = { top: pct(c.top), left: pct(c.left), width: pct(c.width), height: pct(c.height ?? 1.3) } as const;
             const val = estado.txt[c.key] ?? "";
             const onChange = (v: string) => setTxt(c.key, c.upper ? v.toUpperCase() : v);
             return c.area ? (
