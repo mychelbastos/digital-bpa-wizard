@@ -2,11 +2,19 @@
 // (sem DOM), para ser testável e independente de ambiente. Trabalha sobre o HTML já
 // decodificado em texto (o arquivo é ISO-8859-1; quem lê o File cuida do encoding).
 //
-// Estrutura observada (pfo_2510332_202604.xls):
-//   Cabeçalho da tabela: Unidade | Procedimento | Qtde Orçada | Valor Unitário | Valor Orçado | ... | (Prod/Aprov zerados)
-//   Linhas: 2510332 | "030205002 - Atendimento fisioterapeutico ..." | 993 | 4,67 | 4.637,31 | 0 | 0,00 | ...
-//   Última linha: TOTAL (ignorada).
-// A COMPETÊNCIA não vem no corpo deste export — vem no NOME do arquivo (pfo_<cnes>_<AAAAMM>.xls).
+// Suporta os DOIS formatos observados:
+//
+// (A) Download direto do site (pfo.asp) — o real, que o usuário importa:
+//   Cabeçalho em linhas soltas: "Unidade: 3080560 - CLILAB ...", "Competência: 04/2026".
+//   Tabela: Procedimento | Qtde Orçada | Valor Unitário | Valor Orçado | ... (SEM coluna Unidade).
+//   Código com dígito verificador e traço: "020201007-4 - Determinacao ..." (= 0202010074).
+//   Cada célula de procedimento carrega <div style="display:none"> com CID/CBO (removidos).
+//
+// (B) Arquivo "limpo" (ex.: pfo_2510332_202604 de 4,5 KB):
+//   Tabela com coluna Unidade | Procedimento | Qtde Orçada | ...; código de 9 díg. sem DV.
+//   Competência não vem no corpo — cai para o NOME do arquivo (pfo_<cnes>_<AAAAMM>.xls).
+//
+// CNES e competência são lidos do CORPO quando existem (formato A) e só então do nome (B).
 
 export interface FpoLinhaParsed {
   codigoFpo: string;   // 9 (ou 10) dígitos, como no arquivo
@@ -59,11 +67,36 @@ function decodeEntidades(s: string): string {
     .replace(/&([a-zA-Z]+);/g, (m, name) => ENTIDADES[name] ?? m);
 }
 
-// Extrai as linhas/células de todas as <tr> do HTML (tags removidas). Ignora <script>/<style>.
-function extrairCelulas(html: string): string[][] {
-  const corpo = html
+// Remove <script>/<style> e as <div style="display:none"> (popups de CID/CBO com tabelas
+// aninhadas dentro das células — quebrariam a extração de células se ficassem).
+function limparHtml(html: string): string {
+  return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ");
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<div[^>]*display\s*:\s*none[^>]*>[\s\S]*?<\/div>/gi, " ");
+}
+
+// Texto plano do corpo (tags fora, entidades decodificadas) para varrer CNES/competência.
+function textoPlano(html: string): string {
+  return decodeEntidades(limparHtml(html).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+// "Competência: 04/2026" -> "202604". Só no formato A (download do site).
+function competenciaDoCorpo(texto: string): string | null {
+  const m = texto.match(/compet[êe]ncia:?\s*(\d{2})\/(\d{4})/i);
+  return m ? `${m[2]}${m[1]}` : null;
+}
+
+// "Unidade: 3080560 - ..." -> "3080560". Só no formato A.
+function cnesDoCorpo(texto: string): string | null {
+  const m = texto.match(/unidade:?\s*(\d{7})\b/i);
+  return m ? m[1] : null;
+}
+
+// Extrai as linhas/células de todas as <tr> do HTML (tags removidas). Ignora <script>/<style>
+// e os popups ocultos de CID/CBO.
+function extrairCelulas(html: string): string[][] {
+  const corpo = limparHtml(html);
   const linhas: string[][] = [];
   const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let mtr: RegExpExecArray | null;
@@ -87,18 +120,22 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 export function parseFpoHtml(html: string, nomeArquivo: string): FpoArquivoParsed {
   const avisos: string[] = [];
   const grade = extrairCelulas(html);
-  const competencia = competenciaDoNome(nomeArquivo);
-  if (!competencia) avisos.push("Não consegui ler a competência do nome do arquivo — informe manualmente.");
+  const texto = textoPlano(html);
+
+  // Competência: corpo (formato A) e só então nome do arquivo (formato B).
+  const competencia = competenciaDoCorpo(texto) ?? competenciaDoNome(nomeArquivo);
+  if (!competencia) avisos.push("Não consegui ler a competência (nem no corpo, nem no nome do arquivo) — informe manualmente.");
 
   // Acha a linha de cabeçalho (tem "Procedimento" e "Orçada") e mapeia as colunas relevantes.
+  // No formato A não há coluna "Unidade" (cUnidade fica -1); no B, ela existe.
   let hi = -1;
-  let cUnidade = 0, cProc = 1, cQtd = 2, cValor = 3;
+  let cUnidade = -1, cProc = 0, cQtd = 1, cValor = 2;
   for (let i = 0; i < grade.length; i++) {
     const linha = grade[i].map(semAcento);
     if (linha.some((c) => c.includes("procedimento")) && linha.some((c) => c.includes("orcada"))) {
       hi = i;
       const idx = (frag: string) => linha.findIndex((c) => c.includes(frag));
-      cUnidade = idx("unidade") >= 0 ? idx("unidade") : 0;
+      cUnidade = idx("unidade");
       cProc = idx("procedimento");
       cQtd = idx("qtde orcada") >= 0 ? idx("qtde orcada") : idx("orcada");
       cValor = idx("valor unitario") >= 0 ? idx("valor unitario") : idx("unitario");
@@ -107,32 +144,37 @@ export function parseFpoHtml(html: string, nomeArquivo: string): FpoArquivoParse
   }
   if (hi === -1) {
     avisos.push("Não encontrei o cabeçalho da tabela (Procedimento / Qtde Orçada). O arquivo pode não ser uma FPO válida.");
-    return { cnes: null, competencia, linhas: [], avisos };
+    return { cnes: cnesDoCorpo(texto), competencia, linhas: [], avisos };
   }
 
   const linhas: FpoLinhaParsed[] = [];
   const cnesVistos = new Set<string>();
+  const codigosVistos = new Set<string>();
   for (let i = hi + 1; i < grade.length; i++) {
     const row = grade[i];
-    const cnes = (row[cUnidade] ?? "").trim();
-    if (!/^\d{7}$/.test(cnes)) continue; // pula TOTAL e linhas sem CNES
     const proc = row[cProc] ?? "";
-    const mCod = proc.match(/(\d{9,10})/);
-    if (!mCod) { avisos.push(`Linha ${i + 1}: sem código de procedimento — ignorada.`); continue; }
-    const codigoFpo = mCod[1];
-    const descricao = proc.replace(/^\D*\d{9,10}\s*-?\s*/, "").trim();
+    // Código do procedimento: 9 díg. + (opcional) traço + dígito verificador -> 9 ou 10 díg.
+    const mCod = proc.match(/(\d{9})-?(\d)?/);
+    if (!mCod) continue; // pula TOTAL, rodapé e linhas sem código (sem "aviso": há muito lixo estrutural)
+    const codigoFpo = mCod[1] + (mCod[2] ?? "");
+    if (codigosVistos.has(codigoFpo)) continue; // procedimento repetido (linhas de CBO) — ignora
+    codigosVistos.add(codigoFpo);
+    const descricao = proc.replace(/^\D*\d{9}-?\d?\s*-?\s*/, "").trim();
     const qtdOrcada = parseInt((row[cQtd] ?? "").replace(/\D/g, ""), 10) || 0;
     const valorUnitario = parseNumeroBR(row[cValor] ?? "");
-    cnesVistos.add(cnes);
+    if (cUnidade >= 0 && /^\d{7}$/.test((row[cUnidade] ?? "").trim())) cnesVistos.add(row[cUnidade].trim());
     linhas.push({ codigoFpo, descricao, qtdOrcada, valorUnitario });
   }
 
-  const cnesArquivo = cnesVistos.size === 1 ? [...cnesVistos][0] : (cnesVistos.size ? [...cnesVistos][0] : null);
+  // CNES: corpo (A) -> coluna Unidade das linhas (B) -> nome do arquivo.
+  const cnesLinhas = cnesVistos.size === 1 ? [...cnesVistos][0] : cnesVistos.size ? [...cnesVistos][0] : null;
+  const cnesNome = (nomeArquivo.match(/\d{7}/) ?? [])[0] ?? null;
+  const cnesArquivo = cnesDoCorpo(texto) ?? cnesLinhas ?? cnesNome;
   if (cnesVistos.size > 1) avisos.push(`O arquivo tem mais de um CNES (${[...cnesVistos].join(", ")}) — esperado 1 por arquivo.`);
-  const cnesNome = (nomeArquivo.match(/\d{7}/) ?? [])[0];
   if (cnesNome && cnesArquivo && cnesNome !== cnesArquivo) {
-    avisos.push(`CNES do nome do arquivo (${cnesNome}) diverge do CNES das linhas (${cnesArquivo}).`);
+    avisos.push(`CNES do nome do arquivo (${cnesNome}) diverge do CNES do conteúdo (${cnesArquivo}).`);
   }
+  if (linhas.length === 0) avisos.push("Nenhum procedimento com teto encontrado nesta FPO.");
 
   return { cnes: cnesArquivo, competencia, linhas, avisos };
 }

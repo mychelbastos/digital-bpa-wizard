@@ -66,11 +66,28 @@ export async function salvarTetosFpo(cnes: string, competencia: string, itens: F
   return error ? null : rows.length;
 }
 
-export async function atualizarTetoFpo(cnes: string, procedimento: string, competencia: string, campos: { qtd_orcada?: number; valor_unitario?: number }, atualizadoPor: string | null): Promise<boolean> {
+// Define/atualiza o teto VIGENTE a partir de uma competência (modelo de vigência): grava
+// uma linha em `competencia` que passa a valer dessa competência em diante, até nova edição.
+// Competências anteriores ficam intactas (mantêm o valor antigo). Ex.: base em 04/2026;
+// ao editar visualizando 06/2026, cria-se a vigência de 06/2026 — 04 e 05 seguem no valor base.
+export async function definirTetoVigente(
+  cnes: string,
+  procedimento: string,
+  competencia: string,
+  vals: { qtdOrcada: number; valorUnitario: number; codigoFpo?: string | null; descricaoFpo?: string | null; resolvido?: boolean },
+  atualizadoPor: string | null,
+): Promise<boolean> {
   if (!supabase) return false;
-  const { error } = await supabase.from("fpo_teto")
-    .update({ ...campos, atualizado_por: atualizadoPor, atualizado_em: new Date().toISOString() })
-    .eq("cnes", cnes).eq("procedimento", procedimento).eq("competencia", competencia);
+  const { error } = await supabase.from("fpo_teto").upsert({
+    cnes, procedimento, competencia,
+    qtd_orcada: vals.qtdOrcada,
+    valor_unitario: vals.valorUnitario,
+    codigo_fpo: vals.codigoFpo ?? null,
+    descricao_fpo: vals.descricaoFpo ?? null,
+    resolvido: vals.resolvido ?? true,
+    atualizado_por: atualizadoPor,
+    atualizado_em: new Date().toISOString(),
+  }, { onConflict: "cnes,procedimento,competencia" });
   return !error;
 }
 
@@ -87,6 +104,8 @@ export interface FpoComparacaoRow {
   descricao: string;
   resolvido: boolean;
   temTeto: boolean;
+  tetoCompetencia: string | null;  // competência de onde veio o teto vigente (base herdada)
+  herdado: boolean;                // true quando o teto vem de competência anterior à visualizada
   qtdOrcada: number;
   valorUnitario: number;
   produzido: number;
@@ -97,13 +116,15 @@ export interface FpoComparacaoRow {
 }
 
 // Comparação teto × produção de um CNES+competência. Produção casa por mes_producao
-// (competência de apresentação). Inclui itens com teto e produção zero, e — se houver —
-// produção de procedimento sem teto (estouro de item não orçado).
+// (competência de apresentação). O TETO segue o modelo de VIGÊNCIA: para a competência X,
+// vale a última linha de fpo_teto com competência ≤ X por procedimento (a base carregada
+// vale para as competências futuras até ser editada). Inclui itens com teto e produção zero
+// e produção de procedimento sem teto (estouro de item não orçado).
 export async function carregarComparacaoFpo(cnes: string, competencia: string): Promise<FpoComparacaoRow[]> {
   if (!supabase || !cnes || !competencia) return [];
   const [{ data: tetos }, { data: prod }] = await Promise.all([
-    supabase.from("fpo_teto").select("procedimento, qtd_orcada, valor_unitario, codigo_fpo, descricao_fpo, resolvido")
-      .eq("cnes", cnes).eq("competencia", competencia),
+    supabase.from("fpo_teto").select("procedimento, competencia, qtd_orcada, valor_unitario, codigo_fpo, descricao_fpo, resolvido")
+      .eq("cnes", cnes).lte("competencia", competencia),
     supabase.from("producao_dashboard").select("procedimento, quantidade")
       .eq("cnes", cnes).eq("mes_producao", competencia),
   ]);
@@ -114,9 +135,12 @@ export async function carregarComparacaoFpo(cnes: string, competencia: string): 
     produzidoPor.set(r.procedimento, (produzidoPor.get(r.procedimento) ?? 0) + (r.quantidade || 0));
   }
 
-  const tetoPor = new Map<string, { qtd: number; valor: number; codigoFpo: string | null; descricao: string | null; resolvido: boolean }>();
-  for (const t of (tetos ?? []) as { procedimento: string; qtd_orcada: number; valor_unitario: number; codigo_fpo: string | null; descricao_fpo: string | null; resolvido: boolean }[]) {
-    tetoPor.set(t.procedimento, { qtd: t.qtd_orcada, valor: Number(t.valor_unitario), codigoFpo: t.codigo_fpo, descricao: t.descricao_fpo, resolvido: t.resolvido });
+  // Teto vigente por procedimento = a linha de maior competência ≤ X.
+  type T = { procedimento: string; competencia: string; qtd_orcada: number; valor_unitario: number; codigo_fpo: string | null; descricao_fpo: string | null; resolvido: boolean };
+  const tetoPor = new Map<string, T>();
+  for (const t of (tetos ?? []) as T[]) {
+    const cur = tetoPor.get(t.procedimento);
+    if (!cur || t.competencia > cur.competencia) tetoPor.set(t.procedimento, t);
   }
 
   const chaves = new Set<string>([...tetoPor.keys(), ...produzidoPor.keys()]);
@@ -126,15 +150,17 @@ export async function carregarComparacaoFpo(cnes: string, competencia: string): 
   for (const proc of chaves) {
     const t = tetoPor.get(proc);
     const produzido = produzidoPor.get(proc) ?? 0;
-    const qtdOrcada = t?.qtd ?? 0;
-    const valorUnitario = t?.valor ?? 0;
+    const qtdOrcada = t?.qtd_orcada ?? 0;
+    const valorUnitario = t ? Number(t.valor_unitario) : 0;
     const saldo = qtdOrcada - produzido;
     linhas.push({
       procedimento: proc,
-      codigoFpo: t?.codigoFpo ?? null,
-      descricao: nomes[proc] || t?.descricao || proc,
+      codigoFpo: t?.codigo_fpo ?? null,
+      descricao: nomes[proc] || t?.descricao_fpo || proc,
       resolvido: t?.resolvido ?? true,
       temTeto: Boolean(t),
+      tetoCompetencia: t?.competencia ?? null,
+      herdado: Boolean(t && t.competencia < competencia),
       qtdOrcada,
       valorUnitario,
       produzido,

@@ -7,7 +7,7 @@ import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { parseFpoHtml, type FpoArquivoParsed } from "@/lib/fpo/parse-fpo";
 import {
-  carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, atualizarTetoFpo,
+  carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, definirTetoVigente,
   cnesEditaveisFpo, type FpoComparacaoRow, type FpoItemResolvido,
 } from "@/lib/fpo/fpo";
 
@@ -62,10 +62,19 @@ function FpoPage() {
   const pendencias = rows.filter((r) => !r.resolvido).length;
   const semTeto = rows.filter((r) => !r.temTeto && r.produzido > 0).length;
 
-  const editarCampo = async (r: FpoComparacaoRow, campo: "qtd_orcada" | "valor_unitario", valor: number) => {
+  // Edita o teto criando/atualizando a VIGÊNCIA na competência visualizada (vale dessa
+  // competência em diante; as anteriores mantêm o valor). Funciona também em linha sem teto.
+  const editarCampo = async (r: FpoComparacaoRow, campo: "qtd" | "valor", valor: number) => {
     if (!podeEditar) return;
-    const ok = await atualizarTetoFpo(cnes, r.procedimento, competencia, { [campo]: valor }, user?.id ?? null);
-    if (!ok) { toast.error("Não foi possível salvar a alteração."); return; }
+    const ok = await definirTetoVigente(cnes, r.procedimento, competencia, {
+      qtdOrcada: campo === "qtd" ? Math.max(0, Math.round(valor)) : r.qtdOrcada,
+      valorUnitario: campo === "valor" ? Math.max(0, valor) : r.valorUnitario,
+      codigoFpo: r.codigoFpo,
+      descricaoFpo: r.descricao,
+      resolvido: r.resolvido,
+    }, user?.id ?? null);
+    if (!ok) { toast.error("Não foi possível salvar. Verifique sua permissão de edição nesta unidade."); return; }
+    if (r.herdado || !r.temTeto) toast.success(`Teto definido a partir de ${compLabel(competencia)}.`);
     carregar();
   };
 
@@ -151,18 +160,19 @@ function FpoPage() {
                       <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{r.codigoFpo ?? r.procedimento}</span>
                       {!r.resolvido && <span className="shrink-0 rounded bg-amber-200 px-1 text-[9px] font-semibold text-amber-800">revisar</span>}
                       {r.resolvido && !r.temTeto && <span className="shrink-0 rounded bg-sky-200 px-1 text-[9px] font-semibold text-sky-800">sem teto</span>}
+                      {r.herdado && r.tetoCompetencia && <span className="shrink-0 rounded bg-muted px-1 text-[9px] font-semibold text-muted-foreground" title="Teto herdado de uma competência anterior (base). Edite para criar uma nova vigência a partir deste mês.">base {compLabel(r.tetoCompetencia)}</span>}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {podeEditar && r.temTeto
-                      ? <CampoNum valor={r.qtdOrcada} onSalvar={(v) => editarCampo(r, "qtd_orcada", Math.max(0, Math.round(v)))} />
+                    {podeEditar
+                      ? <CampoNum valor={r.qtdOrcada} onSalvar={(v) => editarCampo(r, "qtd", v)} />
                       : int(r.qtdOrcada)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{int(r.produzido)}</td>
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${r.saldo < 0 ? "text-rose-600" : r.saldo === 0 ? "text-muted-foreground" : "text-emerald-600"}`}>{int(r.saldo)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {podeEditar && r.temTeto
-                      ? <CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor_unitario", Math.max(0, v))} />
+                    {podeEditar
+                      ? <CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} />
                       : brl(r.valorUnitario)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{brl(r.tetoRS)}</td>
@@ -175,6 +185,7 @@ function FpoPage() {
         </div>
         <p className="mt-3 text-center text-[11px] text-muted-foreground">
           Produção casada por mês de apresentação. Saldo verde = ainda pode produzir · vermelho = estourou o teto.
+          {podeEditar && " Clique nos campos Teto / Valor unit. para editar — o valor vale desta competência em diante; as anteriores mantêm o valor antigo."}
         </p>
       </main>
 
