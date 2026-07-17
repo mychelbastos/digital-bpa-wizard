@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
@@ -146,70 +146,82 @@ function FpoPage() {
           </div>
         )}
 
-        {/* Tabela */}
-        <div className="overflow-hidden rounded-2xl border border-border bg-card">
-          <table className="w-full table-fixed text-sm">
-            <colgroup>
-              <col />
-              <col className="w-[22%] sm:w-[16%]" />
-              <col className="w-[22%] sm:w-[16%]" />
-              <col className="w-[22%] sm:w-[16%]" />
-            </colgroup>
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Procedimento</th>
-                <th className="px-2 py-2 text-right font-medium">Teto</th>
-                <th className="px-2 py-2 text-right font-medium">Produzido</th>
-                <th className="px-3 py-2 text-right font-medium">Saldo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={4} className="px-3 py-10 text-center text-muted-foreground"><Loader2 className="mx-auto size-4 animate-spin" /></td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={4} className="px-3 py-10 text-center text-sm text-muted-foreground">Sem FPO para esta unidade/competência. {podeEditar && "Importe o arquivo do estado para começar."}</td></tr>
-              ) : rows.map((r) => (
-                <tr key={r.procedimento} className={`border-b border-border/60 align-top ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
-                  <td className="px-3 py-2">
-                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="min-w-0 flex-1 truncate" title={r.descricao}>{r.descricao}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{r.codigoFpo ?? r.procedimento}</span>
-                      {!r.resolvido && <span className="shrink-0 rounded bg-amber-200 px-1 text-[9px] font-semibold text-amber-800">revisar</span>}
-                      {r.resolvido && !r.temTeto && <span className="shrink-0 rounded bg-sky-200 px-1 text-[9px] font-semibold text-sky-800">sem teto</span>}
-                      {r.herdado && r.tetoCompetencia && <span className="shrink-0 rounded bg-muted px-1 text-[9px] font-semibold text-muted-foreground" title="Teto herdado de uma competência anterior (base). Edite para criar uma nova vigência a partir deste mês.">base {compLabel(r.tetoCompetencia)}</span>}
-                    </div>
-                    {/* Valor por unidade (editável) — abaixo do nome p/ liberar colunas. */}
-                    <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-                      {podeEditar
-                        ? <>R$ <CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} /> / un.</>
-                        : <>{brl(r.valorUnitario)} / un.</>}
-                    </div>
-                  </td>
-                  {/* Teto: qtd em destaque + R$ abaixo */}
-                  <td className="px-2 py-2 text-right tabular-nums">
-                    {podeEditar
-                      ? <CampoNum valor={r.qtdOrcada} onSalvar={(v) => editarCampo(r, "qtd", v)} />
-                      : <span className="font-medium">{int(r.qtdOrcada)}</span>}
-                    <div className="text-[11px] text-muted-foreground">{brl(r.tetoRS)}</div>
-                  </td>
-                  {/* Produzido */}
-                  <td className="px-2 py-2 text-right tabular-nums">
-                    <span className="font-medium">{int(r.produzido)}</span>
-                    <div className="text-[11px] text-muted-foreground">{brl(r.produzidoRS)}</div>
-                  </td>
-                  {/* Saldo (qtd + R$), colorido */}
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    <span className={`font-semibold ${r.saldo < 0 ? "text-rose-600" : r.saldo === 0 ? "text-muted-foreground" : "text-emerald-600"}`}>{int(r.saldo)}</span>
-                    <div className={`text-[11px] ${r.saldoRS < 0 ? "text-rose-600" : "text-muted-foreground"}`}>{brl(r.saldoRS)}</div>
-                  </td>
-                </tr>
+        {/* Tabela — completa no desktop; cartões no celular (sem scroll horizontal). */}
+        {loading ? (
+          <div className="rounded-2xl border border-border bg-card p-10 text-center"><Loader2 className="mx-auto size-4 animate-spin text-muted-foreground" /></div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
+            Sem FPO para esta unidade/competência. {podeEditar && "Importe o arquivo do estado para começar."}
+          </div>
+        ) : (
+          <>
+            {/* Desktop: tabela clara com todas as colunas (cabe na largura da página). */}
+            <div className="hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="px-3 py-2 font-medium">Procedimento</th>
+                    <th className="px-2 py-2 text-right font-medium">Teto</th>
+                    <th className="px-2 py-2 text-right font-medium">Produzido</th>
+                    <th className="px-2 py-2 text-right font-medium">Saldo</th>
+                    <th className="px-2 py-2 text-right font-medium">Valor unit.</th>
+                    <th className="px-2 py-2 text-right font-medium">Teto R$</th>
+                    <th className="px-2 py-2 text-right font-medium">Produzido R$</th>
+                    <th className="px-3 py-2 text-right font-medium">Saldo R$</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.procedimento} className={`border-b border-border/60 ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
+                      <td className="max-w-0 px-3 py-2">
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <span className="min-w-0 truncate" title={r.descricao}>{r.descricao}</span>
+                          <Badges r={r} />
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
+                        {podeEditar ? <CampoNum valor={r.qtdOrcada} onSalvar={(v) => editarCampo(r, "qtd", v)} /> : int(r.qtdOrcada)}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{int(r.produzido)}</td>
+                      <td className={`whitespace-nowrap px-2 py-2 text-right font-semibold tabular-nums ${r.saldo < 0 ? "text-rose-600" : r.saldo === 0 ? "text-muted-foreground" : "text-emerald-600"}`}>{int(r.saldo)}</td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
+                        {podeEditar ? <CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} /> : brl(r.valorUnitario)}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{brl(r.tetoRS)}</td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{brl(r.produzidoRS)}</td>
+                      <td className={`whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums ${r.saldoRS < 0 ? "text-rose-600" : "text-foreground"}`}>{brl(r.saldoRS)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Celular: um cartão por procedimento. */}
+            <div className="space-y-2.5 lg:hidden">
+              {rows.map((r) => (
+                <div key={r.procedimento} className={`rounded-xl border border-border p-3 ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : "bg-card"}`}>
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="font-medium">{r.descricao}</span>
+                    <Badges r={r} />
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                    Valor unit.: {podeEditar ? <><span>R$</span><CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} /></> : brl(r.valorUnitario)}
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                    <ColunaCartao titulo="Teto" qtd={podeEditar ? <CampoNum valor={r.qtdOrcada} center onSalvar={(v) => editarCampo(r, "qtd", v)} /> : int(r.qtdOrcada)} reais={brl(r.tetoRS)} />
+                    <ColunaCartao titulo="Produzido" qtd={int(r.produzido)} reais={brl(r.produzidoRS)} />
+                    <ColunaCartao titulo="Saldo" qtd={int(r.saldo)} reais={brl(r.saldoRS)}
+                      cor={r.saldo < 0 ? "text-rose-600" : r.saldo === 0 ? "text-muted-foreground" : "text-emerald-600"}
+                      corReais={r.saldoRS < 0 ? "text-rose-600" : "text-muted-foreground"} />
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </>
+        )}
         <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          Cada célula mostra a quantidade e o valor em R$ logo abaixo. Saldo verde = ainda pode produzir · vermelho = estourou o teto.
-          {podeEditar && " Clique no Teto ou no valor por unidade para editar — vale desta competência em diante; as anteriores mantêm o valor antigo."}
+          Produção casada por mês de apresentação. Saldo verde = ainda pode produzir · vermelho = estourou o teto.
+          {podeEditar && " Clique no Teto ou no valor unit. para editar — vale desta competência em diante; as anteriores mantêm o valor antigo."}
         </p>
       </main>
 
@@ -237,10 +249,36 @@ function Card({ titulo, qtd, valor, saldo }: { titulo: string; qtd: number; valo
   );
 }
 
-// Campo numérico editável inline (salva no blur / Enter). `decimal` para valores em R$.
-function CampoNum({ valor, onSalvar, decimal }: { valor: number; onSalvar: (v: number) => void; decimal?: boolean }) {
+// Código do procedimento + selos (revisar / sem teto / base herdada). Usado na tabela e nos cartões.
+function Badges({ r }: { r: FpoComparacaoRow }) {
+  return (
+    <>
+      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{r.codigoFpo ?? r.procedimento}</span>
+      {!r.resolvido && <span className="shrink-0 rounded bg-amber-200 px-1 text-[9px] font-semibold text-amber-800">revisar</span>}
+      {r.resolvido && !r.temTeto && <span className="shrink-0 rounded bg-sky-200 px-1 text-[9px] font-semibold text-sky-800">sem teto</span>}
+      {r.herdado && r.tetoCompetencia && <span className="shrink-0 rounded bg-muted px-1 text-[9px] font-semibold text-muted-foreground" title="Teto herdado de uma competência anterior (base). Edite para criar uma nova vigência a partir deste mês.">base {compLabel(r.tetoCompetencia)}</span>}
+    </>
+  );
+}
+
+// Coluna de um cartão (celular): título, quantidade em destaque e o valor em R$.
+function ColunaCartao({ titulo, qtd, reais, cor = "text-foreground", corReais = "text-muted-foreground" }: {
+  titulo: string; qtd: ReactNode; reais: string; cor?: string; corReais?: string;
+}) {
+  return (
+    <div className="rounded-lg bg-muted/40 px-1 py-1.5">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{titulo}</p>
+      <p className={`mt-0.5 font-semibold tabular-nums ${cor}`}>{qtd}</p>
+      <p className={`text-[10px] tabular-nums ${corReais}`}>{reais}</p>
+    </div>
+  );
+}
+
+// Campo numérico editável inline (salva no blur / Enter). `decimal` p/ valores em R$; `center`
+// centraliza (cartões do celular) em vez de alinhar à direita (tabela).
+function CampoNum({ valor, onSalvar, decimal, center }: { valor: number; onSalvar: (v: number) => void; decimal?: boolean; center?: boolean }) {
   const [txt, setTxt] = useState(String(valor));
-  useEffect(() => { setTxt(decimal ? String(valor) : String(valor)); }, [valor, decimal]);
+  useEffect(() => { setTxt(String(valor)); }, [valor]);
   const commit = () => {
     const n = Number(txt.replace(",", "."));
     if (Number.isFinite(n) && n !== valor) onSalvar(n);
@@ -253,7 +291,7 @@ function CampoNum({ valor, onSalvar, decimal }: { valor: number; onSalvar: (v: n
       onChange={(e) => setTxt(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      className="w-16 max-w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right tabular-nums hover:border-border focus:border-primary focus:bg-background focus:outline-none"
+      className={`rounded border border-transparent bg-transparent px-1 py-0.5 tabular-nums hover:border-border focus:border-primary focus:bg-background focus:outline-none ${center ? "w-full text-center" : "w-16 max-w-full text-right"}`}
     />
   );
 }
