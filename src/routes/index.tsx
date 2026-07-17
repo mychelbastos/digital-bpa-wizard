@@ -412,29 +412,44 @@ function ResumoFpoTotal({ resumo, competencia, onVerDetalhes }: {
   onVerDetalhes: () => void;
 }) {
   const tot = resumo.reduce(
-    (a, u) => ({ tetoRS: a.tetoRS + u.tetoRS, prodRS: a.prodRS + u.produzidoRS }),
-    { tetoRS: 0, prodRS: 0 },
+    (a, u) => ({ tetoRS: a.tetoRS + u.tetoRS, prodRS: a.prodRS + u.produzidoRS, saldoRS: a.saldoRS + u.saldoRS }),
+    { tetoRS: 0, prodRS: 0, saldoRS: 0 },
   );
   const pct = tot.tetoRS > 0 ? tot.prodRS / tot.tetoRS : 0;
+  const over = pct > 1;
+  const pctTxt = pct > 0 && pct < 0.1 ? (pct * 100).toFixed(1).replace(".", ",") : (pct * 100).toFixed(0);
   return (
-    <section className="mb-5 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">FPO × Produção · {mesLabel(competencia)}</h2>
-        <button onClick={onVerDetalhes} className="shrink-0 text-[11px] font-semibold text-primary hover:underline">Ver detalhes</button>
+    <section className="mb-5 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3 sm:px-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <span className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary"><TrendingUp className="size-3.5" /></span>
+          FPO × Produção · {mesLabel(competencia)}
+        </h2>
+        <button onClick={onVerDetalhes} className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10">
+          Ver detalhes <ChevronDown className="size-3.5" />
+        </button>
       </div>
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4">
-        <div className="mb-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+      <div className="px-4 py-4 sm:px-5">
+        <div className="mb-4 grid grid-cols-3 gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total das unidades</p>
-            <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
-              {brlFmt(tot.prodRS)} <span className="text-sm font-medium text-muted-foreground">de {brlFmt(tot.tetoRS)} orçado</span>
-            </p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Produzido</p>
+            <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground sm:text-2xl">{brlFmt(tot.prodRS)}</p>
           </div>
-          <span className={`rounded-full px-2.5 py-1 text-sm font-bold tabular-nums ${pct > 1 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
-            {(pct * 100).toFixed(0)}% do teto
-          </span>
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Orçado (teto)</p>
+            <p className="mt-0.5 text-xl font-bold tabular-nums text-muted-foreground sm:text-2xl">{brlFmt(tot.tetoRS)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Saldo</p>
+            <p className={`mt-0.5 text-xl font-bold tabular-nums sm:text-2xl ${tot.saldoRS < 0 ? "text-rose-600" : "text-emerald-600"}`}>{brlFmt(tot.saldoRS)}</p>
+          </div>
         </div>
-        <Barra pct={pct} thick />
+        <div className="flex items-center gap-3">
+          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+            <div className={`h-full rounded-full transition-[width] ${over ? "bg-gradient-to-r from-rose-400 to-rose-600" : "bg-gradient-to-r from-emerald-400 to-emerald-600"}`} style={{ width: `${Math.min(100, Math.max(2, pct * 100))}%` }} />
+          </div>
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${over ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{pctTxt}% do teto</span>
+        </div>
       </div>
     </section>
   );
