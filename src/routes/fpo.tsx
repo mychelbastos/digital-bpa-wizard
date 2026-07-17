@@ -157,7 +157,17 @@ function FpoPage() {
           <>
             {/* Desktop: tabela clara com todas as colunas (cabe na largura da página). */}
             <div className="hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col />
+                  <col className="w-[7%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
                     <th className="px-3 py-2 font-medium">Procedimento</th>
@@ -173,7 +183,7 @@ function FpoPage() {
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.procedimento} className={`border-b border-border/60 ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
-                      <td className="max-w-0 px-3 py-2">
+                      <td className="px-3 py-2">
                         <div className="flex min-w-0 items-baseline gap-2">
                           <span className="min-w-0 truncate" title={r.descricao}>{r.descricao}</span>
                           <Badges r={r} />
