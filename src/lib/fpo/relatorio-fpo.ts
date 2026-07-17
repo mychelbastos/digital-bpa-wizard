@@ -35,7 +35,13 @@ export interface DadosRelatorioFpo {
   geradoEm?: Date;
 }
 
-export function gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date() }: DadosRelatorioFpo) {
+export function gerarRelatorioFpo(dados: DadosRelatorioFpo) {
+  const pdf = construirPdfFpo(dados);
+  pdf.save(`relatorio-fpo-${dados.cnes}-${dados.competencia}.pdf`);
+}
+
+// Constrói o PDF (sem salvar) — separado p/ ser testável (contar páginas, etc.).
+export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date() }: DadosRelatorioFpo): jsPDF {
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
@@ -66,6 +72,7 @@ export function gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, gerado
 
   let pagina = 0;
   const desenharCabecalhoPagina = () => {
+    if (pagina > 0) pdf.addPage(); // a 1ª página já existe; as demais precisam ser criadas
     pagina++;
     // Faixa do título
     pdf.setFillColor(...VERDE);
@@ -188,5 +195,5 @@ export function gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, gerado
   notas.push("Saldo negativo = produção acima do teto.");
   if (y + 12 < rodapeLimite) pdf.text(notas.join("  ·  "), M, y);
 
-  pdf.save(`relatorio-fpo-${cnes}-${competencia}.pdf`);
+  return pdf;
 }
