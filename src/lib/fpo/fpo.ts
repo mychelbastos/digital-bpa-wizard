@@ -170,8 +170,11 @@ export async function carregarComparacaoFpo(cnes: string, competencia: string): 
       saldoRS: saldo * valorUnitario,
     });
   }
-  // Maior teto primeiro; depois maior produção.
-  return linhas.sort((a, b) => b.qtdOrcada - a.qtdOrcada || b.produzido - a.produzido);
+  // Ordena pelo CÓDIGO do procedimento (crescente), agrupando pelos 7 primeiros dígitos —
+  // arrumação da página FPO (não afeta a dashboard nem o resumo).
+  return linhas.sort((a, b) =>
+    a.procedimento.slice(0, 7).localeCompare(b.procedimento.slice(0, 7)) ||
+    a.procedimento.localeCompare(b.procedimento));
 }
 
 // CNES em que o usuário pode EDITAR a FPO (permissão editar_fpo).
