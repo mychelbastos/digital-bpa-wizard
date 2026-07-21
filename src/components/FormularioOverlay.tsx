@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject, type KeyboardEvent as RKeyboardEvent } from "react";
+import { Link } from "@tanstack/react-router";
 import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
@@ -70,8 +71,9 @@ function filtrar(c: CampoForm, v: string): string {
   return c.maxLen ? s.slice(0, c.maxLen) : s;
 }
 
-export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas }: {
+export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas, calibravel = false }: {
   titulo: string; storageKey: string; campos: CampoForm[]; checks: CheckForm[]; paginas: PaginaForm[];
+  calibravel?: boolean; // mostra as ferramentas de calibração (Editar posições / Contornos)
 }) {
   const rectsKey = `${storageKey}-rects`;
   const sheetRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -237,12 +239,17 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
     <div className="min-h-screen bg-muted/40 pb-16">
       <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3">
-          <h1 className="text-base font-semibold">{titulo}</h1>
+          <div className="flex items-center gap-3">
+            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
+            <h1 className="text-base font-semibold">{titulo}</h1>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => setEditar((e) => !e)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${editar ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border bg-card text-foreground hover:bg-muted"}`}>
-              <Pencil className="size-4" /> {editar ? "Editando posições" : "Editar posições"}
-            </button>
-            {editar ? (
+            {calibravel && (
+              <button onClick={() => setEditar((e) => !e)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${editar ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border bg-card text-foreground hover:bg-muted"}`}>
+                <Pencil className="size-4" /> {editar ? "Editando posições" : "Editar posições"}
+              </button>
+            )}
+            {calibravel && editar ? (
               <>
                 <button onClick={copiarCoords} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"><Copy className="size-4" /> Copiar coordenadas</button>
                 <button onClick={() => setExportOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">Ver quadro</button>
@@ -250,14 +257,14 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
               </>
             ) : (
               <>
-                <button onClick={() => setContornos((c) => !c)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${contornos ? "border-sky-400 bg-sky-50 text-sky-700" : "border-border bg-card text-foreground hover:bg-muted"}`}><Ruler className="size-4" /> Contornos</button>
+                {calibravel && <button onClick={() => setContornos((c) => !c)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${contornos ? "border-sky-400 bg-sky-50 text-sky-700" : "border-border bg-card text-foreground hover:bg-muted"}`}><Ruler className="size-4" /> Contornos</button>}
                 <button onClick={limpar} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"><Eraser className="size-4" /> Limpar</button>
                 <button onClick={baixarPdf} disabled={exportando} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"><FileDown className="size-4" /> {exportando ? "Gerando…" : "Baixar PDF"}</button>
               </>
             )}
           </div>
         </div>
-        {editar && (
+        {calibravel && editar && (
           <div className="mx-auto mt-2 max-w-[1100px] text-xs text-muted-foreground">
             Arraste as caixas para posicionar; arraste o canto inferior-direito para redimensionar. Clique numa caixa para ajustar os números com precisão. Setas do teclado movem a selecionada. Ao terminar, <strong>Copiar coordenadas</strong> e me mande no chat.
           </div>
