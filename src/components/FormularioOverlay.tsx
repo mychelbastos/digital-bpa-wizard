@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject, type KeyboardEvent as RKeyboardEvent } from "react";
 import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
+import { focarProximoCampo } from "@/lib/foco-campos";
+import { carregarNomesProcedimentos, carregarDescricoesCid } from "@/lib/dashboard-producao";
+import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
+
+// Enter em qualquer campo (menos textarea) pula para o próximo — mesma navegação do BPA-I.
+function aoTeclarEnter(e: RKeyboardEvent<HTMLInputElement>) {
+  if (e.key === "Enter") { e.preventDefault(); focarProximoCampo(e.currentTarget); }
+}
 
 // Campo/checkbox posicionado por % sobre a imagem de fundo. Suporta campos inteligentes
 // (numérico, data/hora, células de 1 dígito) e múltiplas páginas (campo.pagina, 1-based).
@@ -20,6 +28,9 @@ export interface CampoForm {
   hora?: boolean;
   celulas?: number;
   pagina?: number;
+  // Crivo (validação/preenchimento a partir das tabelas do sistema):
+  crivo?: "procedimento" | "cnes" | "cid";
+  alvo?: string; // key do campo a preencher com o nome/descrição encontrado
 }
 export interface CheckForm {
   key: string;
@@ -59,6 +70,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
   const [sel, setSel] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportando, setExportando] = useState(false);
+  const [crivoStatus, setCrivoStatus] = useState<Record<string, "ok" | "erro" | "buscando">>({});
 
   useEffect(() => {
     try {
@@ -72,6 +84,39 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
   useEffect(() => { try { localStorage.setItem(rectsKey, JSON.stringify(rects)); } catch { /* */ } }, [rects, rectsKey]);
 
   const setTxt = (key: string, v: string) => setTxtState((e) => ({ ...e, [key]: v }));
+
+  // Dígitos "puros" de um valor (células/data guardam "seg|seg|..."; junta).
+  const digitos = (c: CampoForm, v: string) => (c.celulas || c.data || c.hora ? v.split("|").join("") : v).trim();
+
+  // Crivo: valida contra as tabelas do sistema e, quando há alvo, preenche o nome/descrição.
+  const dispararCrivo = async (c: CampoForm, valor: string) => {
+    if (!c.crivo) return;
+    setCrivoStatus((s) => ({ ...s, [c.key]: "buscando" }));
+    let ok = false, nome: string | null = null;
+    try {
+      if (c.crivo === "procedimento") { const r = await carregarNomesProcedimentos([valor]); nome = r[valor] ?? null; ok = !!nome; }
+      else if (c.crivo === "cnes") { nome = await buscarEstabelecimento(valor); ok = !!nome; }
+      else if (c.crivo === "cid") { const r = await carregarDescricoesCid([valor.toUpperCase()]); nome = r[valor.toUpperCase()] ?? null; ok = !!nome; }
+    } catch { ok = false; }
+    setCrivoStatus((s) => ({ ...s, [c.key]: ok ? "ok" : "erro" }));
+    if (ok && c.alvo && nome) setTxt(c.alvo, nome.toUpperCase());
+  };
+
+  // Mudança de valor de um campo (dispara o crivo quando o valor fica "completo").
+  const aoMudar = (c: CampoForm, v: string) => {
+    setTxt(c.key, v);
+    if (!c.crivo) return;
+    const dig = digitos(c, v);
+    const completo = c.crivo === "procedimento" ? dig.length === 10
+      : c.crivo === "cnes" ? dig.length === 7
+      : dig.length >= 3; // CID
+    if (completo) dispararCrivo(c, dig);
+    else setCrivoStatus((s) => { const n = { ...s }; delete n[c.key]; return n; });
+  };
+  const crivoOutline = (key: string) => {
+    const st = crivoStatus[key];
+    return st === "ok" ? "outline outline-2 outline-emerald-500/70" : st === "erro" ? "outline outline-2 outline-rose-500/70" : "";
+  };
   const toggle = (key: string) => setChkState((e) => {
     const marcado = e[key];
     const grupo = checks.find((c) => c.key === key)?.grupo;
@@ -165,11 +210,12 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
                 const r = rectCampo(c);
                 const style = { top: pctS(r.top), left: pctS(r.left), width: pctS(r.width), height: pctS(r.height) } as const;
                 const val = txt[c.key] ?? "";
-                if (c.data) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={[2, 2, 4]} />;
-                if (c.hora) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={[2, 2]} />;
-                if (c.celulas) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => setTxt(c.key, v)} contornoCls={contornoCls} segmentos={Array(c.celulas).fill(1)} uniforme />;
+                const cls = `${contornoCls} ${crivoOutline(c.key)}`;
+                if (c.data) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={[2, 2, 4]} />;
+                if (c.hora) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={[2, 2]} />;
+                if (c.celulas) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={Array(c.celulas).fill(1)} uniforme alfa={c.letras} />;
                 if (c.area) return <textarea key={c.key} value={val} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute resize-none whitespace-pre-wrap ${contornoCls}`} style={{ ...style, textAlign: "left", lineHeight: 1.2 }} />;
-                return <input key={c.key} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute ${contornoCls}`} style={style} />;
+                return <input key={c.key} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => aoMudar(c, filtrar(c, e.target.value))} onKeyDown={aoTeclarEnter} onBlur={c.crivo === "cid" && digitos(c, val).length >= 3 ? () => dispararCrivo(c, digitos(c, val)) : undefined} className={`form-text absolute ${cls}`} style={style} />;
               })}
               {!editar && checksPag.map((c) => {
                 const r = rectCheck(c.key, c.top, c.left);
@@ -285,8 +331,8 @@ function PainelAjuste({ chave, rect, check, onChange, onClose }: {
   );
 }
 
-function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, uniforme }: {
-  campo: CampoForm; rect: Rect; value: string; onChange: (v: string) => void; contornoCls: string; segmentos: number[]; uniforme?: boolean;
+function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, uniforme, alfa }: {
+  campo: CampoForm; rect: Rect; value: string; onChange: (v: string) => void; contornoCls: string; segmentos: number[]; uniforme?: boolean; alfa?: boolean;
 }) {
   const partes = (value || "").split("|");
   const vals = segmentos.map((_, i) => partes[i] ?? "");
@@ -302,18 +348,26 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, u
   // Data (3 seg): a caixa do APAC tem 2 barras (~0.34 e ~0.61 do box) — dia antes da 1ª,
   // mês entre as duas, ano DEPOIS da 2ª barra (no espaço largo à direita).
   const pos = uniforme ? uniformePos() : segmentos.length === 3 ? [[0.03, 0.31], [0.40, 0.57], [0.68, 0.99]] : [[0, 0.46], [0.54, 1.0]];
-  const focar = (i: number) => (document.getElementById(`seg-${campo.key}-${i}`) as HTMLInputElement | null)?.focus();
-  const onSeg = (i: number, digs: string) => {
-    const nv = digs.replace(/\D/g, "").slice(0, segmentos[i]);
+  const seg = (i: number) => document.getElementById(`seg-${campo.key}-${i}`) as HTMLInputElement | null;
+  const onSeg = (i: number, raw: string) => {
+    const nv = (alfa ? raw.replace(/[^A-Za-zÀ-ÿ]/g, "").toUpperCase() : raw.replace(/\D/g, "")).slice(0, segmentos[i]);
     const arr = segmentos.map((_, j) => (j === i ? nv : vals[j]));
     onChange(arr.join("|"));
-    if (nv.length === segmentos[i] && nv.length > vals[i].length && i < segmentos.length - 1) focar(i + 1);
+    if (nv.length === segmentos[i] && nv.length > vals[i].length && i < segmentos.length - 1) seg(i + 1)?.focus();
+  };
+  // Navegação estilo BPA-I: auto-avanço (acima), Backspace em casinha vazia volta, Enter pula
+  // o campo inteiro (salta as demais casinhas irmãs).
+  const onKey = (i: number, e: RKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !vals[i] && i > 0) { e.preventDefault(); seg(i - 1)?.focus(); }
+    else if (e.key === "ArrowLeft" && i > 0) { e.preventDefault(); seg(i - 1)?.focus(); }
+    else if (e.key === "ArrowRight" && i < segmentos.length - 1) { e.preventDefault(); seg(i + 1)?.focus(); }
+    else if (e.key === "Enter") { e.preventDefault(); const irmas = segmentos.map((_, j) => seg(j)).filter((x): x is HTMLInputElement => !!x && x !== e.currentTarget); focarProximoCampo(e.currentTarget, irmas); }
   };
   return (
     <>
       {segmentos.map((_, i) => (
-        <input key={i} id={`seg-${campo.key}-${i}`} value={vals[i]} inputMode="numeric"
-          onChange={(e) => onSeg(i, e.target.value)}
+        <input key={i} id={`seg-${campo.key}-${i}`} value={vals[i]} inputMode={alfa ? "text" : "numeric"}
+          onChange={(e) => onSeg(i, e.target.value)} onKeyDown={(e) => onKey(i, e)}
           className={`form-text absolute ${contornoCls}`}
           style={{ top: pctS(rect.top), left: pctS(rect.left + rect.width * pos[i][0]), width: pctS(rect.width * (pos[i][1] - pos[i][0])), height: pctS(rect.height), textAlign: "center", padding: "0 1px", fontSize: "clamp(6px, 0.95cqw, 11px)", lineHeight: 1 }} />
       ))}
