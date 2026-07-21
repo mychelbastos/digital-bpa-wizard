@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TfdRouteImport } from './routes/tfd'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as MinhasFichasRouteImport } from './routes/minhas-fichas'
 import { Route as LaudoAihRouteImport } from './routes/laudo-aih'
@@ -23,6 +24,11 @@ import { Route as ApacRouteImport } from './routes/apac'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TfdRoute = TfdRouteImport.update({
+  id: '/tfd',
+  path: '/tfd',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PerfilRoute = PerfilRouteImport.update({
   id: '/perfil',
   path: '/perfil',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
+  '/tfd': typeof TfdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
+  '/tfd': typeof TfdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
+  '/tfd': typeof TfdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
+    | '/tfd'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
+    | '/tfd'
   id:
     | '__root__'
     | '/'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
+    | '/tfd'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -197,10 +209,18 @@ export interface RootRouteChildren {
   LaudoAihRoute: typeof LaudoAihRoute
   MinhasFichasRoute: typeof MinhasFichasRoute
   PerfilRoute: typeof PerfilRoute
+  TfdRoute: typeof TfdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tfd': {
+      id: '/tfd'
+      path: '/tfd'
+      fullPath: '/tfd'
+      preLoaderRoute: typeof TfdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/perfil': {
       id: '/perfil'
       path: '/perfil'
@@ -309,6 +329,7 @@ const rootRouteChildren: RootRouteChildren = {
   LaudoAihRoute: LaudoAihRoute,
   MinhasFichasRoute: MinhasFichasRoute,
   PerfilRoute: PerfilRoute,
+  TfdRoute: TfdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
