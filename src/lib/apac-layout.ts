@@ -4,7 +4,7 @@
 import type { CampoForm as Campo, CheckForm as Check } from "@/components/FormularioOverlay";
 
 export const CAMPOS: Campo[] = [
-  { key: "estab_solic_nome", top: 10.2, left: 5.5, width: 70.8, height: 1.9, upper: true },
+  { key: "estab_solic_nome", top: 10.2, left: 5.5, width: 70.8, height: 1.9, upper: true, autocomplete: "estabelecimento", cnesAlvo: "estab_solic_cnes" },
   { key: "estab_solic_cnes", top: 10.4, left: 77.5, width: 16.8, height: 1.7, celulas: 7, crivo: "cnes", alvo: "estab_solic_nome" },
   { key: "pac_nome", top: 15.8, left: 5.8, width: 58.8, height: 1.5, upper: true },
   { key: "pac_prontuario", top: 15.8, left: 65.4, width: 14.2, height: 1.4, num: true },
@@ -76,7 +76,7 @@ export const CAMPOS: Campo[] = [
   { key: "data_autorizacao", top: 26.7, left: 4.7, width: 14, height: 1.4, data: true, pagina: 2 },
   { key: "validade_inicio", top: 26.8, left: 66.2, width: 11.8, data: true, pagina: 2 },
   { key: "validade_fim", top: 26.9, left: 81.5, width: 11.4, data: true, pagina: 2 },
-  { key: "estab_exec_nome", top: 31.6, left: 4.7, width: 64.6, height: 1.6, upper: true, pagina: 2 },
+  { key: "estab_exec_nome", top: 31.6, left: 4.7, width: 64.6, height: 1.6, upper: true, pagina: 2, autocomplete: "estabelecimento", cnesAlvo: "estab_exec_cnes" },
   { key: "estab_exec_cnes", top: 31.6, left: 72.8, width: 18.1, height: 1.6, celulas: 7, pagina: 2, crivo: "cnes", alvo: "estab_exec_nome" },
 ];
 

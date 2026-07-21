@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
 import { focarProximoCampo } from "@/lib/foco-campos";
 import { carregarNomesProcedimentos, carregarDescricoesCid } from "@/lib/dashboard-producao";
-import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
+import { buscarEstabelecimento, buscarEstabelecimentosPorNome, type EstabelecimentoSug } from "@/lib/bpa-i-v2/estabelecimentos";
 
 // Enter em qualquer campo (menos textarea) pula para o próximo — mesma navegação do BPA-I.
 function aoTeclarEnter(e: RKeyboardEvent<HTMLInputElement>) {
@@ -31,6 +31,9 @@ export interface CampoForm {
   // Crivo (validação/preenchimento a partir das tabelas do sistema):
   crivo?: "procedimento" | "cnes" | "cid";
   alvo?: string; // key do campo a preencher com o nome/descrição encontrado
+  // Autocomplete por NOME (ex.: nome do estabelecimento → sugere e preenche o CNES):
+  autocomplete?: "estabelecimento";
+  cnesAlvo?: string; // key do campo CNES (celulas) a preencher ao escolher uma sugestão
 }
 export interface CheckForm {
   key: string;
@@ -215,6 +218,9 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
                 if (c.hora) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={[2, 2]} />;
                 if (c.celulas) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={Array(c.celulas).fill(1)} uniforme alfa={c.letras} />;
                 if (c.area) return <textarea key={c.key} value={val} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute resize-none whitespace-pre-wrap ${contornoCls}`} style={{ ...style, textAlign: "left", lineHeight: 1.2 }} />;
+                if (c.autocomplete) return <CampoAutocomplete key={c.key} rect={r} value={val} contornoCls={cls}
+                  onChangeNome={(v) => setTxt(c.key, v)}
+                  onSelecionar={(nome, cnes) => { setTxt(c.key, nome.toUpperCase()); if (c.cnesAlvo) { setTxt(c.cnesAlvo, cnes.split("").join("|")); setCrivoStatus((s) => ({ ...s, [c.cnesAlvo!]: "ok" })); } }} />;
                 return <input key={c.key} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => aoMudar(c, filtrar(c, e.target.value))} onKeyDown={aoTeclarEnter} onBlur={c.crivo === "cid" && digitos(c, val).length >= 3 ? () => dispararCrivo(c, digitos(c, val)) : undefined} className={`form-text absolute ${cls}`} style={style} />;
               })}
               {!editar && checksPag.map((c) => {
@@ -371,6 +377,46 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, u
           className={`form-text absolute ${contornoCls}`}
           style={{ top: pctS(rect.top), left: pctS(rect.left + rect.width * pos[i][0]), width: pctS(rect.width * (pos[i][1] - pos[i][0])), height: pctS(rect.height), textAlign: "center", padding: "0 1px", fontSize: "clamp(6px, 0.95cqw, 11px)", lineHeight: 1 }} />
       ))}
+    </>
+  );
+}
+
+// Campo de NOME com autocomplete de estabelecimento: ao digitar 3+ letras, sugere e (ao
+// escolher) preenche o CNES. A busca é debounced; a lista aparece logo abaixo do campo.
+function CampoAutocomplete({ rect, value, contornoCls, onChangeNome, onSelecionar }: {
+  rect: Rect; value: string; contornoCls: string; onChangeNome: (v: string) => void; onSelecionar: (nome: string, cnes: string) => void;
+}) {
+  const [sug, setSug] = useState<EstabelecimentoSug[]>([]);
+  const [aberto, setAberto] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const buscar = (termo: string) => {
+    if (timer.current) clearTimeout(timer.current);
+    if (termo.trim().length < 3) { setSug([]); setAberto(false); return; }
+    timer.current = setTimeout(async () => {
+      const r = await buscarEstabelecimentosPorNome(termo);
+      setSug(r); setAberto(r.length > 0);
+    }, 250);
+  };
+  return (
+    <>
+      <input value={value} autoComplete="off"
+        onChange={(e) => { const v = e.target.value.toUpperCase(); onChangeNome(v); buscar(v); }}
+        onKeyDown={aoTeclarEnter} onBlur={() => setTimeout(() => setAberto(false), 150)}
+        className={`form-text absolute ${contornoCls}`}
+        style={{ top: pctS(rect.top), left: pctS(rect.left), width: pctS(rect.width), height: pctS(rect.height) }} />
+      {aberto && (
+        <ul className="absolute z-30 max-h-44 overflow-auto rounded-md border border-border bg-white shadow-lg"
+          style={{ top: `${rect.top + rect.height + 0.2}%`, left: pctS(rect.left), minWidth: pctS(Math.max(rect.width, 45)) }}>
+          {sug.map((s) => (
+            <li key={s.cnes}>
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); onSelecionar(s.nome, s.cnes); setAberto(false); }}
+                className="block w-full px-2 py-1 text-left text-[11px] leading-tight hover:bg-muted">
+                <span className="font-medium text-foreground">{s.nome}</span> <span className="text-muted-foreground">· CNES {s.cnes}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
 }
