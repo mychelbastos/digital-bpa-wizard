@@ -4,7 +4,14 @@ import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
 import { focarProximoCampo } from "@/lib/foco-campos";
 import { carregarNomesProcedimentos, carregarDescricoesCid } from "@/lib/dashboard-producao";
-import { buscarEstabelecimento, buscarEstabelecimentosPorNome, type EstabelecimentoSug } from "@/lib/bpa-i-v2/estabelecimentos";
+import { buscarEstabelecimento, buscarEstabelecimentosPorNome } from "@/lib/bpa-i-v2/estabelecimentos";
+import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
+import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
+
+const normTxt = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+// Uma opção do autocomplete: rótulo + sublegenda + ação de aplicar (preenche os campos).
+interface OpcaoAuto { label: string; sub?: string; aplicar: () => void; }
 
 // Enter em qualquer campo (menos textarea) pula para o próximo — mesma navegação do BPA-I.
 function aoTeclarEnter(e: RKeyboardEvent<HTMLInputElement>) {
@@ -29,11 +36,13 @@ export interface CampoForm {
   celulas?: number;
   pagina?: number;
   // Crivo (validação/preenchimento a partir das tabelas do sistema):
-  crivo?: "procedimento" | "cnes" | "cid";
+  crivo?: "procedimento" | "cnes" | "cid" | "cep";
   alvo?: string; // key do campo a preencher com o nome/descrição encontrado
-  // Autocomplete por NOME (ex.: nome do estabelecimento → sugere e preenche o CNES):
-  autocomplete?: "estabelecimento";
-  cnesAlvo?: string; // key do campo CNES (celulas) a preencher ao escolher uma sugestão
+  alvos?: Record<string, string>; // vários alvos (ex.: CEP → { ibge, uf, municipio })
+  // Autocomplete por NOME → sugere e preenche o código/CNES + campos relacionados:
+  autocomplete?: "estabelecimento" | "procedimento" | "municipio";
+  codAlvo?: string; // key do campo de código (celulas) a preencher ao escolher
+  cnesAlvo?: string; // idem, para estabelecimento (compat)
 }
 export interface CheckForm {
   key: string;
@@ -90,6 +99,8 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
 
   // Dígitos "puros" de um valor (células/data guardam "seg|seg|..."; junta).
   const digitos = (c: CampoForm, v: string) => (c.celulas || c.data || c.hora ? v.split("|").join("") : v).trim();
+  // Preenche um campo de casinhas (celulas) a partir de uma string ("2510332" -> "2|5|1|0|3|3|2").
+  const preencherCelulas = (key: string, s: string) => setTxt(key, s.split("").join("|"));
 
   // Crivo: valida contra as tabelas do sistema e, quando há alvo, preenche o nome/descrição.
   const dispararCrivo = async (c: CampoForm, valor: string) => {
@@ -100,6 +111,15 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
       if (c.crivo === "procedimento") { const r = await carregarNomesProcedimentos([valor]); nome = r[valor] ?? null; ok = !!nome; }
       else if (c.crivo === "cnes") { nome = await buscarEstabelecimento(valor); ok = !!nome; }
       else if (c.crivo === "cid") { const r = await carregarDescricoesCid([valor.toUpperCase()]); nome = r[valor.toUpperCase()] ?? null; ok = !!nome; }
+      else if (c.crivo === "cep") {
+        const info = await buscarInfoCep(valor); ok = !!info.ibge;
+        if (info.ibge && c.alvos?.ibge) preencherCelulas(c.alvos.ibge, info.ibge);
+        if (info.cidadeUf) {
+          const [cidade, uf] = info.cidadeUf.split(" - ");
+          if (uf && c.alvos?.uf) preencherCelulas(c.alvos.uf, uf.trim());
+          if (cidade && c.alvos?.municipio) setTxt(c.alvos.municipio, cidade.trim().toUpperCase());
+        }
+      }
     } catch { ok = false; }
     setCrivoStatus((s) => ({ ...s, [c.key]: ok ? "ok" : "erro" }));
     if (ok && c.alvo && nome) setTxt(c.alvo, nome.toUpperCase());
@@ -112,6 +132,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
     const dig = digitos(c, v);
     const completo = c.crivo === "procedimento" ? dig.length === 10
       : c.crivo === "cnes" ? dig.length === 7
+      : c.crivo === "cep" ? dig.length === 8
       : dig.length >= 3; // CID
     if (completo) dispararCrivo(c, dig);
     else setCrivoStatus((s) => { const n = { ...s }; delete n[c.key]; return n; });
@@ -218,9 +239,24 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
                 if (c.hora) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={[2, 2]} />;
                 if (c.celulas) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={Array(c.celulas).fill(1)} uniforme alfa={c.letras} />;
                 if (c.area) return <textarea key={c.key} value={val} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute resize-none whitespace-pre-wrap ${contornoCls}`} style={{ ...style, textAlign: "left", lineHeight: 1.2 }} />;
-                if (c.autocomplete) return <CampoAutocomplete key={c.key} rect={r} value={val} contornoCls={cls}
-                  onChangeNome={(v) => setTxt(c.key, v)}
-                  onSelecionar={(nome, cnes) => { setTxt(c.key, nome.toUpperCase()); if (c.cnesAlvo) { setTxt(c.cnesAlvo, cnes.split("").join("|")); setCrivoStatus((s) => ({ ...s, [c.cnesAlvo!]: "ok" })); } }} />;
+                if (c.autocomplete) {
+                  const buscarOpcoes = async (termo: string): Promise<OpcaoAuto[]> => {
+                    if (c.autocomplete === "procedimento") {
+                      const rs = await buscarProcedimentosPorNome(termo);
+                      return rs.map((p) => ({ label: p.nome, sub: p.codigo, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.codAlvo) { preencherCelulas(c.codAlvo, p.codigo); setCrivoStatus((s) => ({ ...s, [c.codAlvo!]: "ok" })); } } }));
+                    }
+                    if (c.autocomplete === "municipio") {
+                      const t = normTxt(termo);
+                      return MUNICIPIOS_IBGE.filter((m) => normTxt(m.label).includes(t)).slice(0, 8).map((m) => {
+                        const [cidade, uf] = m.label.split(" - ");
+                        return { label: m.label, aplicar: () => { setTxt(c.key, cidade.trim().toUpperCase()); if (c.alvos?.ibge) preencherCelulas(c.alvos.ibge, m.code); if (c.alvos?.uf && uf) preencherCelulas(c.alvos.uf, uf.trim()); } };
+                      });
+                    }
+                    const rs = await buscarEstabelecimentosPorNome(termo);
+                    return rs.map((e) => ({ label: e.nome, sub: `CNES ${e.cnes}`, aplicar: () => { setTxt(c.key, e.nome.toUpperCase()); if (c.cnesAlvo) { preencherCelulas(c.cnesAlvo, e.cnes); setCrivoStatus((s) => ({ ...s, [c.cnesAlvo!]: "ok" })); } } }));
+                  };
+                  return <CampoAutocomplete key={c.key} rect={r} value={val} contornoCls={cls} onChangeNome={(v) => setTxt(c.key, filtrar(c, v))} buscar={buscarOpcoes} />;
+                }
                 return <input key={c.key} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => aoMudar(c, filtrar(c, e.target.value))} onKeyDown={aoTeclarEnter} onBlur={c.crivo === "cid" && digitos(c, val).length >= 3 ? () => dispararCrivo(c, digitos(c, val)) : undefined} className={`form-text absolute ${cls}`} style={style} />;
               })}
               {!editar && checksPag.map((c) => {
@@ -381,37 +417,37 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, u
   );
 }
 
-// Campo de NOME com autocomplete de estabelecimento: ao digitar 3+ letras, sugere e (ao
-// escolher) preenche o CNES. A busca é debounced; a lista aparece logo abaixo do campo.
-function CampoAutocomplete({ rect, value, contornoCls, onChangeNome, onSelecionar }: {
-  rect: Rect; value: string; contornoCls: string; onChangeNome: (v: string) => void; onSelecionar: (nome: string, cnes: string) => void;
+// Campo de NOME com autocomplete: ao digitar 3+ letras, `buscar` devolve opções (rótulo +
+// sublegenda + ação de aplicar). Busca debounced; lista logo abaixo do campo.
+function CampoAutocomplete({ rect, value, contornoCls, onChangeNome, buscar }: {
+  rect: Rect; value: string; contornoCls: string; onChangeNome: (v: string) => void; buscar: (termo: string) => Promise<OpcaoAuto[]>;
 }) {
-  const [sug, setSug] = useState<EstabelecimentoSug[]>([]);
+  const [ops, setOps] = useState<OpcaoAuto[]>([]);
   const [aberto, setAberto] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const buscar = (termo: string) => {
+  const rodar = (termo: string) => {
     if (timer.current) clearTimeout(timer.current);
-    if (termo.trim().length < 3) { setSug([]); setAberto(false); return; }
+    if (termo.trim().length < 3) { setOps([]); setAberto(false); return; }
     timer.current = setTimeout(async () => {
-      const r = await buscarEstabelecimentosPorNome(termo);
-      setSug(r); setAberto(r.length > 0);
+      const r = await buscar(termo);
+      setOps(r); setAberto(r.length > 0);
     }, 250);
   };
   return (
     <>
       <input value={value} autoComplete="off"
-        onChange={(e) => { const v = e.target.value.toUpperCase(); onChangeNome(v); buscar(v); }}
+        onChange={(e) => { onChangeNome(e.target.value); rodar(e.target.value); }}
         onKeyDown={aoTeclarEnter} onBlur={() => setTimeout(() => setAberto(false), 150)}
         className={`form-text absolute ${contornoCls}`}
         style={{ top: pctS(rect.top), left: pctS(rect.left), width: pctS(rect.width), height: pctS(rect.height) }} />
       {aberto && (
         <ul className="absolute z-30 max-h-44 overflow-auto rounded-md border border-border bg-white shadow-lg"
           style={{ top: `${rect.top + rect.height + 0.2}%`, left: pctS(rect.left), minWidth: pctS(Math.max(rect.width, 45)) }}>
-          {sug.map((s) => (
-            <li key={s.cnes}>
-              <button type="button" onMouseDown={(e) => { e.preventDefault(); onSelecionar(s.nome, s.cnes); setAberto(false); }}
+          {ops.map((o, i) => (
+            <li key={i}>
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); o.aplicar(); setAberto(false); }}
                 className="block w-full px-2 py-1 text-left text-[11px] leading-tight hover:bg-muted">
-                <span className="font-medium text-foreground">{s.nome}</span> <span className="text-muted-foreground">· CNES {s.cnes}</span>
+                <span className="font-medium text-foreground">{o.label}</span>{o.sub && <span className="text-muted-foreground"> · {o.sub}</span>}
               </button>
             </li>
           ))}

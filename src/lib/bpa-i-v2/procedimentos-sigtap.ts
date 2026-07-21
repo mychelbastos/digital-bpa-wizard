@@ -11,6 +11,26 @@ export interface ProcedimentoSigtap {
 
 const SEM_LIMITE = 9999;
 
+// Autocomplete por NOME (ou código, se numérico) do procedimento SIGTAP → sugere código+nome.
+// Deduplica por código (a tabela tem uma linha por competência). Nunca lança.
+export async function buscarProcedimentosPorNome(termo: string): Promise<{ codigo: string; nome: string }[]> {
+  const q = termo.trim();
+  if (!supabase || q.length < 3) return [];
+  try {
+    let req = supabase.from("procedimentos_sigtap").select("codigo, nome").limit(60);
+    req = /^[0-9]+$/.test(q) ? req.like("codigo", `${q}%`) : req.ilike("nome", `%${q}%`);
+    const { data, error } = await req.order("nome");
+    if (error || !data) return [];
+    const vistos = new Set<string>(); const out: { codigo: string; nome: string }[] = [];
+    for (const r of data as { codigo: string; nome: string }[]) {
+      if (!vistos.has(r.codigo)) { vistos.add(r.codigo); out.push(r); if (out.length >= 8) break; }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 // Competências (AAAAMM) que estão de fato carregadas nas tabelas SIGTAP. Cache em
 // memória: só muda quando importamos uma competência nova (evento raro), então uma
 // leitura por sessão basta. null enquanto não carregou.
