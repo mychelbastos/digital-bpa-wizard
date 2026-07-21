@@ -290,10 +290,14 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, u
 }) {
   const partes = (value || "").split("|");
   const vals = segmentos.map((_, i) => partes[i] ?? "");
+  // Divide a caixa em N partes iguais (uma por casinha impressa), com uma margem interna
+  // pequena para não encostar no divisor. Antes o "gap" absoluto engolia a largura quando
+  // havia muitas casinhas (ex.: 9 casinhas do telefone ficavam invisíveis).
   const uniformePos = (): number[][] => {
-    const n = segmentos.length, gap = 0.12;
-    const cw = (1 - gap * (n - 1)) / n;
-    return segmentos.map((_, i) => { const s = i * (cw + gap); return [s, s + cw]; });
+    const n = segmentos.length;
+    const cw = 1 / n;
+    const m = cw * 0.12;
+    return segmentos.map((_, i) => [i * cw + m, (i + 1) * cw - m]);
   };
   const pos = uniforme ? uniformePos() : segmentos.length === 3 ? [[0, 0.21], [0.29, 0.50], [0.56, 1.0]] : [[0, 0.46], [0.54, 1.0]];
   const focar = (i: number) => (document.getElementById(`seg-${campo.key}-${i}`) as HTMLInputElement | null)?.focus();
