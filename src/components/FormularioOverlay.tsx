@@ -299,7 +299,9 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, u
     const m = cw * 0.12;
     return segmentos.map((_, i) => [i * cw + m, (i + 1) * cw - m]);
   };
-  const pos = uniforme ? uniformePos() : segmentos.length === 3 ? [[0, 0.21], [0.29, 0.50], [0.56, 1.0]] : [[0, 0.46], [0.54, 1.0]];
+  // Data (3 seg): a caixa do APAC tem 2 barras próximas (~36% e ~53%) e um espaço largo para
+  // o ano à direita — dia antes da 1ª barra, mês entre as barras, ano no restante.
+  const pos = uniforme ? uniformePos() : segmentos.length === 3 ? [[0.02, 0.30], [0.38, 0.50], [0.56, 0.98]] : [[0, 0.46], [0.54, 1.0]];
   const focar = (i: number) => (document.getElementById(`seg-${campo.key}-${i}`) as HTMLInputElement | null)?.focus();
   const onSeg = (i: number, digs: string) => {
     const nv = digs.replace(/\D/g, "").slice(0, segmentos[i]);
