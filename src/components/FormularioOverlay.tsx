@@ -85,6 +85,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
   const [exportando, setExportando] = useState(false);
   const [crivoStatus, setCrivoStatus] = useState<Record<string, "ok" | "erro" | "buscando">>({});
   const [crivoLabel, setCrivoLabel] = useState<Record<string, string>>({}); // selo (ex.: "CPF"/"CNS")
+  const [campoFocado, setCampoFocado] = useState<string | null>(null); // key do campo em foco
 
   useEffect(() => {
     try {
@@ -96,6 +97,20 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
   }, [storageKey, rectsKey]);
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify({ txt, chk })); } catch { /* */ } }, [txt, chk, storageKey]);
   useEffect(() => { try { localStorage.setItem(rectsKey, JSON.stringify(rects)); } catch { /* */ } }, [rects, rectsKey]);
+
+  // Rastreia qual campo está em foco (pelo id do input: "seg-<key>-<i>" ou "f-<key>"),
+  // p/ mostrar o feedback "válido" (verde) só enquanto o campo está selecionado — igual BPA-I.
+  useEffect(() => {
+    const atualizar = () => {
+      const id = (document.activeElement as HTMLElement | null)?.id || "";
+      const mSeg = id.match(/^seg-(.+)-\d+$/); const mF = id.match(/^f-(.+)$/);
+      setCampoFocado(mSeg ? mSeg[1] : mF ? mF[1] : null);
+    };
+    const onOut = () => setTimeout(atualizar, 0);
+    document.addEventListener("focusin", atualizar);
+    document.addEventListener("focusout", onOut);
+    return () => { document.removeEventListener("focusin", atualizar); document.removeEventListener("focusout", onOut); };
+  }, []);
 
   const setTxt = (key: string, v: string) => setTxtState((e) => ({ ...e, [key]: v }));
 
@@ -148,7 +163,9 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
   };
   const crivoOutline = (key: string) => {
     const st = crivoStatus[key];
-    return st === "ok" ? "outline outline-2 outline-emerald-500/70" : st === "erro" ? "outline outline-2 outline-rose-500/70" : "";
+    if (st === "erro") return "outline outline-2 outline-rose-500/70"; // inválido: persiste (aviso)
+    if (st === "ok" && campoFocado === key) return "outline outline-2 outline-emerald-500/70"; // válido: só em foco
+    return "";
   };
   const toggle = (key: string) => setChkState((e) => {
     const marcado = e[key];
@@ -264,9 +281,9 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
                     const rs = await buscarEstabelecimentosPorNome(termo);
                     return rs.map((e) => ({ label: e.nome, sub: `CNES ${e.cnes}`, aplicar: () => { setTxt(c.key, e.nome.toUpperCase()); if (c.cnesAlvo) { preencherCelulas(c.cnesAlvo, e.cnes); setCrivoStatus((s) => ({ ...s, [c.cnesAlvo!]: "ok" })); } } }));
                   };
-                  return <CampoAutocomplete key={c.key} rect={r} value={val} contornoCls={cls} onChangeNome={(v) => setTxt(c.key, filtrar(c, v))} buscar={buscarOpcoes} />;
+                  return <CampoAutocomplete key={c.key} id={`f-${c.key}`} rect={r} value={val} contornoCls={cls} onChangeNome={(v) => setTxt(c.key, filtrar(c, v))} buscar={buscarOpcoes} />;
                 }
-                return <input key={c.key} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => aoMudar(c, filtrar(c, e.target.value))} onKeyDown={aoTeclarEnter} onBlur={c.crivo === "cid" && digitos(c, val).length >= 3 ? () => dispararCrivo(c, digitos(c, val)) : undefined} className={`form-text absolute ${cls}`} style={style} />;
+                return <input key={c.key} id={`f-${c.key}`} value={val} inputMode={c.num ? "numeric" : undefined} onChange={(e) => aoMudar(c, filtrar(c, e.target.value))} onKeyDown={aoTeclarEnter} onBlur={c.crivo === "cid" && digitos(c, val).length >= 3 ? () => dispararCrivo(c, digitos(c, val)) : undefined} className={`form-text absolute ${cls}`} style={style} />;
               })}
               {!editar && checksPag.map((c) => {
                 const r = rectCheck(c.key, c.top, c.left);
@@ -276,8 +293,8 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
                   </button>
                 );
               })}
-              {/* Selo de tipo (ex.: CPF/CNS), acima do campo. */}
-              {!editar && camposPag.filter((c) => crivoLabel[c.key]).map((c) => {
+              {/* Selo de tipo (ex.: CPF/CNS): só enquanto o campo está focado, ou se inválido. */}
+              {!editar && camposPag.filter((c) => crivoLabel[c.key] && (campoFocado === c.key || crivoStatus[c.key] === "erro")).map((c) => {
                 const r = rectCampo(c);
                 const st = crivoStatus[c.key];
                 const cor = st === "erro" ? "bg-rose-100 text-rose-700" : st === "ok" ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground";
@@ -440,8 +457,8 @@ function DataHoraCampo({ campo, rect, value, onChange, contornoCls, segmentos, u
 
 // Campo de NOME com autocomplete: ao digitar 3+ letras, `buscar` devolve opções (rótulo +
 // sublegenda + ação de aplicar). Busca debounced; lista logo abaixo do campo.
-function CampoAutocomplete({ rect, value, contornoCls, onChangeNome, buscar }: {
-  rect: Rect; value: string; contornoCls: string; onChangeNome: (v: string) => void; buscar: (termo: string) => Promise<OpcaoAuto[]>;
+function CampoAutocomplete({ id, rect, value, contornoCls, onChangeNome, buscar }: {
+  id: string; rect: Rect; value: string; contornoCls: string; onChangeNome: (v: string) => void; buscar: (termo: string) => Promise<OpcaoAuto[]>;
 }) {
   const [ops, setOps] = useState<OpcaoAuto[]>([]);
   const [aberto, setAberto] = useState(false);
@@ -456,7 +473,7 @@ function CampoAutocomplete({ rect, value, contornoCls, onChangeNome, buscar }: {
   };
   return (
     <>
-      <input value={value} autoComplete="off"
+      <input id={id} value={value} autoComplete="off"
         onChange={(e) => { onChangeNome(e.target.value); rodar(e.target.value); }}
         onKeyDown={aoTeclarEnter} onBlur={() => setTimeout(() => setAberto(false), 150)}
         className={`form-text absolute ${contornoCls}`}
