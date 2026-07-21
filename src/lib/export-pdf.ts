@@ -11,8 +11,9 @@ import html2canvas from "html2canvas-pro";
 // untouched) we REPLACE each <input> with a plain <div> carrying the same value and
 // position: a block element's single line of text is centered reliably by
 // `line-height = box height` in both the browser and the canvas renderer.
-export async function exportSheetPdf(sheet: HTMLElement, filename: string) {
-  const canvas = await html2canvas(sheet, {
+// Rasteriza uma folha (mesmo tratamento de <input> do exportSheetPdf).
+async function rasterizarFolha(sheet: HTMLElement): Promise<HTMLCanvasElement> {
+  return html2canvas(sheet, {
     scale: 2,
     backgroundColor: "#ffffff",
     useCORS: true,
@@ -54,8 +55,25 @@ export async function exportSheetPdf(sheet: HTMLElement, filename: string) {
       clonedSheet.querySelectorAll('[data-html2canvas-ignore="true"]').forEach((el) => el.remove());
     },
   });
+}
+
+// Render a form-sheet element to an A4 PDF.
+export async function exportSheetPdf(sheet: HTMLElement, filename: string) {
+  const canvas = await rasterizarFolha(sheet);
   const img = canvas.toDataURL("image/jpeg", 0.95);
   const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   pdf.addImage(img, "JPEG", 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
+  pdf.save(filename);
+}
+
+// Várias folhas (ex.: formulário de 2 páginas) num único PDF A4, uma por página.
+export async function exportSheetsPdf(sheets: HTMLElement[], filename: string) {
+  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const w = pdf.internal.pageSize.getWidth(), h = pdf.internal.pageSize.getHeight();
+  for (let i = 0; i < sheets.length; i++) {
+    const canvas = await rasterizarFolha(sheets[i]);
+    if (i > 0) pdf.addPage();
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, w, h);
+  }
   pdf.save(filename);
 }
