@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject, type KeyboardEvent as RKeyboardEvent } from "react";
-import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X } from "lucide-react";
+import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
 import { focarProximoCampo } from "@/lib/foco-campos";
@@ -147,11 +147,21 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
     setTxt(c.key, v);
     if (!c.crivo) return;
     const dig = digitos(c, v);
-    // CPF/CNS: detecta o tipo (11=CPF, 15=CNS), valida o dígito verificador e mostra o selo.
+    // CPF/CNS (igual BPA-I): detecta o tipo (11=CPF, 15=CNS), valida o dígito, mostra o selo.
+    // Ao completar um CPF VÁLIDO, ancora os dígitos à DIREITA (4 folgas à esquerda, como o CNS)
+    // e pula pro próximo campo; CNS cheio (15) também pula.
     if (c.crivo === "cpfcns") {
       const info = identificarPaciente(dig);
+      if (dig.length === 11 && info.valido && c.celulas) setTxt(c.key, [...Array(c.celulas - 11).fill(""), ...dig.split("")].join("|"));
       setCrivoLabel((l) => ({ ...l, [c.key]: info.tipo ?? "" }));
       setCrivoStatus((s) => { const n = { ...s }; if (info.completo) n[c.key] = info.valido ? "ok" : "erro"; else delete n[c.key]; return n; });
+      if ((dig.length === 11 && info.valido) || dig.length === 15) {
+        setTimeout(() => {
+          const ins = Array.from({ length: c.celulas ?? 0 }, (_, i) => document.getElementById(`seg-${c.key}-${i}`)).filter((x): x is HTMLInputElement => !!x);
+          const last = ins[ins.length - 1];
+          if (last) focarProximoCampo(last, ins.filter((x) => x !== last));
+        }, 0);
+      }
       return;
     }
     const completo = c.crivo === "procedimento" ? dig.length === 10
@@ -166,6 +176,14 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
     if (st === "erro") return "outline outline-2 outline-rose-500/70"; // inválido: persiste (aviso)
     if (st === "ok" && campoFocado === key) return "outline outline-2 outline-emerald-500/70"; // válido: só em foco
     return "";
+  };
+  // Lixeira: limpa o campo inteiro e volta o foco pra 1ª casinha (igual BPA-I).
+  const limparCampo = (c: CampoForm) => {
+    setTxt(c.key, "");
+    setCrivoStatus((s) => { const n = { ...s }; delete n[c.key]; return n; });
+    setCrivoLabel((l) => { const n = { ...l }; delete n[c.key]; return n; });
+    if (c.alvo) setTxt(c.alvo, ""); // limpa também o nome/descrição que o crivo preencheu
+    setTimeout(() => (document.getElementById(`seg-${c.key}-0`) ?? document.getElementById(`f-${c.key}`))?.focus(), 0);
   };
   const toggle = (key: string) => setChkState((e) => {
     const marcado = e[key];
@@ -305,6 +323,20 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
                   </span>
                 );
               })}
+              {/* Lixeira do campo em foco: limpa o campo inteiro; fora do PDF (ignorada no export). */}
+              {!editar && campoFocado && (() => {
+                const c = camposPag.find((x) => x.key === campoFocado);
+                if (!c || c.area) return null;
+                const r = rectCampo(c);
+                return (
+                  <button key="lixeira" type="button" tabIndex={-1} aria-label="Limpar campo" title="Limpar campo"
+                    data-html2canvas-ignore="true" onMouseDown={(e) => e.preventDefault()} onClick={() => limparCampo(c)}
+                    className="absolute z-40 flex items-center justify-center rounded-full bg-rose-500 text-white shadow ring-1 ring-white hover:bg-rose-600"
+                    style={{ top: `${r.top}%`, left: `${r.left + r.width + 0.4}%`, height: `${Math.min(r.height, 1.7)}%`, aspectRatio: "1", border: "none", padding: 0 }}>
+                    <Trash2 style={{ width: "62%", height: "62%" }} />
+                  </button>
+                );
+              })()}
 
               {editar && camposPag.map((c) => (
                 <CaixaEditavel key={c.key} rect={rectCampo(c)} label={c.key} resizable selecionado={sel === c.key} sheetRef={{ current: sheetRefs.current[pi] }}
