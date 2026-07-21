@@ -8,6 +8,7 @@ import { buscarEstabelecimento, buscarEstabelecimentosPorNome } from "@/lib/bpa-
 import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
+import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
 
 const normTxt = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 // Uma opção do autocomplete: rótulo + sublegenda + ação de aplicar (preenche os campos).
@@ -36,7 +37,7 @@ export interface CampoForm {
   celulas?: number;
   pagina?: number;
   // Crivo (validação/preenchimento a partir das tabelas do sistema):
-  crivo?: "procedimento" | "cnes" | "cid" | "cep";
+  crivo?: "procedimento" | "cnes" | "cid" | "cep" | "cpfcns";
   alvo?: string; // key do campo a preencher com o nome/descrição encontrado
   alvos?: Record<string, string>; // vários alvos (ex.: CEP → { ibge, uf, municipio })
   // Autocomplete por NOME → sugere e preenche o código/CNES + campos relacionados:
@@ -83,6 +84,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
   const [exportOpen, setExportOpen] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [crivoStatus, setCrivoStatus] = useState<Record<string, "ok" | "erro" | "buscando">>({});
+  const [crivoLabel, setCrivoLabel] = useState<Record<string, string>>({}); // selo (ex.: "CPF"/"CNS")
 
   useEffect(() => {
     try {
@@ -130,6 +132,13 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
     setTxt(c.key, v);
     if (!c.crivo) return;
     const dig = digitos(c, v);
+    // CPF/CNS: detecta o tipo (11=CPF, 15=CNS), valida o dígito verificador e mostra o selo.
+    if (c.crivo === "cpfcns") {
+      const info = identificarPaciente(dig);
+      setCrivoLabel((l) => ({ ...l, [c.key]: info.tipo ?? "" }));
+      setCrivoStatus((s) => { const n = { ...s }; if (info.completo) n[c.key] = info.valido ? "ok" : "erro"; else delete n[c.key]; return n; });
+      return;
+    }
     const completo = c.crivo === "procedimento" ? dig.length === 10
       : c.crivo === "cnes" ? dig.length === 7
       : c.crivo === "cep" ? dig.length === 8
@@ -265,6 +274,18 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas 
                   <button key={c.key} type="button" onClick={() => toggle(c.key)} className={`absolute flex items-center justify-center ${contornoCls}`} style={{ top: pctS(r.top), left: pctS(r.left), width: pctS(r.width), height: pctS(r.height) }} aria-label={c.key}>
                     {chk[c.key] && <span className="text-[#0a2540]" style={{ fontSize: "min(2.6cqw, 16px)", fontWeight: 800, lineHeight: 1 }}>✕</span>}
                   </button>
+                );
+              })}
+              {/* Selo de tipo (ex.: CPF/CNS), acima do campo. */}
+              {!editar && camposPag.filter((c) => crivoLabel[c.key]).map((c) => {
+                const r = rectCampo(c);
+                const st = crivoStatus[c.key];
+                const cor = st === "erro" ? "bg-rose-100 text-rose-700" : st === "ok" ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground";
+                return (
+                  <span key={`selo-${c.key}`} className={`pointer-events-none absolute rounded px-1 text-[9px] font-bold leading-tight ${cor}`}
+                    style={{ top: `${r.top - 1.5}%`, left: `${r.left}%` }}>
+                    {crivoLabel[c.key]}{st === "erro" ? " inválido" : st === "ok" ? " ✓" : ""}
+                  </span>
                 );
               })}
 
