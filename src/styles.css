@@ -253,3 +253,16 @@
   animation-iteration-count: infinite;
 }
 
+
+/* ===== Regra padrão do sistema: campos de formulário em MAIÚSCULAS (visual) =====
+   Vale para inputs de texto e textareas de TODO o sistema (cadastro de paciente,
+   destino, BPA, TFD, etc.). Fora da regra: e-mail, senha, numéricos, datas/hora e
+   qualquer campo marcado com data-nocaps. Placeholders ficam sem transformar. */
+input:not([type="email"]):not([type="password"]):not([type="number"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="month"]):not([type="checkbox"]):not([type="radio"]):not([data-nocaps]),
+textarea:not([data-nocaps]) {
+  text-transform: uppercase;
+}
+input::placeholder,
+textarea::placeholder {
+  text-transform: none;
+}

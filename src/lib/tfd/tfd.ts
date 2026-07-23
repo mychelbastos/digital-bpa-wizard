@@ -65,10 +65,10 @@ export async function salvarDestino(input: DestinoInput): Promise<TfdDestino | n
   if (!supabase) return null;
   const row = {
     organizacao_id: input.organizacao_id,
-    descricao: input.descricao.trim(),
-    municipio_destino: input.municipio_destino?.trim() || null,
+    descricao: input.descricao.trim().toUpperCase(),
+    municipio_destino: input.municipio_destino?.trim().toUpperCase() || null,
     uf_destino: input.uf_destino?.trim().toUpperCase() || null,
-    estabelecimento_destino: input.estabelecimento_destino?.trim() || null,
+    estabelecimento_destino: input.estabelecimento_destino?.trim().toUpperCase() || null,
     distancia_km: Math.max(0, input.distancia_km || 0),
     ativo: input.ativo ?? true,
     atualizado_em: new Date().toISOString(),
@@ -92,10 +92,10 @@ export async function salvarDestino(input: DestinoInput): Promise<TfdDestino | n
 export async function atualizarDestino(id: string, campos: Partial<Omit<TfdDestino, "id" | "organizacao_id">>): Promise<boolean> {
   if (!supabase || !id) return false;
   const row: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
-  if (campos.descricao !== undefined) row.descricao = campos.descricao.trim();
-  if (campos.municipio_destino !== undefined) row.municipio_destino = campos.municipio_destino?.trim() || null;
+  if (campos.descricao !== undefined) row.descricao = campos.descricao.trim().toUpperCase();
+  if (campos.municipio_destino !== undefined) row.municipio_destino = campos.municipio_destino?.trim().toUpperCase() || null;
   if (campos.uf_destino !== undefined) row.uf_destino = campos.uf_destino?.trim().toUpperCase() || null;
-  if (campos.estabelecimento_destino !== undefined) row.estabelecimento_destino = campos.estabelecimento_destino?.trim() || null;
+  if (campos.estabelecimento_destino !== undefined) row.estabelecimento_destino = campos.estabelecimento_destino?.trim().toUpperCase() || null;
   if (campos.distancia_km !== undefined) row.distancia_km = Math.max(0, campos.distancia_km || 0);
   if (campos.ativo !== undefined) row.ativo = campos.ativo;
   const { error } = await supabase.from("tfd_destinos").update(row).eq("id", id);

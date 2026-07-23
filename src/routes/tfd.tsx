@@ -83,6 +83,36 @@ const ROTULO_CAMPO: Record<string, string> = {
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 
+const MESES = [
+  ["01", "Janeiro"], ["02", "Fevereiro"], ["03", "Março"], ["04", "Abril"], ["05", "Maio"], ["06", "Junho"],
+  ["07", "Julho"], ["08", "Agosto"], ["09", "Setembro"], ["10", "Outubro"], ["11", "Novembro"], ["12", "Dezembro"],
+];
+const ANOS: string[] = (() => {
+  const atual = new Date().getFullYear();
+  const arr: string[] = [];
+  for (let a = atual + 1; a >= atual - 4; a--) arr.push(String(a));
+  return arr;
+})();
+
+// Seletor de competência (mês + ano) — evita erro de digitação. value/onChange em AAAAMM.
+function CompetenciaSelect(props: { value: string; onChange: (v: string) => void; className?: string }) {
+  const ano = props.value.slice(0, 4);
+  const mes = props.value.slice(4, 6);
+  const cls = props.className ?? campo;
+  return (
+    <div className="flex gap-2">
+      <select value={mes} onChange={(e) => props.onChange(`${ano || String(new Date().getFullYear())}${e.target.value}`)} className={cls} data-nocaps>
+        <option value="">Mês</option>
+        {MESES.map(([c, nome]) => <option key={c} value={c}>{nome}</option>)}
+      </select>
+      <select value={ano} onChange={(e) => props.onChange(`${e.target.value}${mes || "01"}`)} className={`${cls} max-w-[6rem]`} data-nocaps>
+        <option value="">Ano</option>
+        {ANOS.map((a) => <option key={a} value={a}>{a}</option>)}
+      </select>
+    </div>
+  );
+}
+
 // Campo de texto com sugestões a partir de uma lista (código+label). Sugere ao digitar
 // `minChars`+ letras; ao escolher, chama onPick com a opção.
 function ComboField(props: {
@@ -294,8 +324,7 @@ function TfdPage() {
         </div>
         <div>
           <div className={label}>Competência</div>
-          <input value={competencia} onChange={(e) => setCompetencia(digitos(e.target.value).slice(0, 6))}
-            placeholder="AAAAMM" className={`${campo} w-32`} />
+          <CompetenciaSelect value={competencia} onChange={setCompetencia} />
         </div>
         {!podeGerir && cnes && (
           <p className="text-xs text-amber-700">Você não tem permissão para gerir TFD nesta unidade (somente leitura).</p>
@@ -564,7 +593,12 @@ function FormTfd(props: {
 
       {temAcomp && (
         <div className="mt-2">
-          <PacientePicker orgId={orgId} paciente={acompanhante} onEscolhe={setAcompanhante} titulo="Acompanhante" />
+          <PacientePicker orgId={orgId} paciente={acompanhante} onEscolhe={setAcompanhante} titulo="Acompanhante"
+            enderecoPadrao={paciente ? {
+              cep: paciente.cep, cod_logradouro: paciente.cod_logradouro, logradouro: paciente.logradouro,
+              numero: paciente.numero, complemento: paciente.complemento, bairro: paciente.bairro,
+              municipio_nome: paciente.municipio_nome, municipio_ibge: paciente.municipio_ibge, uf: paciente.uf,
+            } : undefined} />
         </div>
       )}
 
@@ -633,15 +667,33 @@ function FormTfd(props: {
 // ---------------------------------------------------------------------------
 // Seletor / cadastro de paciente.
 // ---------------------------------------------------------------------------
-function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEscolhe: (p: Paciente | null) => void; titulo?: string; permitirAcompanhante?: boolean }) {
+// Endereço "modelo" para copiar (ex.: do paciente para o acompanhante).
+interface EnderecoPadrao {
+  cep: string | null; cod_logradouro: string | null; logradouro: string | null;
+  numero: string | null; complemento: string | null; bairro: string | null;
+  municipio_nome: string | null; municipio_ibge: string | null; uf: string | null;
+}
+
+function PacientePicker(props: {
+  orgId: string; paciente: Paciente | null; onEscolhe: (p: Paciente | null) => void;
+  titulo?: string; permitirAcompanhante?: boolean; enderecoPadrao?: EnderecoPadrao;
+  onPendente?: (v: boolean) => void;
+}) {
   const { orgId, paciente } = props;
   const titulo = props.titulo ?? "Paciente";
+  const termoTipo = titulo.toLowerCase(); // "paciente" ou "acompanhante"
   const [termo, setTermo] = useState("");
   const [sugestoes, setSugestoes] = useState<Paciente[]>([]);
   const [buscando, setBuscando] = useState(false);
   const [criando, setCriando] = useState(false);
   const [completar, setCompletar] = useState<Paciente | null>(null); // selecionado c/ cadastro incompleto
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Avisa o pai se há texto digitado sem seleção (para bloquear "salvar" com acompanhante pendente).
+  useEffect(() => {
+    props.onPendente?.(!paciente && !completar && termo.trim().length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termo, paciente, completar]);
 
   useEffect(() => {
     if (paciente) return;
@@ -670,6 +722,7 @@ function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEsc
           Cadastro incompleto de <b>{completar.nome}</b>. Complete os dados obrigatórios para usar no TFD.
         </div>
         <PacienteForm orgId={orgId} paciente={completar} permitirAcompanhante={props.permitirAcompanhante}
+          enderecoPadrao={props.enderecoPadrao} titulo={titulo}
           onSalvo={(p) => { setCompletar(null); props.onEscolhe(p); }}
           onCancela={() => setCompletar(null)} />
       </div>
@@ -720,11 +773,12 @@ function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEsc
       {termo.trim().length >= 3 && !buscando && (
         <button type="button" onClick={() => setCriando(true)}
           className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline">
-          <UserPlus className="size-3" /> Cadastrar novo paciente
+          <UserPlus className="size-3" /> Cadastrar novo {termoTipo}
         </button>
       )}
       {criando && (
         <PacienteForm orgId={orgId} nomeInicial={termo} permitirAcompanhante={props.permitirAcompanhante}
+          enderecoPadrao={props.enderecoPadrao} titulo={titulo}
           onSalvo={(p) => { setCriando(false); props.onEscolhe(p); }} onCancela={() => setCriando(false)} />
       )}
     </div>
@@ -735,9 +789,10 @@ function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEsc
 // temos: nome social, nome da mãe). Autofill de município/UF pelo CEP (ViaCEP). Aceita um
 // `paciente` para EDITAR/COMPLETAR (pré-preenche e atualiza) ou `nomeInicial` para criar.
 // Exige todos os campos obrigatórios antes de salvar (regra do TFD).
-function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?: string; permitirAcompanhante?: boolean; onSalvo: (p: Paciente) => void; onCancela: () => void }) {
+function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?: string; permitirAcompanhante?: boolean; enderecoPadrao?: EnderecoPadrao; titulo?: string; onSalvo: (p: Paciente) => void; onCancela: () => void }) {
   const ini = props.paciente;
   const permitirAcompanhante = props.permitirAcompanhante ?? true;
+  const rotuloTipo = (props.titulo ?? "paciente").toLowerCase();
   const semear = props.nomeInicial ?? "";
   const soLetras = /\d/.test(semear) ? "" : semear;
   const soNum = semear.replace(/\D/g, "");
@@ -764,6 +819,8 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
   const [municipioIbge, setMunicipioIbge] = useState(ini?.municipio_ibge ?? "");
   const [uf, setUf] = useState(ini?.uf ?? "");
   const [acompanhante, setAcompanhante] = useState<Paciente | null>(null);
+  const [acompanhantePendente, setAcompanhantePendente] = useState(false);
+  const [usarMesmoEndereco, setUsarMesmoEndereco] = useState(false);
   const [faltando, setFaltando] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
   const errCls = (key: string) => (faltando.includes(key) ? " !border-destructive" : "");
@@ -772,6 +829,17 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
   useEffect(() => {
     if (ini?.acompanhante_id) carregarPaciente(ini.acompanhante_id, false).then((p) => p && setAcompanhante(p));
   }, [ini?.acompanhante_id]);
+
+  // "Usar o mesmo endereço": copia o endereço-modelo (ex.: do paciente) para os campos.
+  const ep = props.enderecoPadrao;
+  const aplicarMesmoEndereco = (marcar: boolean) => {
+    setUsarMesmoEndereco(marcar);
+    if (marcar && ep) {
+      setCep(ep.cep ?? ""); setCodLog(ep.cod_logradouro ?? ""); setLogradouro(ep.logradouro ?? "");
+      setNumero(ep.numero ?? ""); setComplemento(ep.complemento ?? ""); setBairro(ep.bairro ?? "");
+      setMunicipioNome(ep.municipio_nome ?? ""); setMunicipioIbge(ep.municipio_ibge ?? ""); setUf(ep.uf ?? "");
+    }
+  };
 
   const aoMudarCep = async (v: string) => {
     const d = digitos(v).slice(0, 8);
@@ -802,6 +870,11 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
       toast.error(`Campos obrigatórios em falta: ${rotulos}.`);
       return;
     }
+    // Acompanhante digitado mas não cadastrado: não deixa salvar sem cadastrá-lo (ou limpar).
+    if (permitirAcompanhante && acompanhantePendente && !acompanhante) {
+      toast.error("Cadastre o acompanhante digitado (ou limpe o campo) antes de salvar.");
+      return;
+    }
     setSalvando(true);
     const p = await salvarPaciente({
       id: props.paciente?.id, tfd: true, acompanhante_id: acompanhante?.id ?? null,
@@ -812,8 +885,8 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
       municipio_nome: municipioNome, municipio_ibge: municipioIbge, uf,
     });
     setSalvando(false);
-    if (!p) { toast.error("Falha ao salvar o paciente."); return; }
-    toast.success(props.paciente ? "Cadastro do paciente atualizado." : "Paciente cadastrado.");
+    if (!p) { toast.error(`Falha ao salvar o ${rotuloTipo}.`); return; }
+    toast.success(props.paciente ? "Cadastro atualizado." : `${rotuloTipo[0].toUpperCase()}${rotuloTipo.slice(1)} cadastrado.`);
     props.onSalvo(p);
   };
 
@@ -881,11 +954,19 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
         </div>
       </div>
 
-      <div className="mb-1 mt-3 text-[11px] font-semibold uppercase text-muted-foreground">Contato e endereço</div>
+      <div className="mb-1 mt-3 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase text-muted-foreground">Contato e endereço</span>
+        {ep && (
+          <label className="flex items-center gap-2 text-xs font-medium text-primary">
+            <input type="checkbox" checked={usarMesmoEndereco} onChange={(e) => aplicarMesmoEndereco(e.target.checked)} className="size-4" />
+            USAR O MESMO ENDEREÇO
+          </label>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
         <div className="sm:col-span-2">
           <div className={label}>E-mail</div>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} className={campo} />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} data-nocaps />
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Telefone (DDD + número) *</div>
@@ -942,8 +1023,13 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
 
       {permitirAcompanhante && (
         <>
-          <div className="mb-1 mt-3 text-[11px] font-semibold uppercase text-muted-foreground">Acompanhante habitual (opcional)</div>
-          <PacientePicker orgId={props.orgId} paciente={acompanhante} onEscolhe={setAcompanhante} titulo="Acompanhante" permitirAcompanhante={false} />
+          <div className="mb-1 mt-3 text-[11px] font-semibold uppercase text-muted-foreground">Acompanhante (opcional)</div>
+          <PacientePicker orgId={props.orgId} paciente={acompanhante} onEscolhe={setAcompanhante} titulo="Acompanhante"
+            permitirAcompanhante={false} onPendente={setAcompanhantePendente}
+            enderecoPadrao={{
+              cep, cod_logradouro: codLog, logradouro, numero, complemento, bairro,
+              municipio_nome: municipioNome, municipio_ibge: municipioIbge, uf,
+            }} />
         </>
       )}
 
@@ -1371,9 +1457,9 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
           <button type="button" onClick={props.onFechar} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
         </div>
 
-        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          <div><div className={label}>Competência de</div><input value={compDe} onChange={(e) => setCompDe(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="AAAAMM" className={campo} /></div>
-          <div><div className={label}>até</div><input value={compAte} onChange={(e) => setCompAte(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="AAAAMM" className={campo} /></div>
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div><div className={label}>Competência de</div><CompetenciaSelect value={compDe} onChange={setCompDe} /></div>
+          <div><div className={label}>até</div><CompetenciaSelect value={compAte} onChange={setCompAte} /></div>
           <div><div className={label}>Status</div>
             <select value={status} onChange={(e) => setStatus(e.target.value as "" | TfdStatus)} className={campo}>
               <option value="">Todos</option><option value="agendada">Agendada</option><option value="realizada">Realizada</option><option value="faturada">Faturada</option><option value="cancelada">Cancelada</option>
