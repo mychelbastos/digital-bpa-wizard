@@ -916,7 +916,7 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
       return;
     }
     setSalvando(true);
-    const p = await salvarPaciente({
+    const res = await salvarPaciente({
       id: props.paciente?.id, tfd: true, acompanhante_id: acompanhante?.id ?? null,
       organizacao_id: props.orgId, nome, nome_social: nomeSocial, cns, cpf, sexo: sexo || null,
       nascimento: nascimento || null, nome_mae: nomeMae, nacionalidade, raca_cor: racaCor || null,
@@ -925,9 +925,9 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
       municipio_nome: municipioNome, municipio_ibge: municipioIbge, uf,
     });
     setSalvando(false);
-    if (!p) { toast.error(`Falha ao salvar o ${rotuloTipo}.`); return; }
+    if (!res.paciente) { toast.error(res.erro || `Falha ao salvar o ${rotuloTipo}.`); return; }
     toast.success(props.paciente ? "Cadastro atualizado." : `${rotuloTipo[0].toUpperCase()}${rotuloTipo.slice(1)} cadastrado.`);
-    props.onSalvo(p);
+    props.onSalvo(res.paciente);
   };
 
   return (

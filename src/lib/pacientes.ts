@@ -95,32 +95,32 @@ export async function carregarPaciente(id: string, logar = true): Promise<Pacien
   }
 }
 
-// Procura um paciente já cadastrado por CNS (ou CPF) na org — base da deduplicação.
-export async function acharPacientePorDocumento(
-  organizacaoId: string,
-  cns: string | null | undefined,
-  cpf: string | null | undefined,
-): Promise<Paciente | null> {
-  if (!supabase || !organizacaoId) return null;
-  const c = soDigitos(cns);
-  const p = soDigitos(cpf);
-  if (!c && !p) return null;
-  try {
-    let req = supabase.from("pacientes").select(COLS).eq("organizacao_id", organizacaoId).is("excluido_em", null).limit(1);
-    if (c) req = req.eq("cns", c);
-    else req = req.eq("cpf", p);
-    const { data, error } = await req.maybeSingle();
-    return error || !data ? null : (data as Paciente);
-  } catch {
-    return null;
-  }
+// Procura um paciente por um documento (CNS ou CPF) na org (ignora excluídos). null se não há.
+async function acharPorDocumento(organizacaoId: string, coluna: "cns" | "cpf", valor: string): Promise<Paciente | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("pacientes").select(COLS)
+    .eq("organizacao_id", organizacaoId).is("excluido_em", null).eq(coluna, valor).limit(1).maybeSingle();
+  return error || !data ? null : (data as Paciente);
 }
 
-// Cria ou atualiza um paciente, deduplicando por CNS/CPF na org (find-then-write; a tabela
-// tem índice único parcial, mas o upsert por índice parcial é frágil no PostgREST). Retorna
-// o paciente salvo, ou null em falha.
-export async function salvarPaciente(input: PacienteInput): Promise<Paciente | null> {
-  if (!supabase) return null;
+// Compat: retorna o paciente que casa por CNS (preferencial) ou CPF, sem tratar conflito.
+export async function acharPacientePorDocumento(organizacaoId: string, cns?: string | null, cpf?: string | null): Promise<Paciente | null> {
+  const c = soDigitos(cns), p = soDigitos(cpf);
+  if (!supabase || !organizacaoId || (!c && !p)) return null;
+  try {
+    if (c) { const hit = await acharPorDocumento(organizacaoId, "cns", c); if (hit) return hit; }
+    if (p) return await acharPorDocumento(organizacaoId, "cpf", p);
+    return null;
+  } catch { return null; }
+}
+
+export interface SalvarPacienteResultado { paciente: Paciente | null; erro?: string }
+
+// Cria ou atualiza um paciente, deduplicando por CNS/CPF na org (CNS é o identificador forte).
+// Quando os documentos apontam para PESSOAS DIFERENTES, NÃO mescla: retorna erro descritivo
+// (ex.: CPF de outra pessoa). Retorna { paciente } no sucesso, ou { paciente: null, erro }.
+export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacienteResultado> {
+  if (!supabase) return { paciente: null, erro: "Sistema indisponível." };
   const cns = soDigitos(input.cns) || null;
   const cpf = soDigitos(input.cpf) || null;
   const row = {
@@ -151,22 +151,34 @@ export async function salvarPaciente(input: PacienteInput): Promise<Paciente | n
     atualizado_em: new Date().toISOString(),
     ...(input.tfd ? { tfd: true } : {}), // só marca; nunca desmarca num update
   };
+  const erroBanco = (msg: string | undefined): string =>
+    /23505|duplicate key/i.test(msg ?? "") ? "CNS ou CPF já cadastrado para outra pessoa." : "Falha ao salvar.";
+
   try {
     // Atualização explícita por id (edição/complemento de um paciente já selecionado).
     if (input.id) {
       const { data, error } = await supabase.from("pacientes").update(row).eq("id", input.id).select(COLS).single();
-      return error || !data ? null : (data as Paciente);
+      return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
     }
-    // Senão, deduplica por documento: atualiza o existente ou insere novo.
-    const existente = await acharPacientePorDocumento(input.organizacao_id, cns, cpf);
+    // Dedup SEGURA. CNS é o identificador forte.
+    const byCns = cns ? await acharPorDocumento(input.organizacao_id, "cns", cns) : null;
+    const byCpf = cpf ? await acharPorDocumento(input.organizacao_id, "cpf", cpf) : null;
+    if (byCns && byCpf && byCns.id !== byCpf.id) {
+      return { paciente: null, erro: `Conflito de documentos: o CNS é de ${byCns.nome} e o CPF é de ${byCpf.nome}. Confira o CNS/CPF.` };
+    }
+    const existente = byCns ?? byCpf;
+    // Achado só pelo CPF, mas o registro tem OUTRO CNS ⇒ pessoas diferentes (CPF trocado).
+    if (existente && !byCns && cns && existente.cns && existente.cns !== cns) {
+      return { paciente: null, erro: `Este CPF já pertence a ${existente.nome} (CNS diferente). Confira o CPF.` };
+    }
     if (existente) {
       const { data, error } = await supabase.from("pacientes").update(row).eq("id", existente.id).select(COLS).single();
-      return error || !data ? null : (data as Paciente);
+      return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
     }
     const { data, error } = await supabase.from("pacientes").insert(row).select(COLS).single();
-    return error || !data ? null : (data as Paciente);
+    return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
   } catch {
-    return null;
+    return { paciente: null, erro: "Falha ao salvar." };
   }
 }
 
