@@ -445,7 +445,13 @@ const cells = (s: string | null | undefined, n: number): string[] => {
 // Preenche uma seq BPA-I com a demografia COMPLETA de uma pessoa (paciente ou acompanhante),
 // para que o BPA Magnético aceite na importação. `dataAtend` = YYYY-MM-DD -> [D,D,M,M,A,A,A,A].
 function preencherSeqPessoa(s: SeqData, pessoa: Paciente, dataAtend: string | null) {
-  s.cnsPac = cells(pessoa.cns, 15);
+  // Identificação (BPA-I v04.00): um único campo aceita CPF (11) OU CNS (15). PRIORIZA o CPF;
+  // se não houver, usa o CNS. O CPF entra ALINHADO À DIREITA no campo de 15 (convenção do v3).
+  const cpf = (pessoa.cpf || "").replace(/\D/g, "");
+  const cns = (pessoa.cns || "").replace(/\D/g, "");
+  s.cnsPac = cpf.length === 11
+    ? [...Array(4).fill(""), ...cpf.split("")]
+    : cells(cns, 15);
   s.nomePac = (pessoa.nome || "").toUpperCase();
   if (pessoa.sexo) s.sexo = pessoa.sexo;
   if (pessoa.nascimento) s.dataNasc = cells(pessoa.nascimento.split("-").reverse().join(""), 8);
@@ -459,7 +465,7 @@ function preencherSeqPessoa(s: SeqData, pessoa: Paciente, dataAtend: string | nu
   if (pessoa.numero) s.numero = cells(pessoa.numero, 4);
   if (pessoa.complemento) s.complemento = pessoa.complemento;
   if (pessoa.bairro) s.bairro = pessoa.bairro.toUpperCase();
-  if (pessoa.cpf) s.cpfPac = cells(pessoa.cpf, 11);
+  // cpfPac (cauda) fica vazio: a identificação (CPF ou CNS) vai no campo `cnsPac`, como no v3.
   if (pessoa.situacao_rua) s.situacaoRua = pessoa.situacao_rua;
   if (pessoa.email) s.email = pessoa.email;
   if (pessoa.telefone) {
@@ -501,10 +507,10 @@ export function montarSeqsTfd(tfd: TfdParaSeq, paciente: Paciente, acompanhante:
   return linhas.map((l) => criarSeq(l, tfd.data_atendimento));
 }
 
-// Header do profissional + seqs -> objeto `dados` no shape do BPA-I v2. O gerador do .txt
-// (gerarArquivoBpa) distribui essas seqs em folhas de 3 automaticamente.
+// Header do profissional + seqs -> objeto `dados` no shape do BPA-I v2. Cada ficha é UMA FOLHA
+// (máx. 3 seqs, como o formulário). `folha` numera a folha (1, 2, ...) no cabeçalho.
 function dadosBpaTfd(
-  h: { cnes: string; profCns: string | null; profNome: string | null; profCbo: string | null; competencia: string; nomeEstab: string },
+  h: { cnes: string; profCns: string | null; profNome: string | null; profCbo: string | null; competencia: string; nomeEstab: string; folha?: number },
   seqs: SeqData[],
 ): unknown {
   return {
@@ -516,7 +522,7 @@ function dadosBpaTfd(
     profMes: cells(h.competencia.slice(4, 6), 2),
     profAno: cells(h.competencia.slice(0, 4), 4),
     profEquipe: "",
-    profFolha: Array(3).fill(""),
+    profFolha: cells(h.folha ? String(h.folha) : "", 3),
     seqs,
     respConfirmacao: null,
     respData: [],
@@ -584,30 +590,46 @@ export async function gerarFaturamentoMes(cnes: string, competencia: string, nom
       grupos.set(profCns, g);
     }
 
-    let totalSeqs = 0;
+    const mm = competencia.slice(4, 6), yyyy = competencia.slice(0, 4);
+    const emLotes = <T,>(arr: T[], n: number): T[][] => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+      return out;
+    };
+
+    let totalSeqs = 0, totalFichas = 0;
     for (const g of grupos.values()) {
-      const dados = dadosBpaTfd({ cnes, profCns: g.profCns, profNome: g.profNome, profCbo: g.profCbo, competencia, nomeEstab }, g.seqs);
       totalSeqs += g.seqs.length;
-      const payload = {
-        titulo: `TFD ${competencia.slice(4, 6)}/${competencia.slice(0, 4)} — ${g.profNome || g.profCns}`,
-        competencia, dados, tipo: "BPA-I", cnes,
-        profissional_cns: g.profCns, profissional_nome: g.profNome, origem: "tfd", mes_producao: competencia,
-      };
-      const { data: existente } = await supabase.from("fichas").select("id")
-        .eq("cnes", cnes).eq("competencia", competencia).eq("origem", "tfd").eq("profissional_cns", g.profCns).limit(1).maybeSingle();
-      let fichaId: string | null = null;
-      if (existente) {
-        const { error: e2 } = await supabase.from("fichas").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", (existente as { id: string }).id);
-        if (!e2) fichaId = (existente as { id: string }).id;
-      } else {
-        const { data: nova, error: e3 } = await supabase.from("fichas").insert(payload).select("id").single();
-        if (!e3 && nova) fichaId = (nova as { id: string }).id;
+      // Uma FOLHA (ficha) a cada 3 sequências (formulário BPA-I = 3 seqs/folha).
+      const folhas = emLotes(g.seqs, 3);
+      // Fichas TFD já existentes desse profissional (idempotência por slot/folha).
+      const { data: existentes } = await supabase.from("fichas").select("id")
+        .eq("cnes", cnes).eq("competencia", competencia).eq("origem", "tfd").eq("profissional_cns", g.profCns)
+        .order("created_at", { ascending: true });
+      const idsExist = ((existentes ?? []) as { id: string }[]).map((r) => r.id);
+
+      let primeiraFichaId: string | null = null;
+      const total = Math.max(folhas.length, idsExist.length);
+      for (let i = 0; i < total; i++) {
+        const seqsFolha = i < folhas.length ? folhas[i] : []; // folha extra (dado sumiu) → esvazia
+        const dados = dadosBpaTfd({ cnes, profCns: g.profCns, profNome: g.profNome, profCbo: g.profCbo, competencia, nomeEstab, folha: i + 1 }, seqsFolha);
+        const payload = {
+          titulo: `TFD ${mm}/${yyyy} — ${g.profNome || g.profCns} (folha ${i + 1})`,
+          competencia, dados, tipo: "BPA-I", cnes,
+          profissional_cns: g.profCns, profissional_nome: g.profNome, origem: "tfd", mes_producao: competencia,
+        };
+        if (i < idsExist.length) {
+          await supabase.from("fichas").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", idsExist[i]);
+          if (seqsFolha.length && !primeiraFichaId) primeiraFichaId = idsExist[i];
+          if (seqsFolha.length) totalFichas++;
+        } else {
+          const { data: nova, error: eIns } = await supabase.from("fichas").insert(payload).select("id").single();
+          if (!eIns && nova) { if (!primeiraFichaId) primeiraFichaId = (nova as { id: string }).id; totalFichas++; }
+        }
       }
-      if (fichaId) {
-        await supabase.from("tfd").update({ status: "faturada", ficha_id: fichaId, atualizado_em: new Date().toISOString() }).in("id", g.tfdIds);
-      }
+      await supabase.from("tfd").update({ status: "faturada", ficha_id: primeiraFichaId, atualizado_em: new Date().toISOString() }).in("id", g.tfdIds);
     }
-    return { fichas: grupos.size, tfds: tfds.length, seqs: totalSeqs, semProf };
+    return { fichas: totalFichas, tfds: tfds.length, seqs: totalSeqs, semProf };
   } catch {
     return null;
   }
