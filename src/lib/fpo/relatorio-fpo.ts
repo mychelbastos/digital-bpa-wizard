@@ -34,6 +34,7 @@ export interface DadosRelatorioFpo {
   rows: FpoComparacaoRow[];
   geradoEm?: Date;
   responsavel?: string | null; // nome impresso sob a linha de assinatura (ex.: usuário logado)
+  logo?: string | null;        // timbre da prefeitura (data URI PNG) no cabeçalho
 }
 
 export function gerarRelatorioFpo(dados: DadosRelatorioFpo) {
@@ -42,7 +43,7 @@ export function gerarRelatorioFpo(dados: DadosRelatorioFpo) {
 }
 
 // Constrói o PDF (sem salvar) — separado p/ ser testável (contar páginas, etc.).
-export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date(), responsavel }: DadosRelatorioFpo): jsPDF {
+export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date(), responsavel, logo }: DadosRelatorioFpo): jsPDF {
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
@@ -78,6 +79,15 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
     // Faixa do título
     pdf.setFillColor(...VERDE);
     pdf.rect(0, 0, W, 54, "F");
+    // Timbre da prefeitura no canto direito (sobre um retângulo branco).
+    if (logo) {
+      try {
+        const lh = 34, lw = lh * 3.18;
+        pdf.setFillColor(255, 255, 255);
+        pdf.roundedRect(W - M - lw - 6, 10, lw + 12, lh + 6, 3, 3, "F");
+        pdf.addImage(logo, "PNG", W - M - lw, 13, lw, lh);
+      } catch { /* logo inválida */ }
+    }
     pdf.setTextColor(255, 255, 255);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(15);

@@ -27,6 +27,8 @@ import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 import { validarCns } from "@/lib/bpa-i-v2/validacao";
 import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
+import { carregarLogoOrg } from "@/lib/org-logo";
+import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
 
 export const Route = createFileRoute("/tfd")({
   validateSearch: (s: Record<string, unknown>): { cnes?: string; comp?: string } => ({
@@ -42,6 +44,15 @@ const competenciaAtual = () => {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 const compLabel = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c);
+// Competência de trabalho do TFD: mês atual + 3 anteriores (mesma regra de retenção; meses
+// mais antigos só via relatórios). Registro/edição ficam limitados a estas 4 competências.
+const competenciasRecentes = (): string[] => {
+  const d = new Date();
+  return Array.from({ length: 4 }, (_, i) => {
+    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}`;
+  });
+};
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const digitos = (s: string) => (s || "").replace(/\D/g, "");
 
@@ -222,7 +233,7 @@ function TfdPage() {
   const faturarMes = async () => {
     if (!podeGerir || !cnes || !competencia) return;
     setFaturando(true);
-    const res = await gerarFaturamentoMes(cnes, competencia, nomeUnidade);
+    const res = await gerarFaturamentoMes(cnes, competencia, nomeUnidade, { nome: user?.nome ?? "", cns: user?.cns ?? "" });
     setFaturando(false);
     if (!res) { toast.error("Falha ao gerar o faturamento. Verifique sua permissão."); return; }
     if (res.tfds === 0) { toast.info("Nenhum TFD para faturar neste mês."); return; }
@@ -267,7 +278,7 @@ function TfdPage() {
   const aoSalvarForm = async () => {
     const eraFaturada = Boolean(editando && (editando.tfd.ficha_id || editando.tfd.status === "faturada"));
     fecharForm();
-    if (eraFaturada) await gerarFaturamentoMes(cnes, competencia, nomeUnidade);
+    if (eraFaturada) await gerarFaturamentoMes(cnes, competencia, nomeUnidade, { nome: user?.nome ?? "", cns: user?.cns ?? "" });
     carregar();
   };
 
@@ -346,7 +357,12 @@ function TfdPage() {
         </div>
         <div>
           <div className={label}>Competência</div>
-          <CompetenciaSelect value={competencia} onChange={setCompetencia} />
+          <select value={competencia} onChange={(e) => setCompetencia(e.target.value)} className={`${campo} w-40`} data-nocaps>
+            {competenciasRecentes().map((c, i) => (
+              <option key={c} value={c}>{compLabel(c)}{i === 0 ? " (atual)" : ""}</option>
+            ))}
+            {!competenciasRecentes().includes(competencia) && <option value={competencia}>{compLabel(competencia)}</option>}
+          </select>
         </div>
         {!podeGerir && cnes && (
           <p className="text-xs text-amber-700">Você não tem permissão para gerir TFD nesta unidade (somente leitura).</p>
@@ -1447,6 +1463,8 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
   const [agrup, setAgrup] = useState<AgrupamentoRel>("detalhado");
   const [rows, setRows] = useState<TfdRelatorioRow[]>([]);
   const [carregando, setCarregando] = useState(false);
+  const [logo, setLogo] = useState<string | null>(null);
+  useEffect(() => { carregarLogoOrg().then(setLogo); }, []);
 
   const carregar = useCallback(async () => {
     if (!props.cnes) return;
@@ -1500,6 +1518,17 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
     URL.revokeObjectURL(url);
   };
 
+  const baixarPdf = () => {
+    const periodo = compDe === compAte ? compLabel(compDe) : `${compLabel(compDe)} a ${compLabel(compAte)}`;
+    const pdf = construirPdfTfd({
+      logo, nomeUnidade: props.nomeUnidade, periodo,
+      status: status ? STATUS_META[status].rotulo : "Todos",
+      agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
+      colunas, dados, totalTfd: filtradas.length, totalViagens, totalRS: brl(totalRS),
+    });
+    pdf.save(`tfd_${agrup}_${compDe}-${compAte}.pdf`);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onMouseDown={props.onFechar}>
       <div className="mt-6 w-full max-w-4xl rounded-lg border border-border bg-card p-4 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -1529,8 +1558,8 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
             {!carregando && <span className="font-semibold text-foreground">{brl(totalRS)}</span>}
           </div>
           <div className="flex gap-2">
+            <button type="button" onClick={baixarPdf} disabled={dados.length === 0} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"><FileText className="size-3" /> PDF (timbre)</button>
             <button type="button" onClick={baixarCsv} disabled={dados.length === 0} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"><Download className="size-3" /> CSV</button>
-            <button type="button" onClick={() => window.print()} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"><FileBarChart className="size-3" /> Imprimir</button>
           </div>
         </div>
 

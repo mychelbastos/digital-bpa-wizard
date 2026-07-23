@@ -509,10 +509,20 @@ export function montarSeqsTfd(tfd: TfdParaSeq, paciente: Paciente, acompanhante:
 
 // Header do profissional + seqs -> objeto `dados` no shape do BPA-I v2. Cada ficha é UMA FOLHA
 // (máx. 3 seqs, como o formulário). `folha` numera a folha (1, 2, ...) no cabeçalho.
+export interface ConfirmacaoResp { nome: string; cns: string }
+
 function dadosBpaTfd(
-  h: { cnes: string; profCns: string | null; profNome: string | null; profCbo: string | null; competencia: string; nomeEstab: string; folha?: number },
+  h: { cnes: string; profCns: string | null; profNome: string | null; profCbo: string | null; competencia: string; nomeEstab: string; folha?: number; confirmacao?: ConfirmacaoResp | null },
   seqs: SeqData[],
 ): unknown {
+  // Confirmação eletrônica do Responsável (usuário logado que gerou o faturamento) — já vem
+  // "assinada" na ficha. respData = data de hoje (DDMMAAAA em dígitos).
+  const agora = new Date();
+  const c = h.confirmacao && h.confirmacao.nome ? h.confirmacao : null;
+  const respConfirmacao = c ? { nome: c.nome, cns: (c.cns || "").replace(/\D/g, ""), em: agora.toISOString(), validado: false } : null;
+  const respData = c
+    ? `${String(agora.getDate()).padStart(2, "0")}${String(agora.getMonth() + 1).padStart(2, "0")}${agora.getFullYear()}`.split("")
+    : [];
   return {
     nomeEstab: h.nomeEstab,
     cnes: cells(h.cnes, 7),
@@ -524,8 +534,8 @@ function dadosBpaTfd(
     profEquipe: "",
     profFolha: cells(h.folha ? String(h.folha) : "", 3),
     seqs,
-    respConfirmacao: null,
-    respData: [],
+    respConfirmacao,
+    respData,
     gestCarimbo: "",
     gestRubrica: "",
     gestData: [],
@@ -559,7 +569,7 @@ export interface ResultadoFaturamentoTfd {
 // AGRUPADOS por profissional responsável — cada profissional vira UMA ficha BPA-I com todas
 // as suas seqs (o gerador do .txt fatia em folhas de 3). Idempotente: reexecutar atualiza a
 // ficha do profissional em vez de duplicar. Marca os TFDs como 'faturada'. Null em falha.
-export async function gerarFaturamentoMes(cnes: string, competencia: string, nomeEstab: string): Promise<ResultadoFaturamentoTfd | null> {
+export async function gerarFaturamentoMes(cnes: string, competencia: string, nomeEstab: string, responsavel?: ConfirmacaoResp | null): Promise<ResultadoFaturamentoTfd | null> {
   if (!supabase) return null;
   try {
     const { data: tfds, error } = await supabase.from("tfd")
@@ -612,7 +622,7 @@ export async function gerarFaturamentoMes(cnes: string, competencia: string, nom
       const total = Math.max(folhas.length, idsExist.length);
       for (let i = 0; i < total; i++) {
         const seqsFolha = i < folhas.length ? folhas[i] : []; // folha extra (dado sumiu) → esvazia
-        const dados = dadosBpaTfd({ cnes, profCns: g.profCns, profNome: g.profNome, profCbo: g.profCbo, competencia, nomeEstab, folha: i + 1 }, seqsFolha);
+        const dados = dadosBpaTfd({ cnes, profCns: g.profCns, profNome: g.profNome, profCbo: g.profCbo, competencia, nomeEstab, folha: i + 1, confirmacao: responsavel ?? null }, seqsFolha);
         const payload = {
           titulo: `TFD ${mm}/${yyyy} — ${g.profNome || g.profCns} (folha ${i + 1})`,
           competencia, dados, tipo: "BPA-I", cnes,

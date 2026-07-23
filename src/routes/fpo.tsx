@@ -11,6 +11,7 @@ import {
   cnesEditaveisFpo, type FpoComparacaoRow, type FpoItemResolvido,
 } from "@/lib/fpo/fpo";
 import { gerarRelatorioFpo } from "@/lib/fpo/relatorio-fpo";
+import { carregarLogoOrg } from "@/lib/org-logo";
 
 export const Route = createFileRoute("/fpo")({
   // Aceita ?cnes=&comp= para abrir já numa unidade/competência (vindo do card da dashboard).
@@ -96,7 +97,7 @@ function FpoPage() {
             <h1 className="flex items-center gap-2 text-base font-semibold"><FileSpreadsheet className="size-4" /> FPO — Ficha de Programação Orçamentária</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome })}
+            <button onClick={async () => gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome, logo: await carregarLogoOrg() })}
               disabled={rows.length === 0}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
               <FileDown className="size-4" /> Gerar relatório
