@@ -297,41 +297,43 @@ function preencherSeqPessoa(s: SeqData, pessoa: Paciente, dataAtend: string | nu
   if (dataAtend) s.dataAtend = cells(dataAtend.split("-").reverse().join(""), 8);
 }
 
-// Monta o `dados` (shape do BPA-I v2) de uma ficha TFD: header do profissional responsável +
-// uma seq por linha faturável. Cada seq recebe a demografia COMPLETA da pessoa. Linha de
-// acompanhante usa o CNS/demografia do PRÓPRIO acompanhante (⚠️ regra a validar — ver
-// gerar-bpa-tfd.ts). `acompanhante` obrigatório quando tem_acompanhante.
-export function montarDadosFichaTfd(
-  tfd: Pick<TfdRegistro, "cnes" | "competencia" | "qtd_com_pernoite" | "qtd_sem_pernoite" | "tem_acompanhante" | "prof_cns" | "prof_nome" | "prof_cbo" | "distancia_km" | "data_atendimento">,
-  paciente: Paciente,
-  acompanhante: Paciente | null,
-  nomeEstab: string,
-): { dados: unknown; totalSeqs: number } {
-  const entrada: EntradaTfd = {
+// Dados relevantes de um TFD para gerar as sequências.
+type TfdParaSeq = Pick<TfdRegistro, "distancia_km" | "qtd_com_pernoite" | "qtd_sem_pernoite" | "tem_acompanhante" | "data_atendimento">;
+
+// Gera as sequências BPA-I de UM TFD (paciente + acompanhante), cada uma com demografia
+// COMPLETA e caráter de atendimento ELETIVO ("01", sempre, para TFD).
+export function montarSeqsTfd(tfd: TfdParaSeq, paciente: Paciente, acompanhante: Paciente | null): SeqData[] {
+  const linhas = gerarProcedimentosTfd({
     distanciaKm: tfd.distancia_km,
     qtdComPernoite: tfd.qtd_com_pernoite,
     qtdSemPernoite: tfd.qtd_sem_pernoite,
     temAcompanhante: tfd.tem_acompanhante,
-  };
-  const linhas = gerarProcedimentosTfd(entrada);
-
-  const seqs = linhas.map((l) => {
+  });
+  return linhas.map((l) => {
     const s = emptySeq();
     s.codProc = cells(l.codigo, 10);
     s.qtde = cells(String(l.quantidade), 3);
+    s.carater = cells("01", 2); // TFD é sempre eletivo
     const pessoa = l.para === "acompanhante" ? acompanhante : paciente;
     if (pessoa) preencherSeqPessoa(s, pessoa, tfd.data_atendimento);
     return s;
   });
+}
 
-  const dados = {
-    nomeEstab,
-    cnes: cells(tfd.cnes, 7),
-    profCns: cells(tfd.prof_cns, 15),
-    profNome: (tfd.prof_nome || "").toUpperCase(),
-    profCbo: cells(tfd.prof_cbo, 6),
-    profMes: cells(tfd.competencia.slice(4, 6), 2),
-    profAno: cells(tfd.competencia.slice(0, 4), 4),
+// Header do profissional + seqs -> objeto `dados` no shape do BPA-I v2. O gerador do .txt
+// (gerarArquivoBpa) distribui essas seqs em folhas de 3 automaticamente.
+function dadosBpaTfd(
+  h: { cnes: string; profCns: string | null; profNome: string | null; profCbo: string | null; competencia: string; nomeEstab: string },
+  seqs: SeqData[],
+): unknown {
+  return {
+    nomeEstab: h.nomeEstab,
+    cnes: cells(h.cnes, 7),
+    profCns: cells(h.profCns, 15),
+    profNome: (h.profNome || "").toUpperCase(),
+    profCbo: cells(h.profCbo, 6),
+    profMes: cells(h.competencia.slice(4, 6), 2),
+    profAno: cells(h.competencia.slice(0, 4), 4),
     profEquipe: "",
     profFolha: Array(3).fill(""),
     seqs,
@@ -340,34 +342,91 @@ export function montarDadosFichaTfd(
     gestCarimbo: "",
     gestRubrica: "",
     gestData: [],
-    origem_tfd: true, // marcador auxiliar no próprio dados (além de fichas.origem='tfd')
+    origem_tfd: true, // marcador auxiliar (além de fichas.origem='tfd')
   };
+}
+
+// `dados` de uma ficha BPA-I para UM TFD (prévia/individual).
+export function montarDadosFichaTfd(
+  tfd: TfdParaSeq & Pick<TfdRegistro, "cnes" | "competencia" | "prof_cns" | "prof_nome" | "prof_cbo">,
+  paciente: Paciente,
+  acompanhante: Paciente | null,
+  nomeEstab: string,
+): { dados: unknown; totalSeqs: number } {
+  const seqs = montarSeqsTfd(tfd, paciente, acompanhante);
+  const dados = dadosBpaTfd(
+    { cnes: tfd.cnes, profCns: tfd.prof_cns, profNome: tfd.prof_nome, profCbo: tfd.prof_cbo, competencia: tfd.competencia, nomeEstab },
+    seqs,
+  );
   return { dados, totalSeqs: seqs.length };
 }
 
-// Gera a ficha BPA-I (origem='tfd') a partir de um registro de TFD, vincula-a ao TFD e marca
-// o TFD como 'faturada'. Retorna o id da ficha, ou null em falha.
-export async function faturarTfd(
-  tfd: TfdRegistro, paciente: Paciente, acompanhante: Paciente | null, nomeEstab: string, competenciaProducao: string,
-): Promise<string | null> {
+export interface ResultadoFaturamentoTfd {
+  fichas: number;   // fichas BPA-I geradas (1 por profissional)
+  tfds: number;     // TFDs faturados
+  seqs: number;     // total de sequências
+  semProf: number;  // TFDs pulados por não ter profissional responsável
+}
+
+// FATURAMENTO DO MÊS: consolida TODOS os TFDs (não cancelados) da competência num CNES,
+// AGRUPADOS por profissional responsável — cada profissional vira UMA ficha BPA-I com todas
+// as suas seqs (o gerador do .txt fatia em folhas de 3). Idempotente: reexecutar atualiza a
+// ficha do profissional em vez de duplicar. Marca os TFDs como 'faturada'. Null em falha.
+export async function gerarFaturamentoMes(cnes: string, competencia: string, nomeEstab: string): Promise<ResultadoFaturamentoTfd | null> {
   if (!supabase) return null;
-  const { dados } = montarDadosFichaTfd(tfd, paciente, acompanhante, nomeEstab);
   try {
-    const { data, error } = await supabase.from("fichas").insert({
-      titulo: `TFD — ${paciente.nome}`,
-      competencia: tfd.competencia,
-      dados,
-      tipo: "BPA-I",
-      cnes: tfd.cnes,
-      profissional_cns: (tfd.prof_cns || "").replace(/\D/g, "") || null,
-      profissional_nome: tfd.prof_nome || null,
-      origem: "tfd",
-      mes_producao: competenciaProducao,
-    }).select("id").single();
-    if (error || !data) return null;
-    const fichaId = (data as { id: string }).id;
-    await supabase.from("tfd").update({ ficha_id: fichaId, status: "faturada", atualizado_em: new Date().toISOString() }).eq("id", tfd.id);
-    return fichaId;
+    const { data: tfds, error } = await supabase.from("tfd")
+      .select("id, cnes, competencia, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, data_atendimento, tem_acompanhante, paciente_id, acompanhante_id, prof_cns, prof_nome, prof_cbo")
+      .eq("cnes", cnes).eq("competencia", competencia).neq("status", "cancelada");
+    if (error) return null;
+    if (!tfds || tfds.length === 0) return { fichas: 0, tfds: 0, seqs: 0, semProf: 0 };
+
+    // Carrega as pessoas (paciente + acompanhante) envolvidas.
+    const ids = [...new Set((tfds as Array<Record<string, string | null>>).flatMap((t) => [t.paciente_id, t.acompanhante_id]).filter(Boolean) as string[])];
+    const { data: pacs } = await supabase.from("pacientes").select("*").in("id", ids);
+    const pacMap = new Map<string, Paciente>((pacs ?? []).map((p) => [(p as Paciente).id, p as Paciente]));
+
+    // Agrupa as seqs por profissional responsável.
+    interface Grupo { profCns: string; profNome: string | null; profCbo: string | null; seqs: SeqData[]; tfdIds: string[]; }
+    const grupos = new Map<string, Grupo>();
+    let semProf = 0;
+    for (const t of tfds as Array<Record<string, unknown>>) {
+      const profCns = String(t.prof_cns || "").replace(/\D/g, "");
+      if (!profCns) { semProf++; continue; }
+      const pac = pacMap.get(t.paciente_id as string);
+      if (!pac) continue;
+      const ac = t.acompanhante_id ? pacMap.get(t.acompanhante_id as string) ?? null : null;
+      const seqs = montarSeqsTfd(t as unknown as TfdParaSeq, pac, ac);
+      const g = grupos.get(profCns) ?? { profCns, profNome: (t.prof_nome as string) ?? null, profCbo: (t.prof_cbo as string) ?? null, seqs: [], tfdIds: [] };
+      g.seqs.push(...seqs);
+      g.tfdIds.push(t.id as string);
+      grupos.set(profCns, g);
+    }
+
+    let totalSeqs = 0;
+    for (const g of grupos.values()) {
+      const dados = dadosBpaTfd({ cnes, profCns: g.profCns, profNome: g.profNome, profCbo: g.profCbo, competencia, nomeEstab }, g.seqs);
+      totalSeqs += g.seqs.length;
+      const payload = {
+        titulo: `TFD ${competencia.slice(4, 6)}/${competencia.slice(0, 4)} — ${g.profNome || g.profCns}`,
+        competencia, dados, tipo: "BPA-I", cnes,
+        profissional_cns: g.profCns, profissional_nome: g.profNome, origem: "tfd", mes_producao: competencia,
+      };
+      const { data: existente } = await supabase.from("fichas").select("id")
+        .eq("cnes", cnes).eq("competencia", competencia).eq("origem", "tfd").eq("profissional_cns", g.profCns).limit(1).maybeSingle();
+      let fichaId: string | null = null;
+      if (existente) {
+        const { error: e2 } = await supabase.from("fichas").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", (existente as { id: string }).id);
+        if (!e2) fichaId = (existente as { id: string }).id;
+      } else {
+        const { data: nova, error: e3 } = await supabase.from("fichas").insert(payload).select("id").single();
+        if (!e3 && nova) fichaId = (nova as { id: string }).id;
+      }
+      if (fichaId) {
+        await supabase.from("tfd").update({ status: "faturada", ficha_id: fichaId, atualizado_em: new Date().toISOString() }).in("id", g.tfdIds);
+      }
+    }
+    return { fichas: grupos.size, tfds: tfds.length, seqs: totalSeqs, semProf };
   } catch {
     return null;
   }

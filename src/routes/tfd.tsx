@@ -10,11 +10,11 @@ import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { buscarProfissionais, buscarCbosVinculo } from "@/lib/bpa-i-v2/profissionais";
 import {
-  buscarPacientes, salvarPaciente, carregarPaciente, registrarLeituraPaciente, pacienteFaltando, type Paciente,
+  buscarPacientes, salvarPaciente, registrarLeituraPaciente, pacienteFaltando, type Paciente,
 } from "@/lib/pacientes";
 import {
   orgDoCnes, listarDestinos, salvarDestino, valoresVigentes, definirValorVigente,
-  listarTfd, salvarTfd, atualizarStatusTfd, faturarTfd, previaTfd, CNES_TFD,
+  listarTfd, salvarTfd, atualizarStatusTfd, gerarFaturamentoMes, previaTfd, CNES_TFD,
   type TfdDestino, type TfdRegistroView, type TfdStatus,
 } from "@/lib/tfd/tfd";
 import { COD_TFD } from "@/lib/tfd/gerar-bpa-tfd";
@@ -125,18 +125,19 @@ function TfdPage() {
   // Total do mês = soma dos totais por paciente (valores guardados em tfd_linhas).
   const totalMesRS = useMemo(() => registros.reduce((s, r) => s + r.total_rs, 0), [registros]);
 
-  const faturar = async (r: TfdRegistroView) => {
-    if (!podeGerir) return;
-    if (!r.paciente_cns) { toast.error("Paciente sem CNS — cadastre o CNS antes de faturar."); return; }
-    if (r.tem_acompanhante && !r.acompanhante_id) { toast.error("Acompanhante marcado mas não cadastrado. Edite o TFD."); return; }
-    const [pac, ac] = await Promise.all([
-      carregarPaciente(r.paciente_id, false),
-      r.acompanhante_id ? carregarPaciente(r.acompanhante_id, false) : Promise.resolve(null),
-    ]);
-    if (!pac) { toast.error("Não consegui carregar o paciente."); return; }
-    const fichaId = await faturarTfd(r as unknown as Parameters<typeof faturarTfd>[0], pac, ac, nomeUnidade, competenciaAtual());
-    if (!fichaId) { toast.error("Falha ao gerar a ficha BPA-I."); return; }
-    toast.success("Ficha BPA-I gerada e TFD marcado como faturado.");
+  const [faturando, setFaturando] = useState(false);
+  // Faturamento do mês: consolida todos os TFDs da competência em fichas BPA-I (1 por
+  // profissional responsável), que o Fechamento transforma no .txt do BPA Magnético.
+  const faturarMes = async () => {
+    if (!podeGerir || !cnes || !competencia) return;
+    setFaturando(true);
+    const res = await gerarFaturamentoMes(cnes, competencia, nomeUnidade);
+    setFaturando(false);
+    if (!res) { toast.error("Falha ao gerar o faturamento. Verifique sua permissão."); return; }
+    if (res.tfds === 0) { toast.info("Nenhum TFD para faturar neste mês."); return; }
+    let msg = `${res.fichas} ficha(s) BPA-I geradas (${res.tfds} TFD, ${res.seqs} seqs).`;
+    if (res.semProf > 0) msg += ` ${res.semProf} sem profissional responsável — não faturados.`;
+    toast.success(msg);
     carregar();
   };
 
@@ -153,8 +154,8 @@ function TfdPage() {
         <h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-foreground">
           <Ambulance className="size-5 text-primary" /> TFD — Tratamento Fora de Domicílio
         </h1>
-        <div className="mt-6 rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-          O TFD está disponível apenas para as unidades habilitadas. Você não tem vínculo em nenhuma delas.
+        <div className="mt-6 rounded-lg border border-border bg-card p-6 text-center text-sm font-semibold text-muted-foreground">
+          SEM PERMISSÃO DE ACESSO
         </div>
       </div>
     );
@@ -171,10 +172,17 @@ function TfdPage() {
           </h1>
         </div>
         {podeGerir && (
-          <button type="button" onClick={() => setFormAberto((a) => !a)}
-            className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            <Plus className="size-4" /> Novo TFD
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={faturarMes} disabled={faturando || registros.length === 0}
+              className="flex items-center gap-2 rounded-md border border-primary/40 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+              title="Consolida os TFDs do mês em fichas BPA-I (por profissional)">
+              {faturando ? <Loader2 className="size-4 animate-spin" /> : <Receipt className="size-4" />} Gerar faturamento do mês
+            </button>
+            <button type="button" onClick={() => setFormAberto((a) => !a)}
+              className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+              <Plus className="size-4" /> Novo TFD
+            </button>
+          </div>
         )}
       </div>
 
@@ -266,12 +274,6 @@ function TfdPage() {
                       {r.status === "agendada" && (
                         <button type="button" onClick={() => mudarStatus(r, "realizada")}
                           className="rounded border border-border px-2 py-1 text-xs hover:bg-muted">Realizada</button>
-                      )}
-                      {(r.status === "agendada" || r.status === "realizada") && (
-                        <button type="button" onClick={() => faturar(r)}
-                          className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700">
-                          <Receipt className="size-3" /> Faturar
-                        </button>
                       )}
                       {r.status === "faturada" && r.ficha_id && (
                         <Link to="/minhas-fichas" className="flex items-center gap-1 text-xs text-emerald-700 hover:underline">
