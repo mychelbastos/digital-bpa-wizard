@@ -80,14 +80,19 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
     pdf.setFillColor(...VERDE);
     pdf.rect(0, 0, W, 54, "F");
     // Timbre da prefeitura no canto direito (sobre um retângulo branco).
+    // Timbre no canto direito. `reservaDir` = largura ocupada pelo timbre (+ gap), para os
+    // textos de "Gerado em"/"Página" ficarem À ESQUERDA dele (sem sobrepor).
+    let reservaDir = 0;
     if (logo) {
       try {
         const lh = 34, lw = lh * 3.18;
         pdf.setFillColor(255, 255, 255);
         pdf.roundedRect(W - M - lw - 6, 10, lw + 12, lh + 6, 3, 3, "F");
         pdf.addImage(logo, "PNG", W - M - lw, 13, lw, lh);
+        reservaDir = lw + 20;
       } catch { /* logo inválida */ }
     }
+    const xDir = W - M - reservaDir;
     pdf.setTextColor(255, 255, 255);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(15);
@@ -96,8 +101,8 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
     pdf.setFontSize(9);
     pdf.text(`Ficha de Programação Orçamentária · Competência ${compLabel(competencia)}`, M, 42);
     pdf.setFontSize(8);
-    pdf.text(`Gerado em ${geradoEm.toLocaleDateString("pt-BR")} ${geradoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`, W - M, 26, { align: "right" });
-    pdf.text(`Página ${pagina}`, W - M, 42, { align: "right" });
+    pdf.text(`Gerado em ${geradoEm.toLocaleDateString("pt-BR")} ${geradoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`, xDir, 26, { align: "right" });
+    pdf.text(`Página ${pagina}`, xDir, 42, { align: "right" });
 
     // Identificação da unidade
     pdf.setTextColor(...ESCURO);
