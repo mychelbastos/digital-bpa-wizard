@@ -889,15 +889,17 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
 // Novo destino (rota).
 // ---------------------------------------------------------------------------
 function NovoDestino(props: { orgId: string; onCriado: (d: TfdDestino) => void; onCancela: () => void }) {
-  const [descricao, setDescricao] = useState("");
   const [municipio, setMunicipio] = useState("");
   const [uf, setUf] = useState("");
   const [estab, setEstab] = useState("");
   const [km, setKm] = useState("0");
   const [salvando, setSalvando] = useState(false);
 
+  // A descrição (rótulo do destino na lista) é composta automaticamente: Município — Estabelecimento.
+  const descricao = [municipio.trim(), estab.trim()].filter(Boolean).join(" — ");
+
   const salvar = async () => {
-    if (!descricao.trim()) { toast.error("Informe a descrição do destino."); return; }
+    if (!municipio.trim()) { toast.error("Informe o município de destino."); return; }
     setSalvando(true);
     const d = await salvarDestino({
       organizacao_id: props.orgId, descricao, municipio_destino: municipio, uf_destino: uf,
@@ -912,18 +914,14 @@ function NovoDestino(props: { orgId: string; onCriado: (d: TfdDestino) => void; 
   return (
     <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
       <p className="mb-2 text-[11px] text-muted-foreground">
-        Destino = a cidade/unidade para onde o paciente viaja (ex.: Salvador). O <b>estabelecimento</b> é o
-        hospital/clínica de referência lá (ex.: Hospital Roberto Santos) — opcional.
+        Destino = a cidade para onde o paciente viaja. O <b>estabelecimento</b> é o hospital/clínica de
+        referência lá (opcional). O nome do destino é montado como <i>Município — Estabelecimento</i>.
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
         <div className="sm:col-span-2">
-          <div className={label}>Descrição</div>
-          <input value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ex.: Salvador — Hosp. Roberto Santos" className={campo} />
-        </div>
-        <div>
-          <div className={label}>Município de destino</div>
+          <div className={label}>Município de destino *</div>
           <ComboField value={municipio} onText={setMunicipio} opcoes={MUNICIPIOS_IBGE} minChars={3}
-            placeholder="digite 3+ letras…"
+            placeholder="Ex.: Salvador (digite 3+ letras)…"
             onPick={(o) => {
               const [cidade, sigla] = o.label.split(" - ");
               setMunicipio((cidade || o.label).trim());
@@ -935,14 +933,19 @@ function NovoDestino(props: { orgId: string; onCriado: (d: TfdDestino) => void; 
           <ComboField value={uf} onText={(t) => setUf(t.toUpperCase().slice(0, 2))} opcoes={UFS} minChars={1}
             onPick={(o) => setUf(o.code)} />
         </div>
-        <div className="sm:col-span-3">
-          <div className={label}>Estabelecimento de destino (hospital/clínica) — opcional</div>
-          <input value={estab} onChange={(e) => setEstab(e.target.value)} placeholder="Ex.: Hospital Roberto Santos" className={campo} />
-        </div>
         <div>
           <div className={label}>Distância (km, só ida)</div>
           <input value={km} onChange={(e) => setKm(e.target.value.replace(/[^\d.]/g, ""))} className={campo} />
         </div>
+        <div className="sm:col-span-4">
+          <div className={label}>Estabelecimento de destino (hospital/clínica) — opcional</div>
+          <input value={estab} onChange={(e) => setEstab(e.target.value)} placeholder="Ex.: Hospital Roberto Santos" className={campo} />
+        </div>
+        {descricao && (
+          <div className="sm:col-span-4 text-[11px] text-muted-foreground">
+            Ficará salvo como: <b>{descricao}</b>{uf ? ` (${uf})` : ""}
+          </div>
+        )}
       </div>
       <div className="mt-2 flex justify-end gap-2">
         <button type="button" onClick={props.onCancela} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted">Cancelar</button>
