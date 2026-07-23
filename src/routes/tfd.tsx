@@ -89,7 +89,9 @@ function TfdPage() {
       const nomes = await Promise.all(unicos.map(async (c) => ({ cnes: c, nome: (await buscarEstabelecimento(c)) || c })));
       setCnesOpcoes(nomes);
       setGeriveis(new Set(ger));
-      if (unicos[0]) setCnes((atual) => (atual && unicos.includes(atual) ? atual : unicos[0]));
+      // Padrão: Secretaria Municipal (2510375) quando o usuário tem vínculo nela.
+      const padrao = unicos.includes("2510375") ? "2510375" : unicos[0];
+      if (padrao) setCnes((atual) => (atual && unicos.includes(atual) ? atual : padrao));
       setCarregouUnidades(true);
     })();
   }, []);
@@ -126,9 +128,13 @@ function TfdPage() {
   const faturar = async (r: TfdRegistroView) => {
     if (!podeGerir) return;
     if (!r.paciente_cns) { toast.error("Paciente sem CNS — cadastre o CNS antes de faturar."); return; }
-    const pac = await carregarPaciente(r.paciente_id, false);
+    if (r.tem_acompanhante && !r.acompanhante_id) { toast.error("Acompanhante marcado mas não cadastrado. Edite o TFD."); return; }
+    const [pac, ac] = await Promise.all([
+      carregarPaciente(r.paciente_id, false),
+      r.acompanhante_id ? carregarPaciente(r.acompanhante_id, false) : Promise.resolve(null),
+    ]);
     if (!pac) { toast.error("Não consegui carregar o paciente."); return; }
-    const fichaId = await faturarTfd(r as unknown as Parameters<typeof faturarTfd>[0], pac, nomeUnidade, competenciaAtual());
+    const fichaId = await faturarTfd(r as unknown as Parameters<typeof faturarTfd>[0], pac, ac, nomeUnidade, competenciaAtual());
     if (!fichaId) { toast.error("Falha ao gerar a ficha BPA-I."); return; }
     toast.success("Ficha BPA-I gerada e TFD marcado como faturado.");
     carregar();
@@ -245,7 +251,9 @@ function TfdPage() {
                   <span className="text-[11px] text-muted-foreground"> ({r.qtd_com_pernoite}c/{r.qtd_sem_pernoite}s)</span>
                 </td>
                 <td className="px-3 py-2 text-right">{r.distancia_km}</td>
-                <td className="px-3 py-2 text-center">{r.tem_acompanhante ? "Sim" : "—"}</td>
+                <td className="px-3 py-2 text-center" title={r.acompanhante_nome ?? ""}>
+                  {r.tem_acompanhante ? (r.acompanhante_nome ? "Sim ✓" : "Sim ⚠") : "—"}
+                </td>
                 <td className="px-3 py-2 text-right font-medium">{brl(r.total_rs)}</td>
                 <td className="px-3 py-2 text-center">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_META[r.status].cor}`}>
@@ -308,9 +316,9 @@ function FormTfd(props: {
   const [distanciaKm, setDistanciaKm] = useState("0");
   const [comP, setComP] = useState("0");
   const [semP, setSemP] = useState("0");
+  const [dataAtend, setDataAtend] = useState("");
   const [temAcomp, setTemAcomp] = useState(false);
-  const [acompNome, setAcompNome] = useState("");
-  const [acompCns, setAcompCns] = useState("");
+  const [acompanhante, setAcompanhante] = useState<Paciente | null>(null);
   const [profCns, setProfCns] = useState("");
   const [profNome, setProfNome] = useState("");
   const [profCbo, setProfCbo] = useState("");
@@ -340,13 +348,15 @@ function FormTfd(props: {
 
   const salvar = async () => {
     if (!paciente) { toast.error("Selecione ou cadastre o paciente."); return; }
-    if (temAcomp && !digitos(acompCns)) { toast.error("Informe o CNS do acompanhante (ou desmarque acompanhante)."); return; }
+    if (!dataAtend) { toast.error("Informe a data de atendimento (vira a data das sequências no BPA-I)."); return; }
+    if (temAcomp && !acompanhante) { toast.error("Cadastre/selecione o acompanhante (ou desmarque acompanhante)."); return; }
     setSalvando(true);
     const id = await salvarTfd(null, {
       organizacao_id: orgId, cnes, competencia, paciente_id: paciente.id,
       destino_id: destinoId || null, distancia_km: Number(distanciaKm) || 0,
       qtd_com_pernoite: Number(comP) || 0, qtd_sem_pernoite: Number(semP) || 0,
-      tem_acompanhante: temAcomp, acompanhante_nome: acompNome, acompanhante_cns: acompCns,
+      data_atendimento: dataAtend, tem_acompanhante: temAcomp,
+      acompanhante_id: temAcomp ? acompanhante?.id ?? null : null,
       prof_cns: profCns, prof_nome: profNome, prof_cbo: profCbo, observacoes: obs, status: "agendada",
     }, linhasComValor);
     setSalvando(false);
@@ -390,7 +400,7 @@ function FormTfd(props: {
         <NovoDestino orgId={orgId} onCriado={(d) => { props.onDestinosMudou(); setNovoDestino(false); aoEscolherDestino(d.id); }} onCancela={() => setNovoDestino(false)} />
       )}
 
-      {/* Viagens */}
+      {/* Viagens + data de atendimento */}
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
           <div className={label}>Viagens c/ pernoite</div>
@@ -400,22 +410,19 @@ function FormTfd(props: {
           <div className={label}>Viagens s/ pernoite</div>
           <input type="number" min={0} value={semP} onChange={(e) => setSemP(e.target.value)} className={campo} />
         </div>
-        <label className="col-span-2 flex items-end gap-2 pb-2 text-sm">
+        <div>
+          <div className={label}>Data de atendimento</div>
+          <input type="date" value={dataAtend} onChange={(e) => setDataAtend(e.target.value)} className={campo} />
+        </div>
+        <label className="flex items-end gap-2 pb-2 text-sm">
           <input type="checkbox" checked={temAcomp} onChange={(e) => setTemAcomp(e.target.checked)} className="size-4" />
           Tem acompanhante
         </label>
       </div>
 
       {temAcomp && (
-        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <div className={label}>Nome do acompanhante</div>
-            <input value={acompNome} onChange={(e) => setAcompNome(e.target.value)} className={campo} />
-          </div>
-          <div>
-            <div className={label}>CNS do acompanhante</div>
-            <input value={acompCns} onChange={(e) => setAcompCns(digitos(e.target.value).slice(0, 15))} className={campo} />
-          </div>
+        <div className="mt-2">
+          <PacientePicker orgId={orgId} paciente={acompanhante} onEscolhe={setAcompanhante} titulo="Acompanhante" />
         </div>
       )}
 
@@ -484,8 +491,9 @@ function FormTfd(props: {
 // ---------------------------------------------------------------------------
 // Seletor / cadastro de paciente.
 // ---------------------------------------------------------------------------
-function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEscolhe: (p: Paciente | null) => void }) {
+function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEscolhe: (p: Paciente | null) => void; titulo?: string }) {
   const { orgId, paciente } = props;
+  const titulo = props.titulo ?? "Paciente";
   const [termo, setTermo] = useState("");
   const [sugestoes, setSugestoes] = useState<Paciente[]>([]);
   const [buscando, setBuscando] = useState(false);
@@ -543,7 +551,7 @@ function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEsc
 
   return (
     <div>
-      <div className={label}>Paciente</div>
+      <div className={label}>{titulo}</div>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Nome, CNS ou CPF…"

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { emptySeq } from "@/lib/bpai-v2-layout";
+import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
 import type { Paciente } from "@/lib/pacientes";
 import { gerarProcedimentosTfd, COD_TFD, type EntradaTfd } from "./gerar-bpa-tfd";
 
@@ -140,9 +140,9 @@ export interface TfdRegistro {
   competencia: string;
   qtd_com_pernoite: number;
   qtd_sem_pernoite: number;
+  data_atendimento: string | null; // data de referência das sequências BPA-I (YYYY-MM-DD)
   tem_acompanhante: boolean;
-  acompanhante_nome: string | null;
-  acompanhante_cns: string | null;
+  acompanhante_id: string | null;  // pessoa cadastrada (mesmos campos do paciente/BPA-I)
   prof_cns: string | null;
   prof_nome: string | null;
   prof_cbo: string | null;
@@ -159,32 +159,37 @@ export interface LinhaValor {
   valor_unitario: number;
 }
 
-// Registro + dados do paciente/destino embutidos + total valorado, para a listagem.
+// Registro + dados do paciente/acompanhante/destino embutidos + total valorado, p/ a listagem.
 export interface TfdRegistroView extends TfdRegistro {
   paciente_nome: string | null;
   paciente_cns: string | null;
+  acompanhante_nome: string | null;
+  acompanhante_cns: string | null;
   destino_descricao: string | null;
   total_rs: number; // soma de quantidade × valor_unitario das linhas (por paciente)
 }
 
 const TFD_COLS =
-  "id, organizacao_id, cnes, paciente_id, destino_id, distancia_km, competencia, qtd_com_pernoite, qtd_sem_pernoite, tem_acompanhante, acompanhante_nome, acompanhante_cns, prof_cns, prof_nome, prof_cbo, status, ficha_id, observacoes";
+  "id, organizacao_id, cnes, paciente_id, destino_id, distancia_km, competencia, qtd_com_pernoite, qtd_sem_pernoite, data_atendimento, tem_acompanhante, acompanhante_id, prof_cns, prof_nome, prof_cbo, status, ficha_id, observacoes";
 
 export async function listarTfd(cnes: string, competencia: string): Promise<TfdRegistroView[]> {
   if (!supabase || !cnes || !competencia) return [];
   try {
     const { data, error } = await supabase.from("tfd")
-      .select(`${TFD_COLS}, pacientes(nome, cns), tfd_destinos(descricao), tfd_linhas(quantidade, valor_unitario)`)
+      .select(`${TFD_COLS}, paciente:pacientes!tfd_paciente_id_fkey(nome, cns), acompanhante:pacientes!tfd_acompanhante_id_fkey(nome, cns), tfd_destinos(descricao), tfd_linhas(quantidade, valor_unitario)`)
       .eq("cnes", cnes).eq("competencia", competencia).order("criado_em", { ascending: false });
     if (error || !data) return [];
     return (data as unknown as Array<Record<string, unknown>>).map((r) => {
-      const pac = (Array.isArray(r.pacientes) ? r.pacientes[0] : r.pacientes) as { nome?: string; cns?: string } | null;
+      const pac = (Array.isArray(r.paciente) ? r.paciente[0] : r.paciente) as { nome?: string; cns?: string } | null;
+      const ac = (Array.isArray(r.acompanhante) ? r.acompanhante[0] : r.acompanhante) as { nome?: string; cns?: string } | null;
       const dest = (Array.isArray(r.tfd_destinos) ? r.tfd_destinos[0] : r.tfd_destinos) as { descricao?: string } | null;
       const linhas = (Array.isArray(r.tfd_linhas) ? r.tfd_linhas : []) as { quantidade: number; valor_unitario: number }[];
       return {
         ...(r as unknown as TfdRegistro),
         paciente_nome: pac?.nome ?? null,
         paciente_cns: pac?.cns ?? null,
+        acompanhante_nome: ac?.nome ?? null,
+        acompanhante_cns: ac?.cns ?? null,
         destino_descricao: dest?.descricao ?? null,
         total_rs: linhas.reduce((s, l) => s + (l.quantidade || 0) * Number(l.valor_unitario || 0), 0),
       };
@@ -224,9 +229,9 @@ export async function salvarTfd(id: string | null, input: TfdInput, linhas?: Lin
     competencia: input.competencia,
     qtd_com_pernoite: Math.max(0, Math.floor(input.qtd_com_pernoite || 0)),
     qtd_sem_pernoite: Math.max(0, Math.floor(input.qtd_sem_pernoite || 0)),
+    data_atendimento: input.data_atendimento || null,
     tem_acompanhante: Boolean(input.tem_acompanhante),
-    acompanhante_nome: input.acompanhante_nome?.trim() || null,
-    acompanhante_cns: (input.acompanhante_cns || "").replace(/\D/g, "") || null,
+    acompanhante_id: input.acompanhante_id ?? null,
     prof_cns: (input.prof_cns || "").replace(/\D/g, "") || null,
     prof_nome: input.prof_nome?.trim() || null,
     prof_cbo: (input.prof_cbo || "").replace(/\D/g, "") || null,
@@ -265,12 +270,41 @@ const cells = (s: string | null | undefined, n: number): string[] => {
   return [...d, ...Array(Math.max(0, n - d.length)).fill("")];
 };
 
+// Preenche uma seq BPA-I com a demografia COMPLETA de uma pessoa (paciente ou acompanhante),
+// para que o BPA Magnético aceite na importação. `dataAtend` = YYYY-MM-DD -> [D,D,M,M,A,A,A,A].
+function preencherSeqPessoa(s: SeqData, pessoa: Paciente, dataAtend: string | null) {
+  s.cnsPac = cells(pessoa.cns, 15);
+  s.nomePac = (pessoa.nome || "").toUpperCase();
+  if (pessoa.sexo) s.sexo = pessoa.sexo;
+  if (pessoa.nascimento) s.dataNasc = cells(pessoa.nascimento.split("-").reverse().join(""), 8);
+  if (pessoa.nacionalidade) s.nacionalidade = pessoa.nacionalidade;
+  if (pessoa.raca_cor) s.racaCor = pessoa.raca_cor;
+  if (pessoa.etnia) s.etnia = pessoa.etnia;
+  if (pessoa.cep) s.cep = cells(pessoa.cep, 8);
+  if (pessoa.municipio_ibge) s.ibge = cells(pessoa.municipio_ibge, 7);
+  if (pessoa.cod_logradouro) s.codLog = cells(pessoa.cod_logradouro, 3);
+  if (pessoa.logradouro) s.endereco = pessoa.logradouro.toUpperCase();
+  if (pessoa.numero) s.numero = cells(pessoa.numero, 4);
+  if (pessoa.complemento) s.complemento = pessoa.complemento;
+  if (pessoa.bairro) s.bairro = pessoa.bairro.toUpperCase();
+  if (pessoa.cpf) s.cpfPac = cells(pessoa.cpf, 11);
+  if (pessoa.situacao_rua) s.situacaoRua = pessoa.situacao_rua;
+  if (pessoa.email) s.email = pessoa.email;
+  if (pessoa.telefone) {
+    s.ddd = cells(pessoa.telefone.slice(0, 2), 2);
+    s.telefone = cells(pessoa.telefone.slice(2), 8);
+  }
+  if (dataAtend) s.dataAtend = cells(dataAtend.split("-").reverse().join(""), 8);
+}
+
 // Monta o `dados` (shape do BPA-I v2) de uma ficha TFD: header do profissional responsável +
-// uma seq por linha faturável. Linha de paciente usa o CNS/demografia do paciente; linha de
-// acompanhante usa o CNS do PRÓPRIO acompanhante (⚠️ regra a validar — ver gerar-bpa-tfd.ts).
+// uma seq por linha faturável. Cada seq recebe a demografia COMPLETA da pessoa. Linha de
+// acompanhante usa o CNS/demografia do PRÓPRIO acompanhante (⚠️ regra a validar — ver
+// gerar-bpa-tfd.ts). `acompanhante` obrigatório quando tem_acompanhante.
 export function montarDadosFichaTfd(
-  tfd: Pick<TfdRegistro, "cnes" | "competencia" | "qtd_com_pernoite" | "qtd_sem_pernoite" | "tem_acompanhante" | "acompanhante_nome" | "acompanhante_cns" | "prof_cns" | "prof_nome" | "prof_cbo" | "distancia_km">,
+  tfd: Pick<TfdRegistro, "cnes" | "competencia" | "qtd_com_pernoite" | "qtd_sem_pernoite" | "tem_acompanhante" | "prof_cns" | "prof_nome" | "prof_cbo" | "distancia_km" | "data_atendimento">,
   paciente: Paciente,
+  acompanhante: Paciente | null,
   nomeEstab: string,
 ): { dados: unknown; totalSeqs: number } {
   const entrada: EntradaTfd = {
@@ -285,24 +319,8 @@ export function montarDadosFichaTfd(
     const s = emptySeq();
     s.codProc = cells(l.codigo, 10);
     s.qtde = cells(String(l.quantidade), 3);
-    if (l.para === "acompanhante") {
-      s.cnsPac = cells(tfd.acompanhante_cns, 15);
-      s.nomePac = (tfd.acompanhante_nome || "").toUpperCase();
-    } else {
-      s.cnsPac = cells(paciente.cns, 15);
-      s.nomePac = paciente.nome.toUpperCase();
-      if (paciente.sexo) s.sexo = paciente.sexo;
-      if (paciente.nascimento) s.dataNasc = cells(paciente.nascimento.split("-").reverse().join(""), 8);
-      if (paciente.cep) s.cep = cells(paciente.cep, 8);
-      if (paciente.municipio_ibge) s.ibge = cells(paciente.municipio_ibge, 7);
-      if (paciente.logradouro) s.endereco = paciente.logradouro.toUpperCase();
-      if (paciente.numero) s.numero = cells(paciente.numero, 4);
-      if (paciente.bairro) s.bairro = paciente.bairro.toUpperCase();
-      if (paciente.telefone) {
-        s.ddd = cells(paciente.telefone.slice(0, 2), 2);
-        s.telefone = cells(paciente.telefone.slice(2), 8);
-      }
-    }
+    const pessoa = l.para === "acompanhante" ? acompanhante : paciente;
+    if (pessoa) preencherSeqPessoa(s, pessoa, tfd.data_atendimento);
     return s;
   });
 
@@ -330,10 +348,10 @@ export function montarDadosFichaTfd(
 // Gera a ficha BPA-I (origem='tfd') a partir de um registro de TFD, vincula-a ao TFD e marca
 // o TFD como 'faturada'. Retorna o id da ficha, ou null em falha.
 export async function faturarTfd(
-  tfd: TfdRegistro, paciente: Paciente, nomeEstab: string, competenciaProducao: string,
+  tfd: TfdRegistro, paciente: Paciente, acompanhante: Paciente | null, nomeEstab: string, competenciaProducao: string,
 ): Promise<string | null> {
   if (!supabase) return null;
-  const { dados } = montarDadosFichaTfd(tfd, paciente, nomeEstab);
+  const { dados } = montarDadosFichaTfd(tfd, paciente, acompanhante, nomeEstab);
   try {
     const { data, error } = await supabase.from("fichas").insert({
       titulo: `TFD — ${paciente.nome}`,
