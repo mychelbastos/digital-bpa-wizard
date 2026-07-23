@@ -14,7 +14,7 @@ import {
 } from "@/lib/pacientes";
 import {
   orgDoCnes, listarDestinos, salvarDestino, valoresVigentes, definirValorVigente,
-  listarTfd, salvarTfd, atualizarStatusTfd, faturarTfd, previaTfd,
+  listarTfd, salvarTfd, atualizarStatusTfd, faturarTfd, previaTfd, CNES_TFD,
   type TfdDestino, type TfdRegistroView, type TfdStatus,
 } from "@/lib/tfd/tfd";
 import { COD_TFD } from "@/lib/tfd/gerar-bpa-tfd";
@@ -75,19 +75,22 @@ function TfdPage() {
   const [loading, setLoading] = useState(false);
   const [formAberto, setFormAberto] = useState(false);
   const [valoresAberto, setValoresAberto] = useState(false);
+  const [carregouUnidades, setCarregouUnidades] = useState(false);
 
   const podeGerir = cnes ? geriveis.has(cnes) : false;
   const nomeUnidade = cnesOpcoes.find((o) => o.cnes === cnes)?.nome ?? cnes;
+  const semAcesso = carregouUnidades && cnesOpcoes.length === 0;
 
-  // Unidades do usuário + em quais pode gerir TFD.
+  // Só as unidades habilitadas para o TFD em que o usuário tem vínculo + onde pode gerir.
   useEffect(() => {
     (async () => {
       const [vincs, ger] = await Promise.all([carregarVinculosUsuario(), cnesComPermissao("gerir_tfd")]);
-      const unicos = [...new Set(vincs.map((v) => v.cnes).filter(Boolean))];
+      const unicos = [...new Set(vincs.map((v) => v.cnes).filter(Boolean))].filter((c) => CNES_TFD.includes(c));
       const nomes = await Promise.all(unicos.map(async (c) => ({ cnes: c, nome: (await buscarEstabelecimento(c)) || c })));
       setCnesOpcoes(nomes);
       setGeriveis(new Set(ger));
-      if (unicos[0]) setCnes((atual) => atual || unicos[0]);
+      if (unicos[0]) setCnes((atual) => (atual && unicos.includes(atual) ? atual : unicos[0]));
+      setCarregouUnidades(true);
     })();
   }, []);
 
@@ -136,6 +139,20 @@ function TfdPage() {
     if (await atualizarStatusTfd(r.id, status)) { toast.success(`Status: ${STATUS_META[status].rotulo}.`); carregar(); }
     else toast.error("Não foi possível mudar o status.");
   };
+
+  if (semAcesso) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
+        <h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-foreground">
+          <Ambulance className="size-5 text-primary" /> TFD — Tratamento Fora de Domicílio
+        </h1>
+        <div className="mt-6 rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+          O TFD está disponível apenas para as unidades habilitadas. Você não tem vínculo em nenhuma delas.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">

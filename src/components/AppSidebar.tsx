@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { souAdmin } from "@/lib/permissoes";
+import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
+import { CNES_TFD } from "@/lib/tfd/tfd";
 
 const formularios = [
   { to: "/bpa-i-v3", label: "BPA-I" },
@@ -37,11 +39,16 @@ export function AppSidebar() {
   const user = useAuthUser();
   const [formOpen, setFormOpen] = useState(true);
   const [podeAdmin, setPodeAdmin] = useState(false);
+  const [podeTfd, setPodeTfd] = useState(false);
   const formActive = formularios.some((f) => pathname.startsWith(f.to));
 
   useEffect(() => {
     let vivo = true;
     souAdmin().then((ok) => vivo && setPodeAdmin(ok));
+    // Aba TFD só p/ quem tem vínculo em algum CNES habilitado para o TFD.
+    carregarVinculosUsuario().then((vincs) => {
+      if (vivo) setPodeTfd(vincs.some((v) => CNES_TFD.includes(v.cnes)));
+    });
     return () => {
       vivo = false;
     };
@@ -87,9 +94,11 @@ export function AppSidebar() {
         <Link to="/fpo" search={{}} className={linkCls(pathname.startsWith("/fpo"))}>
           <FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)
         </Link>
-        <Link to="/tfd" search={{}} className={linkCls(pathname.startsWith("/tfd"))}>
-          <Ambulance className="size-4 shrink-0" /> TFD
-        </Link>
+        {podeTfd && (
+          <Link to="/tfd" search={{}} className={linkCls(pathname.startsWith("/tfd"))}>
+            <Ambulance className="size-4 shrink-0" /> TFD
+          </Link>
+        )}
         <Link to="/importar" className={linkCls(pathname.startsWith("/importar"))}>
           <Database className="size-4 shrink-0" /> Importar produção
         </Link>

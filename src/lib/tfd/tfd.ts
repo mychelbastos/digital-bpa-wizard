@@ -6,6 +6,10 @@ import { gerarProcedimentosTfd, COD_TFD, type EntradaTfd } from "./gerar-bpa-tfd
 // Persistência do módulo TFD: destinos (catálogo por org), valores unitários (vigência à la
 // FPO), registros de TFD e a geração da ficha BPA-I a partir de um registro. Null-safe.
 
+// CNES habilitados para o TFD (inicialmente estas duas unidades). Só quem tem vínculo em
+// algum destes vê a aba/página do TFD. A visibilidade dos dados continua por CNES próprio.
+export const CNES_TFD: readonly string[] = ["6429335", "2510375"];
+
 // ---------------------------------------------------------------------------
 // Org a partir do CNES (a RLS deixa o usuário ler os estabelecimentos da sua org).
 // ---------------------------------------------------------------------------
