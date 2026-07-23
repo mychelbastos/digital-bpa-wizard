@@ -12,9 +12,9 @@ export function desenharCabecalhoPdf(
 
   if (opts.logo) {
     try {
-      // Timbre com proporção ~3.18 (760x239). Altura fixa; largura por proporção.
+      // Timbre com proporção ~3.21 (1400x436). Altura fixa; largura por proporção.
       const h = 40;
-      const w = h * 3.18;
+      const w = h * 3.21;
       pdf.addImage(opts.logo, "PNG", margem, y, w, h);
       y += h + 8;
     } catch {

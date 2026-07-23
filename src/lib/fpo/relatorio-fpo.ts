@@ -79,13 +79,12 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
     // Faixa do título
     pdf.setFillColor(...VERDE);
     pdf.rect(0, 0, W, 54, "F");
-    // Timbre da prefeitura no canto direito (sobre um retângulo branco).
-    // Timbre no canto direito. `reservaDir` = largura ocupada pelo timbre (+ gap), para os
-    // textos de "Gerado em"/"Página" ficarem À ESQUERDA dele (sem sobrepor).
+    // Timbre no canto direito (sobre um retângulo branco). `reservaDir` = largura ocupada pelo
+    // timbre (+ gap), para os textos de "Gerado em"/"Página" ficarem À ESQUERDA dele (sem sobrepor).
     let reservaDir = 0;
     if (logo) {
       try {
-        const lh = 34, lw = lh * 3.18;
+        const lh = 34, lw = lh * 3.21;
         pdf.setFillColor(255, 255, 255);
         pdf.roundedRect(W - M - lw - 6, 10, lw + 12, lh + 6, 3, 3, "F");
         pdf.addImage(logo, "PNG", W - M - lw, 13, lw, lh);
