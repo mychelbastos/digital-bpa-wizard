@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { mensagemErroBanco } from "@/lib/erros";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
 import type { Paciente } from "@/lib/pacientes";
 import { gerarProcedimentosTfd, gerarProcedimentosTfdPorData, COD_TFD, type EntradaTfd, type Viagem } from "./gerar-bpa-tfd";
@@ -60,9 +61,11 @@ export type DestinoInput = Partial<Omit<TfdDestino, "id" | "organizacao_id">> & 
   distancia_km: number;
 };
 
-// Cria ou atualiza um destino (dedup por descrição na org).
-export async function salvarDestino(input: DestinoInput): Promise<TfdDestino | null> {
-  if (!supabase) return null;
+export interface SalvarDestinoResultado { destino: TfdDestino | null; erro?: string }
+
+// Cria ou atualiza um destino (dedup por descrição na org). Retorna { destino } ou { erro }.
+export async function salvarDestino(input: DestinoInput): Promise<SalvarDestinoResultado> {
+  if (!supabase) return { destino: null, erro: "Sistema indisponível." };
   const row = {
     organizacao_id: input.organizacao_id,
     descricao: input.descricao.trim().toUpperCase(),
@@ -79,12 +82,12 @@ export async function salvarDestino(input: DestinoInput): Promise<TfdDestino | n
     if (existente) {
       const { data, error } = await supabase.from("tfd_destinos").update(row)
         .eq("id", (existente as { id: string }).id).select(DEST_COLS).single();
-      return error || !data ? null : (data as TfdDestino);
+      return error || !data ? { destino: null, erro: mensagemErroBanco(error) } : { destino: data as TfdDestino };
     }
     const { data, error } = await supabase.from("tfd_destinos").insert(row).select(DEST_COLS).single();
-    return error || !data ? null : (data as TfdDestino);
+    return error || !data ? { destino: null, erro: mensagemErroBanco(error) } : { destino: data as TfdDestino };
   } catch {
-    return null;
+    return { destino: null, erro: "Falha inesperada ao salvar o destino." };
   }
 }
 
@@ -336,19 +339,24 @@ export type TfdInput = Partial<Omit<TfdRegistro, "id">> & {
 };
 
 // Regrava as linhas de valor (por paciente) de um TFD: apaga as atuais e insere as novas.
-async function regravarLinhas(tfdId: string, linhas: LinhaValor[]): Promise<void> {
-  if (!supabase) return;
+// Retorna a mensagem de erro (ou undefined em sucesso).
+async function regravarLinhas(tfdId: string, linhas: LinhaValor[]): Promise<string | undefined> {
+  if (!supabase) return undefined;
   await supabase.from("tfd_linhas").delete().eq("tfd_id", tfdId);
   const rows = linhas
     .filter((l) => l.quantidade > 0)
     .map((l, i) => ({ tfd_id: tfdId, codigo: l.codigo, quantidade: l.quantidade, para: l.para, valor_unitario: Math.max(0, l.valor_unitario || 0), ordem: i }));
-  if (rows.length) await supabase.from("tfd_linhas").insert(rows);
+  if (!rows.length) return undefined;
+  const { error } = await supabase.from("tfd_linhas").insert(rows);
+  return error ? mensagemErroBanco(error) : undefined;
 }
 
+export interface SalvarTfdResultado { id: string | null; erro?: string }
+
 // Cria ou atualiza um registro de TFD (e regrava as linhas de valor por paciente, quando
-// passadas). Retorna o id, ou null em falha.
-export async function salvarTfd(id: string | null, input: TfdInput, linhas?: LinhaValor[]): Promise<string | null> {
-  if (!supabase) return null;
+// passadas). Retorna { id } no sucesso, ou { id: null, erro } com o motivo da falha.
+export async function salvarTfd(id: string | null, input: TfdInput, linhas?: LinhaValor[]): Promise<SalvarTfdResultado> {
+  if (!supabase) return { id: null, erro: "Sistema indisponível." };
   // Viagens (com data por viagem). As contagens e a 1ª data são derivadas delas.
   const viagens: Viagem[] = (input.viagens ?? []).filter((v) => v && v.data);
   const comP = viagens.length ? viagens.filter((v) => v.pernoite === "com").length : Math.max(0, Math.floor(input.qtd_com_pernoite || 0));
@@ -378,30 +386,35 @@ export async function salvarTfd(id: string | null, input: TfdInput, linhas?: Lin
     let tfdId = id;
     if (id) {
       const { error } = await supabase.from("tfd").update(row).eq("id", id);
-      if (error) return null;
+      if (error) return { id: null, erro: mensagemErroBanco(error) };
     } else {
       const { data, error } = await supabase.from("tfd").insert(row).select("id").single();
-      if (error || !data) return null;
+      if (error || !data) return { id: null, erro: mensagemErroBanco(error) };
       tfdId = (data as { id: string }).id;
     }
-    if (tfdId && linhas) await regravarLinhas(tfdId, linhas);
-    return tfdId;
+    if (tfdId && linhas) {
+      const erroLinhas = await regravarLinhas(tfdId, linhas);
+      if (erroLinhas) return { id: tfdId, erro: `TFD salvo, mas os valores não: ${erroLinhas}` };
+    }
+    return { id: tfdId };
   } catch {
-    return null;
+    return { id: null, erro: "Falha inesperada ao salvar o TFD." };
   }
 }
 
-export async function atualizarStatusTfd(id: string, status: TfdStatus): Promise<boolean> {
-  if (!supabase) return false;
+export async function atualizarStatusTfd(id: string, status: TfdStatus): Promise<{ ok: boolean; erro?: string }> {
+  if (!supabase) return { ok: false, erro: "Sistema indisponível." };
   const { error } = await supabase.from("tfd").update({ status, atualizado_em: new Date().toISOString() }).eq("id", id);
-  return !error;
+  return error ? { ok: false, erro: mensagemErroBanco(error) } : { ok: true };
 }
 
-// Exclui um registro de TFD (por id). A RLS exige gerir_tfd no CNES.
-export async function excluirTfd(id: string): Promise<boolean> {
-  if (!supabase || !id) return false;
-  const { error } = await supabase.from("tfd").delete().eq("id", id);
-  return !error;
+// Exclui um registro de TFD (por id). A RLS exige gerir_tfd no CNES (e reabrir_producao se faturado).
+export async function excluirTfd(id: string): Promise<{ ok: boolean; erro?: string }> {
+  if (!supabase || !id) return { ok: false, erro: "Sistema indisponível." };
+  const { error, count } = await supabase.from("tfd").delete({ count: "exact" }).eq("id", id);
+  if (error) return { ok: false, erro: mensagemErroBanco(error) };
+  if (!count) return { ok: false, erro: "Nada foi excluído (sem permissão ou TFD travado por faturamento)." };
+  return { ok: true };
 }
 
 // Carrega um TFD completo (+ paciente e acompanhante já resolvidos) para edição.

@@ -239,8 +239,9 @@ function TfdPage() {
   const mudarStatus = async (r: TfdRegistroView, status: TfdStatus) => {
     if (!podeGerir) return;
     if (travado(r)) { avisoTravado(); return; }
-    if (await atualizarStatusTfd(r.id, status)) { toast.success(`Status: ${STATUS_META[status].rotulo}.`); carregar(); }
-    else toast.error("Não foi possível mudar o status.");
+    const res = await atualizarStatusTfd(r.id, status);
+    if (res.ok) { toast.success(`Status: ${STATUS_META[status].rotulo}.`); carregar(); }
+    else toast.error(res.erro || "Não foi possível mudar o status.");
   };
 
   const editarTfd = async (r: TfdRegistroView) => {
@@ -257,8 +258,9 @@ function TfdPage() {
     if (!podeGerir) return;
     if (travado(r)) { avisoTravado(); return; }
     if (!window.confirm(`Excluir o TFD de ${r.paciente_nome || "paciente"} (${compLabel(r.competencia)})?`)) return;
-    if (await excluirTfd(r.id)) { toast.success("TFD excluído."); carregar(); }
-    else toast.error("Falha ao excluir o TFD.");
+    const res = await excluirTfd(r.id);
+    if (res.ok) { toast.success("TFD excluído."); carregar(); }
+    else toast.error(res.erro || "Falha ao excluir o TFD.");
   };
 
   // Ao salvar o form: se o TFD editado já estava faturado, atualiza a MESMA ficha (sem gerar nova).
@@ -540,7 +542,7 @@ function FormTfd(props: {
     if (viagensValidas.length === 0) { toast.error("Adicione ao menos uma viagem com data."); return; }
     if (temAcomp && !acompanhante) { toast.error("Cadastre/selecione o acompanhante (ou desmarque acompanhante)."); return; }
     setSalvando(true);
-    const id = await salvarTfd(et?.id ?? null, {
+    const res = await salvarTfd(et?.id ?? null, {
       organizacao_id: orgId, cnes, competencia, paciente_id: paciente.id,
       destino_id: destinoId || null, distancia_km: Number(distanciaKm) || 0,
       viagens: viagensValidas, tem_acompanhante: temAcomp,
@@ -549,8 +551,9 @@ function FormTfd(props: {
       ...(et ? {} : { status: "agendada" as const }),
     }, linhasComValor);
     setSalvando(false);
-    if (!id) { toast.error("Falha ao salvar o TFD."); return; }
-    toast.success(et ? "TFD atualizado." : "TFD salvo.");
+    if (!res.id) { toast.error(res.erro || "Falha ao salvar o TFD."); return; }
+    if (res.erro) toast.warning(res.erro); // salvou o TFD mas algo secundário falhou
+    else toast.success(et ? "TFD atualizado." : "TFD salvo.");
     props.onSalvo();
   };
 
@@ -947,7 +950,7 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
           <input value={nomeMae} onChange={(e) => setNomeMae(e.target.value)} className={campo} />
         </div>
         <div>
-          <div className={label}>CNS *</div>
+          <div className={label}>CNS <span className="font-normal normal-case text-muted-foreground">(informe CNS *ou* CPF)</span></div>
           <input value={cns} onChange={(e) => setCns(digitos(e.target.value).slice(0, 15))} data-nocaps inputMode="numeric"
             className={campo + errCls("documento (CNS/CPF)") + (cnsInvalido ? " !border-destructive" : cnsOk ? " !border-emerald-500" : "")} />
           {cnsInvalido && <div className="mt-0.5 text-[11px] text-destructive">CNS inválido</div>}
@@ -955,7 +958,7 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
           {cnsOk && <div className="mt-0.5 text-[11px] text-emerald-600">CNS válido ✓</div>}
         </div>
         <div>
-          <div className={label}>CPF *</div>
+          <div className={label}>CPF</div>
           <input value={cpf} onChange={(e) => setCpf(digitos(e.target.value).slice(0, 11))} data-nocaps inputMode="numeric"
             className={campo + errCls("documento (CNS/CPF)") + (cpfInvalido ? " !border-destructive" : cpfOk ? " !border-emerald-500" : "")} />
           {cpfInvalido && <div className="mt-0.5 text-[11px] text-destructive">CPF inválido</div>}
@@ -1284,14 +1287,14 @@ function NovoDestino(props: { orgId: string; onCriado: (d: TfdDestino) => void; 
   const salvar = async () => {
     if (!municipio.trim()) { toast.error("Informe o município de destino."); return; }
     setSalvando(true);
-    const d = await salvarDestino({
+    const res = await salvarDestino({
       organizacao_id: props.orgId, descricao, municipio_destino: municipio, uf_destino: uf,
       estabelecimento_destino: estab, distancia_km: Number(km) || 0,
     });
     setSalvando(false);
-    if (!d) { toast.error("Falha ao salvar o destino."); return; }
+    if (!res.destino) { toast.error(res.erro || "Falha ao salvar o destino."); return; }
     toast.success("Destino cadastrado.");
-    props.onCriado(d);
+    props.onCriado(res.destino);
   };
 
   return (
