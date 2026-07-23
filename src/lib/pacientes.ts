@@ -29,6 +29,7 @@ export interface Paciente {
   municipio_ibge: string | null;
   municipio_nome: string | null;
   uf: string | null;
+  acompanhante_id: string | null; // acompanhante habitual (outra pessoa cadastrada)
 }
 
 // Campos gravável. `id` presente = atualiza aquele registro; `tfd` marca paciente do TFD.
@@ -57,7 +58,7 @@ export function pacienteFaltando(p: Partial<Paciente>): string[] {
 }
 
 const COLS =
-  "id, organizacao_id, cns, cpf, nome, nome_social, sexo, nascimento, nome_mae, telefone, email, nacionalidade, raca_cor, etnia, situacao_rua, cod_logradouro, logradouro, numero, complemento, bairro, cep, municipio_ibge, municipio_nome, uf";
+  "id, organizacao_id, cns, cpf, nome, nome_social, sexo, nascimento, nome_mae, telefone, email, nacionalidade, raca_cor, etnia, situacao_rua, cod_logradouro, logradouro, numero, complemento, bairro, cep, municipio_ibge, municipio_nome, uf, acompanhante_id";
 
 const soDigitos = (s: string | null | undefined) => (s || "").replace(/\D/g, "");
 
@@ -146,6 +147,7 @@ export async function salvarPaciente(input: PacienteInput): Promise<Paciente | n
     municipio_ibge: soDigitos(input.municipio_ibge) || null,
     municipio_nome: input.municipio_nome?.trim() || null,
     uf: input.uf?.trim().toUpperCase() || null,
+    acompanhante_id: input.acompanhante_id ?? undefined, // undefined = não mexe
     atualizado_em: new Date().toISOString(),
     ...(input.tfd ? { tfd: true } : {}), // só marca; nunca desmarca num update
   };

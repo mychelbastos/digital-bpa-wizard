@@ -10,7 +10,7 @@ import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { buscarProfissionais, buscarCbosVinculo } from "@/lib/bpa-i-v2/profissionais";
 import {
-  buscarPacientes, salvarPaciente, registrarLeituraPaciente, pacienteFaltando, type Paciente,
+  buscarPacientes, salvarPaciente, carregarPaciente, registrarLeituraPaciente, pacienteFaltando, type Paciente,
 } from "@/lib/pacientes";
 import {
   orgDoCnes, listarDestinos, salvarDestino, valoresVigentes, definirValorVigente,
@@ -22,6 +22,7 @@ import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
 import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/nacionalidades";
 import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
+import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 
 export const Route = createFileRoute("/tfd")({
@@ -60,6 +61,56 @@ const STATUS_META: Record<TfdStatus, { rotulo: string; cor: string }> = {
 
 const campo = "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
 const label = "text-xs font-medium text-muted-foreground";
+
+// Unidades da Federação (código = sigla), para autocomplete de UF.
+const UFS: { code: string; label: string }[] = [
+  ["AC", "Acre"], ["AL", "Alagoas"], ["AP", "Amapá"], ["AM", "Amazonas"], ["BA", "Bahia"],
+  ["CE", "Ceará"], ["DF", "Distrito Federal"], ["ES", "Espírito Santo"], ["GO", "Goiás"],
+  ["MA", "Maranhão"], ["MT", "Mato Grosso"], ["MS", "Mato Grosso do Sul"], ["MG", "Minas Gerais"],
+  ["PA", "Pará"], ["PB", "Paraíba"], ["PR", "Paraná"], ["PE", "Pernambuco"], ["PI", "Piauí"],
+  ["RJ", "Rio de Janeiro"], ["RN", "Rio Grande do Norte"], ["RS", "Rio Grande do Sul"],
+  ["RO", "Rondônia"], ["RR", "Roraima"], ["SC", "Santa Catarina"], ["SP", "São Paulo"],
+  ["SE", "Sergipe"], ["TO", "Tocantins"],
+].map(([code, nome]) => ({ code, label: `${code} — ${nome}` }));
+
+// Rótulos amigáveis dos campos obrigatórios do paciente (para a mensagem de validação).
+const ROTULO_CAMPO: Record<string, string> = {
+  "documento (CNS/CPF)": "CNS ou CPF", nome: "Nome", sexo: "Sexo", nascimento: "Nascimento",
+  nacionalidade: "Nacionalidade", raca_cor: "Raça/Cor", cep: "CEP", municipio_ibge: "Cód. IBGE",
+  logradouro: "Logradouro", numero: "Número", bairro: "Bairro", uf: "UF", telefone: "Telefone",
+};
+
+const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+
+// Campo de texto com sugestões a partir de uma lista (código+label). Sugere ao digitar
+// `minChars`+ letras; ao escolher, chama onPick com a opção.
+function ComboField(props: {
+  value: string; onText: (t: string) => void; onPick: (o: { code: string; label: string }) => void;
+  opcoes: { code: string; label: string }[]; minChars?: number; placeholder?: string; className?: string;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const min = props.minChars ?? 3;
+  const termo = props.value || "";
+  const sugestoes = termo.length >= min
+    ? props.opcoes.filter((o) => norm(o.label).includes(norm(termo))).slice(0, 8)
+    : [];
+  return (
+    <div className="relative">
+      <input value={termo} onChange={(e) => { props.onText(e.target.value); setAberto(true); }}
+        onFocus={() => setAberto(true)} onBlur={() => setTimeout(() => setAberto(false), 150)}
+        placeholder={props.placeholder} className={props.className ?? campo} />
+      {aberto && sugestoes.length > 0 && (
+        <div className="absolute z-10 mt-1 max-h-52 w-full overflow-auto rounded-md border border-border bg-popover shadow">
+          {sugestoes.map((o) => (
+            <button key={o.code} type="button" onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { props.onPick(o); setAberto(false); }}
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">{o.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TfdPage() {
   const user = useAuthUser();
@@ -336,6 +387,16 @@ function FormTfd(props: {
     if (d) setDistanciaKm(String(d.distancia_km));
   };
 
+  // Ao escolher um paciente com acompanhante habitual, já traz o acompanhante (removível).
+  useEffect(() => {
+    if (paciente?.acompanhante_id) {
+      carregarPaciente(paciente.acompanhante_id, false).then((ac) => {
+        if (ac) { setTemAcomp(true); setAcompanhante(ac); }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paciente?.id]);
+
   const entrada = {
     distanciaKm: Number(distanciaKm) || 0,
     qtdComPernoite: Number(comP) || 0,
@@ -493,7 +554,7 @@ function FormTfd(props: {
 // ---------------------------------------------------------------------------
 // Seletor / cadastro de paciente.
 // ---------------------------------------------------------------------------
-function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEscolhe: (p: Paciente | null) => void; titulo?: string }) {
+function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEscolhe: (p: Paciente | null) => void; titulo?: string; permitirAcompanhante?: boolean }) {
   const { orgId, paciente } = props;
   const titulo = props.titulo ?? "Paciente";
   const [termo, setTermo] = useState("");
@@ -529,7 +590,7 @@ function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEsc
           <UserPlus className="size-4 shrink-0" />
           Cadastro incompleto de <b>{completar.nome}</b>. Complete os dados obrigatórios para usar no TFD.
         </div>
-        <PacienteForm orgId={orgId} paciente={completar}
+        <PacienteForm orgId={orgId} paciente={completar} permitirAcompanhante={props.permitirAcompanhante}
           onSalvo={(p) => { setCompletar(null); props.onEscolhe(p); }}
           onCancela={() => setCompletar(null)} />
       </div>
@@ -584,7 +645,8 @@ function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEsc
         </button>
       )}
       {criando && (
-        <PacienteForm orgId={orgId} nomeInicial={termo} onSalvo={(p) => { setCriando(false); props.onEscolhe(p); }} onCancela={() => setCriando(false)} />
+        <PacienteForm orgId={orgId} nomeInicial={termo} permitirAcompanhante={props.permitirAcompanhante}
+          onSalvo={(p) => { setCriando(false); props.onEscolhe(p); }} onCancela={() => setCriando(false)} />
       )}
     </div>
   );
@@ -594,8 +656,9 @@ function PacientePicker(props: { orgId: string; paciente: Paciente | null; onEsc
 // temos: nome social, nome da mãe). Autofill de município/UF pelo CEP (ViaCEP). Aceita um
 // `paciente` para EDITAR/COMPLETAR (pré-preenche e atualiza) ou `nomeInicial` para criar.
 // Exige todos os campos obrigatórios antes de salvar (regra do TFD).
-function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?: string; onSalvo: (p: Paciente) => void; onCancela: () => void }) {
+function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?: string; permitirAcompanhante?: boolean; onSalvo: (p: Paciente) => void; onCancela: () => void }) {
   const ini = props.paciente;
+  const permitirAcompanhante = props.permitirAcompanhante ?? true;
   const semear = props.nomeInicial ?? "";
   const soLetras = /\d/.test(semear) ? "" : semear;
   const soNum = semear.replace(/\D/g, "");
@@ -621,7 +684,15 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
   const [municipioNome, setMunicipioNome] = useState(ini?.municipio_nome ?? "");
   const [municipioIbge, setMunicipioIbge] = useState(ini?.municipio_ibge ?? "");
   const [uf, setUf] = useState(ini?.uf ?? "");
+  const [acompanhante, setAcompanhante] = useState<Paciente | null>(null);
+  const [faltando, setFaltando] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const errCls = (key: string) => (faltando.includes(key) ? " !border-destructive" : "");
+
+  // Carrega o acompanhante habitual já vinculado a este paciente (edição).
+  useEffect(() => {
+    if (ini?.acompanhante_id) carregarPaciente(ini.acompanhante_id, false).then((p) => p && setAcompanhante(p));
+  }, [ini?.acompanhante_id]);
 
   const aoMudarCep = async (v: string) => {
     const d = digitos(v).slice(0, 8);
@@ -646,10 +717,15 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
       uf: uf || null, telefone: digitos(telefone) || null,
     };
     const faltam = pacienteFaltando(candidato);
-    if (faltam.length > 0) { toast.error("Preencha todos os campos obrigatórios do paciente antes de continuar."); return; }
+    setFaltando(faltam);
+    if (faltam.length > 0) {
+      const rotulos = faltam.map((f) => ROTULO_CAMPO[f] ?? f).join(", ");
+      toast.error(`Campos obrigatórios em falta: ${rotulos}.`);
+      return;
+    }
     setSalvando(true);
     const p = await salvarPaciente({
-      id: props.paciente?.id, tfd: true,
+      id: props.paciente?.id, tfd: true, acompanhante_id: acompanhante?.id ?? null,
       organizacao_id: props.orgId, nome, nome_social: nomeSocial, cns, cpf, sexo: sexo || null,
       nascimento: nascimento || null, nome_mae: nomeMae, nacionalidade, raca_cor: racaCor || null,
       etnia: etnia || null, situacao_rua: situacaoRua || null, email, telefone, cep,
@@ -664,11 +740,11 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
 
   return (
     <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
-      <div className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">Identificação</div>
+      <div className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">Identificação <span className="font-normal normal-case">(campos com * são obrigatórios)</span></div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
         <div className="sm:col-span-2">
-          <div className={label}>Nome</div>
-          <input value={nome} onChange={(e) => setNome(e.target.value)} className={campo} />
+          <div className={label}>Nome *</div>
+          <input value={nome} onChange={(e) => setNome(e.target.value)} className={campo + errCls("nome")} />
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Nome social</div>
@@ -679,32 +755,32 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
           <input value={nomeMae} onChange={(e) => setNomeMae(e.target.value)} className={campo} />
         </div>
         <div>
-          <div className={label}>CNS</div>
-          <input value={cns} onChange={(e) => setCns(digitos(e.target.value).slice(0, 15))} className={campo} />
+          <div className={label}>CNS *</div>
+          <input value={cns} onChange={(e) => setCns(digitos(e.target.value).slice(0, 15))} className={campo + errCls("documento (CNS/CPF)")} />
         </div>
         <div>
-          <div className={label}>CPF</div>
-          <input value={cpf} onChange={(e) => setCpf(digitos(e.target.value).slice(0, 11))} className={campo} />
+          <div className={label}>CPF *</div>
+          <input value={cpf} onChange={(e) => setCpf(digitos(e.target.value).slice(0, 11))} className={campo + errCls("documento (CNS/CPF)")} />
         </div>
         <div>
-          <div className={label}>Sexo</div>
-          <select value={sexo} onChange={(e) => setSexo(e.target.value as "" | "M" | "F")} className={campo}>
+          <div className={label}>Sexo *</div>
+          <select value={sexo} onChange={(e) => setSexo(e.target.value as "" | "M" | "F")} className={campo + errCls("sexo")}>
             <option value="">—</option><option value="M">Masculino</option><option value="F">Feminino</option>
           </select>
         </div>
         <div>
-          <div className={label}>Nascimento</div>
-          <input type="date" value={nascimento} onChange={(e) => setNascimento(e.target.value)} className={campo} />
+          <div className={label}>Nascimento *</div>
+          <input type="date" value={nascimento} onChange={(e) => setNascimento(e.target.value)} className={campo + errCls("nascimento")} />
         </div>
         <div>
-          <div className={label}>Nacionalidade</div>
-          <select value={nacionalidade} onChange={(e) => setNacionalidade(e.target.value)} className={campo}>
+          <div className={label}>Nacionalidade *</div>
+          <select value={nacionalidade} onChange={(e) => setNacionalidade(e.target.value)} className={campo + errCls("nacionalidade")}>
             {NACIONALIDADES.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
           </select>
         </div>
         <div>
-          <div className={label}>Raça/Cor</div>
-          <select value={racaCor} onChange={(e) => setRacaCor(e.target.value)} className={campo}>
+          <div className={label}>Raça/Cor *</div>
+          <select value={racaCor} onChange={(e) => setRacaCor(e.target.value)} className={campo + errCls("raca_cor")}>
             <option value="">—</option>
             {RACAS.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
           </select>
@@ -733,12 +809,12 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
           <input value={email} onChange={(e) => setEmail(e.target.value)} className={campo} />
         </div>
         <div className="sm:col-span-2">
-          <div className={label}>Telefone (DDD + número)</div>
-          <input value={telefone} onChange={(e) => setTelefone(digitos(e.target.value).slice(0, 11))} className={campo} />
+          <div className={label}>Telefone (DDD + número) *</div>
+          <input value={telefone} onChange={(e) => setTelefone(digitos(e.target.value).slice(0, 11))} className={campo + errCls("telefone")} />
         </div>
         <div>
-          <div className={label}>CEP</div>
-          <input value={cep} onChange={(e) => aoMudarCep(e.target.value)} className={campo} />
+          <div className={label}>CEP *</div>
+          <input value={cep} onChange={(e) => aoMudarCep(e.target.value)} className={campo + errCls("cep")} />
         </div>
         <div>
           <div className={label}>Tipo logradouro</div>
@@ -748,34 +824,55 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
           </select>
         </div>
         <div className="sm:col-span-2">
-          <div className={label}>Logradouro</div>
-          <input value={logradouro} onChange={(e) => setLogradouro(e.target.value)} className={campo} />
+          <div className={label}>Logradouro *</div>
+          <input value={logradouro} onChange={(e) => setLogradouro(e.target.value)} className={campo + errCls("logradouro")} />
         </div>
         <div>
-          <div className={label}>Número</div>
-          <input value={numero} onChange={(e) => setNumero(digitos(e.target.value).slice(0, 6))} className={campo} />
+          <div className={label}>Número *</div>
+          <input value={numero} onChange={(e) => setNumero(digitos(e.target.value).slice(0, 6))} className={campo + errCls("numero")} />
         </div>
         <div>
           <div className={label}>Complemento</div>
           <input value={complemento} onChange={(e) => setComplemento(e.target.value)} className={campo} />
         </div>
         <div className="sm:col-span-2">
-          <div className={label}>Bairro</div>
-          <input value={bairro} onChange={(e) => setBairro(e.target.value)} className={campo} />
+          <div className={label}>Bairro *</div>
+          <input value={bairro} onChange={(e) => setBairro(e.target.value)} className={campo + errCls("bairro")} />
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Município</div>
-          <input value={municipioNome} onChange={(e) => setMunicipioNome(e.target.value)} className={campo} />
+          <ComboField value={municipioNome} onText={setMunicipioNome} opcoes={MUNICIPIOS_IBGE} minChars={3}
+            placeholder="digite 3+ letras…"
+            onPick={(o) => {
+              const [cidade, sigla] = o.label.split(" - ");
+              setMunicipioNome((cidade || o.label).trim());
+              setMunicipioIbge(o.code);
+              if (sigla) setUf(sigla.trim().toUpperCase());
+            }} />
         </div>
         <div>
-          <div className={label}>Cód. IBGE</div>
-          <input value={municipioIbge} onChange={(e) => setMunicipioIbge(digitos(e.target.value).slice(0, 7))} className={campo} />
+          <div className={label}>Cód. IBGE *</div>
+          <input value={municipioIbge} onChange={(e) => setMunicipioIbge(digitos(e.target.value).slice(0, 7))} className={campo + errCls("municipio_ibge")} />
         </div>
         <div>
-          <div className={label}>UF</div>
-          <input value={uf} onChange={(e) => setUf(e.target.value.toUpperCase().slice(0, 2))} className={campo} />
+          <div className={label}>UF *</div>
+          <ComboField value={uf} onText={(t) => setUf(t.toUpperCase().slice(0, 2))} opcoes={UFS} minChars={1}
+            onPick={(o) => setUf(o.code)} className={campo + errCls("uf")} />
         </div>
       </div>
+
+      {permitirAcompanhante && (
+        <>
+          <div className="mb-1 mt-3 text-[11px] font-semibold uppercase text-muted-foreground">Acompanhante habitual (opcional)</div>
+          <PacientePicker orgId={props.orgId} paciente={acompanhante} onEscolhe={setAcompanhante} titulo="Acompanhante" permitirAcompanhante={false} />
+        </>
+      )}
+
+      {faltando.length > 0 && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+          Faltam: {faltando.map((f) => ROTULO_CAMPO[f] ?? f).join(", ")}.
+        </div>
+      )}
 
       <div className="mt-3 flex justify-end gap-2">
         <button type="button" onClick={props.onCancela} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted">Cancelar</button>
@@ -814,22 +911,33 @@ function NovoDestino(props: { orgId: string; onCriado: (d: TfdDestino) => void; 
 
   return (
     <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
+      <p className="mb-2 text-[11px] text-muted-foreground">
+        Destino = a cidade/unidade para onde o paciente viaja (ex.: Salvador). O <b>estabelecimento</b> é o
+        hospital/clínica de referência lá (ex.: Hospital Roberto Santos) — opcional.
+      </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
         <div className="sm:col-span-2">
           <div className={label}>Descrição</div>
           <input value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ex.: Salvador — Hosp. Roberto Santos" className={campo} />
         </div>
         <div>
-          <div className={label}>Município</div>
-          <input value={municipio} onChange={(e) => setMunicipio(e.target.value)} className={campo} />
+          <div className={label}>Município de destino</div>
+          <ComboField value={municipio} onText={setMunicipio} opcoes={MUNICIPIOS_IBGE} minChars={3}
+            placeholder="digite 3+ letras…"
+            onPick={(o) => {
+              const [cidade, sigla] = o.label.split(" - ");
+              setMunicipio((cidade || o.label).trim());
+              if (sigla) setUf(sigla.trim().toUpperCase());
+            }} />
         </div>
         <div>
           <div className={label}>UF</div>
-          <input value={uf} onChange={(e) => setUf(e.target.value.toUpperCase().slice(0, 2))} className={campo} />
+          <ComboField value={uf} onText={(t) => setUf(t.toUpperCase().slice(0, 2))} opcoes={UFS} minChars={1}
+            onPick={(o) => setUf(o.code)} />
         </div>
         <div className="sm:col-span-3">
-          <div className={label}>Estabelecimento (opcional)</div>
-          <input value={estab} onChange={(e) => setEstab(e.target.value)} className={campo} />
+          <div className={label}>Estabelecimento de destino (hospital/clínica) — opcional</div>
+          <input value={estab} onChange={(e) => setEstab(e.target.value)} placeholder="Ex.: Hospital Roberto Santos" className={campo} />
         </div>
         <div>
           <div className={label}>Distância (km, só ida)</div>
