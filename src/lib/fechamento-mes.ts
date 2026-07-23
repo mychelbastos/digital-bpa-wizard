@@ -135,34 +135,32 @@ export function gerarArquivoMes(
     }
   }
 
-  // BPA-I (registro 03) — 3 linhas por folha.
+  // BPA-I (registro 03) — até 99 sequências por folha (regra do BPA Magnético, CONFIRMADA
+  // byte a byte contra .MAR/.JUN reais: o campo seq tem 2 díg. e vai de 01 a 99; ao estourar,
+  // abre folha nova). Agrupa por (CNES, profCNS, CBO, competência): seqs de VÁRIAS fichas do
+  // mesmo profissional/competência entram nas mesmas folhas (cada folha até 99).
+  const gruposI = new Map<string, DadosBpa>();
   for (const f of fichas.filter((x) => x.tipo === "BPA-I")) {
     const st = f.dados as BpaIState;
     const seqs = (st?.seqs ?? []).filter(seqPreenchida);
     if (seqs.length === 0) continue;
     fichasBpaI++;
-    const dados: DadosBpa = {
-      cnes: st.cnes,
-      profCns: st.profCns,
-      profCbo: st.profCbo,
-      profMes: st.profMes,
-      profAno: st.profAno,
-      profFolha: st.profFolha,
-      seqs,
-    };
-    for (let i = 0; i < seqs.length; i += 3) {
-      seqs.slice(i, i + 3).forEach((s, j) => {
-        linhas.push(linhaBpaI(dados, s, folha, j + 1));
+    const comp = dig(st.profAno) + dig(st.profMes);
+    const key = `${dig(st.cnes)}|${dig(st.profCns)}|${dig(st.profCbo)}|${comp}`;
+    let g = gruposI.get(key);
+    if (!g) {
+      g = { cnes: st.cnes, profCns: st.profCns, profCbo: st.profCbo, profMes: st.profMes, profAno: st.profAno, profFolha: st.profFolha, seqs: [] };
+      gruposI.set(key, g);
+    }
+    g.seqs.push(...seqs);
+  }
+  for (const st of gruposI.values()) {
+    for (let i = 0; i < st.seqs.length; i += 99) {
+      st.seqs.slice(i, i + 99).forEach((s, j) => {
+        linhas.push(linhaBpaI(st, s, folha, j + 1));
         controle.push({ proc: dig(s.codProc), qtde: dig(s.qtde) });
         registrarChave(
-          chaveLinha(
-            "03",
-            dig(st.cnes),
-            dig(st.profCns),
-            dig(st.profAno) + dig(st.profMes),
-            folha,
-            j + 1,
-          ),
+          chaveLinha("03", dig(st.cnes), dig(st.profCns), dig(st.profAno) + dig(st.profMes), folha, j + 1),
         );
         linhasBpaI++;
       });

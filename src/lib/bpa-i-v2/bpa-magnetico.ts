@@ -215,8 +215,9 @@ export interface ArquivoBpa {
   folhas: number;
 }
 
-// Gera o arquivo completo (header + linhas). base de folha vem de profFolha (ou 1),
-// 3 linhas por folha (fiel ao formulário). Linhas sem procedimento são ignoradas.
+// Gera o arquivo completo (header + linhas). base de folha vem de profFolha (ou 1). BPA
+// Magnético = até 99 seqs por folha (campo seq de 2 díg.; ao estourar, abre folha nova) —
+// CONFIRMADO contra .MAR/.JUN reais. Linhas sem procedimento são ignoradas.
 export function gerarArquivoBpa(d: DadosBpa, cfg: ConfigOrgao): ArquivoBpa {
   const preenchidas = d.seqs.filter(seqPreenchida);
   const comp = competencia(d.profAno, d.profMes);
@@ -224,8 +225,9 @@ export function gerarArquivoBpa(d: DadosBpa, cfg: ConfigOrgao): ArquivoBpa {
   const controle = campoControle(preenchidas);
 
   const CRLF = "\r\n";
-  const linhas = preenchidas.map((s, i) => linhaBpaI(d, s, base + Math.floor(i / 3), (i % 3) + 1));
-  const nFolhas = Math.max(1, Math.ceil(linhas.length / 3));
+  const SEQS_POR_FOLHA = 99;
+  const linhas = preenchidas.map((s, i) => linhaBpaI(d, s, base + Math.floor(i / SEQS_POR_FOLHA), (i % SEQS_POR_FOLHA) + 1));
+  const nFolhas = Math.max(1, Math.ceil(linhas.length / SEQS_POR_FOLHA));
   const head = header(cfg, comp, linhas.length, nFolhas, controle);
 
   const conteudo = [head, ...linhas].join(CRLF) + CRLF;
