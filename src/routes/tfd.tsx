@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Ambulance, Plus, Search, X, Loader2, Save, UserPlus, MapPin, Receipt, ChevronDown, CheckCircle2, Users, Pencil,
+  Ambulance, Plus, Search, X, Loader2, Save, UserPlus, MapPin, Receipt, ChevronDown, CheckCircle2, Users, Pencil, Trash2, FileBarChart, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
@@ -10,12 +10,13 @@ import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { buscarProfissionais, buscarCbosVinculo } from "@/lib/bpa-i-v2/profissionais";
 import {
-  buscarPacientes, salvarPaciente, carregarPaciente, registrarLeituraPaciente, pacienteFaltando, type Paciente,
+  buscarPacientes, salvarPaciente, carregarPaciente, registrarLeituraPaciente, excluirPaciente, pacienteFaltando, type Paciente,
 } from "@/lib/pacientes";
 import {
-  orgDoCnes, listarDestinos, salvarDestino, valoresVigentes, definirValorVigente,
-  listarTfd, salvarTfd, atualizarStatusTfd, gerarFaturamentoMes, previaTfd, listarTfdsDoPaciente, CNES_TFD,
-  type TfdDestino, type TfdRegistroView, type TfdStatus, type TfdHistoricoItem,
+  orgDoCnes, listarDestinos, salvarDestino, atualizarDestino, excluirDestino, valoresVigentes, definirValorVigente,
+  listarTfd, salvarTfd, atualizarStatusTfd, excluirTfd, carregarTfd, gerarFaturamentoMes, previaTfd,
+  listarTfdsDoPaciente, carregarRelatorioTfd, CNES_TFD,
+  type TfdDestino, type TfdRegistroView, type TfdStatus, type TfdHistoricoItem, type TfdEdicao, type TfdRelatorioRow,
 } from "@/lib/tfd/tfd";
 import { COD_TFD } from "@/lib/tfd/gerar-bpa-tfd";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
@@ -125,8 +126,11 @@ function TfdPage() {
   const [registros, setRegistros] = useState<TfdRegistroView[]>([]);
   const [loading, setLoading] = useState(false);
   const [formAberto, setFormAberto] = useState(false);
+  const [editando, setEditando] = useState<TfdEdicao | null>(null);
   const [valoresAberto, setValoresAberto] = useState(false);
   const [pacientesAberto, setPacientesAberto] = useState(false);
+  const [destinosAberto, setDestinosAberto] = useState(false);
+  const [relatoriosAberto, setRelatoriosAberto] = useState(false);
   const [carregouUnidades, setCarregouUnidades] = useState(false);
 
   const podeGerir = cnes ? geriveis.has(cnes) : false;
@@ -199,6 +203,25 @@ function TfdPage() {
     else toast.error("Não foi possível mudar o status.");
   };
 
+  const editarTfd = async (r: TfdRegistroView) => {
+    if (!podeGerir) return;
+    const ed = await carregarTfd(r.id);
+    if (!ed) { toast.error("Não consegui carregar o TFD."); return; }
+    setEditando(ed);
+    setFormAberto(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const removerTfd = async (r: TfdRegistroView) => {
+    if (!podeGerir) return;
+    if (!window.confirm(`Excluir o TFD de ${r.paciente_nome || "paciente"} (${compLabel(r.competencia)})?`)) return;
+    if (await excluirTfd(r.id)) { toast.success("TFD excluído."); carregar(); }
+    else toast.error("Falha ao excluir o TFD.");
+  };
+
+  const abrirNovo = () => { setEditando(null); setFormAberto(true); };
+  const fecharForm = () => { setFormAberto(false); setEditando(null); };
+
   if (semAcesso) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-6">
@@ -229,12 +252,20 @@ function TfdPage() {
               className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
               <Users className="size-4" /> Pacientes
             </button>
+            <button type="button" onClick={() => setDestinosAberto(true)}
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+              <MapPin className="size-4" /> Destinos
+            </button>
+            <button type="button" onClick={() => setRelatoriosAberto(true)}
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+              <FileBarChart className="size-4" /> Relatórios
+            </button>
             <button type="button" onClick={faturarMes} disabled={faturando || registros.length === 0}
               className="flex items-center gap-2 rounded-md border border-primary/40 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
               title="Consolida os TFDs do mês em fichas BPA-I (por profissional)">
               {faturando ? <Loader2 className="size-4 animate-spin" /> : <Receipt className="size-4" />} Gerar faturamento do mês
             </button>
-            <button type="button" onClick={() => setFormAberto((a) => !a)}
+            <button type="button" onClick={abrirNovo}
               className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
               <Plus className="size-4" /> Novo TFD
             </button>
@@ -244,6 +275,12 @@ function TfdPage() {
 
       {pacientesAberto && orgId && (
         <PacientesPanel orgId={orgId} onFechar={() => setPacientesAberto(false)} />
+      )}
+      {destinosAberto && orgId && (
+        <DestinosPanel orgId={orgId} onFechar={() => setDestinosAberto(false)} onMudou={recarregarDestinos} />
+      )}
+      {relatoriosAberto && (
+        <RelatoriosPanel cnes={cnes} nomeUnidade={nomeUnidade} competencia={competencia} onFechar={() => setRelatoriosAberto(false)} />
       )}
 
       {/* Filtros */}
@@ -265,13 +302,15 @@ function TfdPage() {
         )}
       </div>
 
-      {/* Formulário de novo TFD */}
+      {/* Formulário de novo/editar TFD */}
       {formAberto && podeGerir && orgId && (
         <FormTfd
+          key={editando?.tfd.id ?? "novo"}
           orgId={orgId} cnes={cnes} competencia={competencia} destinos={destinos} valores={valores}
-          onFecha={() => setFormAberto(false)}
+          edicao={editando ?? undefined}
+          onFecha={fecharForm}
           onDestinosMudou={recarregarDestinos}
-          onSalvo={() => { setFormAberto(false); carregar(); }}
+          onSalvo={() => { fecharForm(); carregar(); }}
         />
       )}
 
@@ -324,22 +363,32 @@ function TfdPage() {
                 </td>
                 <td className="px-3 py-2 text-right font-medium">{brl(r.total_rs)}</td>
                 <td className="px-3 py-2 text-center">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_META[r.status].cor}`}>
-                    {STATUS_META[r.status].rotulo}
-                  </span>
+                  {podeGerir ? (
+                    <select value={r.status} onChange={(e) => mudarStatus(r, e.target.value as TfdStatus)}
+                      className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-medium outline-none ${STATUS_META[r.status].cor}`}>
+                      <option value="agendada">Agendada</option>
+                      <option value="realizada">Realizada</option>
+                      <option value="faturada">Faturada</option>
+                      <option value="cancelada">Cancelada</option>
+                    </select>
+                  ) : (
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_META[r.status].cor}`}>{STATUS_META[r.status].rotulo}</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {podeGerir && (
                     <div className="flex justify-end gap-1">
-                      {r.status === "agendada" && (
-                        <button type="button" onClick={() => mudarStatus(r, "realizada")}
-                          className="rounded border border-border px-2 py-1 text-xs hover:bg-muted">Realizada</button>
-                      )}
                       {r.status === "faturada" && r.ficha_id && (
-                        <Link to="/minhas-fichas" className="flex items-center gap-1 text-xs text-emerald-700 hover:underline">
-                          <CheckCircle2 className="size-3" /> Ficha
+                        <Link to="/minhas-fichas" title="Ver ficha gerada" className="rounded border border-border p-1 text-emerald-700 hover:bg-emerald-50">
+                          <CheckCircle2 className="size-3.5" />
                         </Link>
                       )}
+                      <button type="button" onClick={() => editarTfd(r)} title="Editar TFD" className="rounded border border-border p-1 hover:bg-muted">
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button type="button" onClick={() => removerTfd(r)} title="Excluir TFD" className="rounded border border-border p-1 text-destructive hover:bg-destructive/10">
+                        <Trash2 className="size-3.5" />
+                      </button>
                     </div>
                   )}
                 </td>
@@ -370,20 +419,23 @@ function TfdPage() {
 // ---------------------------------------------------------------------------
 function FormTfd(props: {
   orgId: string; cnes: string; competencia: string; destinos: TfdDestino[]; valores: Record<string, number>;
-  onFecha: () => void; onDestinosMudou: () => void; onSalvo: () => void;
+  edicao?: TfdEdicao; onFecha: () => void; onDestinosMudou: () => void; onSalvo: () => void;
 }) {
-  const { orgId, cnes, competencia, destinos, valores } = props;
-  const [paciente, setPaciente] = useState<Paciente | null>(null);
-  const [destinoId, setDestinoId] = useState("");
-  const [distanciaKm, setDistanciaKm] = useState("0");
-  // Lista de viagens: cada uma com data + pernoite. Começa com uma linha vazia.
-  const [viagens, setViagens] = useState<{ data: string; pernoite: "com" | "sem" }[]>([{ data: "", pernoite: "sem" }]);
-  const [temAcomp, setTemAcomp] = useState(false);
-  const [acompanhante, setAcompanhante] = useState<Paciente | null>(null);
-  const [profCns, setProfCns] = useState("");
-  const [profNome, setProfNome] = useState("");
-  const [profCbo, setProfCbo] = useState("");
-  const [obs, setObs] = useState("");
+  const { orgId, cnes, competencia, destinos, valores, edicao } = props;
+  const et = edicao?.tfd;
+  const [paciente, setPaciente] = useState<Paciente | null>(edicao?.paciente ?? null);
+  const [destinoId, setDestinoId] = useState(et?.destino_id ?? "");
+  const [distanciaKm, setDistanciaKm] = useState(et ? String(et.distancia_km) : "0");
+  // Lista de viagens: cada uma com data + pernoite. Começa com uma linha vazia (ou as da edição).
+  const [viagens, setViagens] = useState<{ data: string; pernoite: "com" | "sem" }[]>(
+    et?.viagens?.length ? et.viagens.map((v) => ({ data: v.data, pernoite: v.pernoite })) : [{ data: "", pernoite: "sem" }],
+  );
+  const [temAcomp, setTemAcomp] = useState(et?.tem_acompanhante ?? false);
+  const [acompanhante, setAcompanhante] = useState<Paciente | null>(edicao?.acompanhante ?? null);
+  const [profCns, setProfCns] = useState(et?.prof_cns ?? "");
+  const [profNome, setProfNome] = useState(et?.prof_nome ?? "");
+  const [profCbo, setProfCbo] = useState(et?.prof_cbo ?? "");
+  const [obs, setObs] = useState(et?.observacoes ?? "");
   const [salvando, setSalvando] = useState(false);
   const [novoDestino, setNovoDestino] = useState(false);
   // Override manual do valor unitário por código (senão usa o vigente da org).
@@ -396,7 +448,9 @@ function FormTfd(props: {
   };
 
   // Ao escolher um paciente com acompanhante habitual, já traz o acompanhante (removível).
+  // Não roda na edição (preserva o acompanhante já gravado no TFD).
   useEffect(() => {
+    if (edicao) return;
     if (paciente?.acompanhante_id) {
       carregarPaciente(paciente.acompanhante_id, false).then((ac) => {
         if (ac) { setTemAcomp(true); setAcompanhante(ac); }
@@ -429,23 +483,24 @@ function FormTfd(props: {
     if (viagensValidas.length === 0) { toast.error("Adicione ao menos uma viagem com data."); return; }
     if (temAcomp && !acompanhante) { toast.error("Cadastre/selecione o acompanhante (ou desmarque acompanhante)."); return; }
     setSalvando(true);
-    const id = await salvarTfd(null, {
+    const id = await salvarTfd(et?.id ?? null, {
       organizacao_id: orgId, cnes, competencia, paciente_id: paciente.id,
       destino_id: destinoId || null, distancia_km: Number(distanciaKm) || 0,
       viagens: viagensValidas, tem_acompanhante: temAcomp,
       acompanhante_id: temAcomp ? acompanhante?.id ?? null : null,
-      prof_cns: profCns, prof_nome: profNome, prof_cbo: profCbo, observacoes: obs, status: "agendada",
+      prof_cns: profCns, prof_nome: profNome, prof_cbo: profCbo, observacoes: obs,
+      ...(et ? {} : { status: "agendada" as const }),
     }, linhasComValor);
     setSalvando(false);
     if (!id) { toast.error("Falha ao salvar o TFD."); return; }
-    toast.success("TFD salvo.");
+    toast.success(et ? "TFD atualizado." : "TFD salvo.");
     props.onSalvo();
   };
 
   return (
     <div className="mb-4 rounded-lg border border-primary/30 bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Novo TFD</h2>
+        <h2 className="text-sm font-semibold text-foreground">{et ? "Editar TFD" : "Novo TFD"}</h2>
         <button type="button" onClick={props.onFecha} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
       </div>
 
@@ -920,7 +975,21 @@ function PacientesPanel(props: { orgId: string; onFechar: () => void }) {
   const [editando, setEditando] = useState(false);
   const [historico, setHistorico] = useState<TfdHistoricoItem[]>([]);
   const [carregandoHist, setCarregandoHist] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [excluindoBusy, setExcluindoBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const confirmarExclusao = async () => {
+    if (!sel) return;
+    if (!motivo.trim()) { toast.error("Informe o motivo da exclusão."); return; }
+    setExcluindoBusy(true);
+    const ok = await excluirPaciente(sel.id, motivo);
+    setExcluindoBusy(false);
+    if (!ok) { toast.error("Não foi possível excluir (verifique o motivo e sua permissão)."); return; }
+    toast.success("Paciente excluído (registrado no log).");
+    setExcluindo(false); setMotivo(""); setSel(null);
+  };
 
   useEffect(() => {
     if (sel) return;
@@ -983,10 +1052,29 @@ function PacientesPanel(props: { orgId: string; onFechar: () => void }) {
             <div className="rounded-md border border-border p-3">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-base font-semibold text-foreground">{sel.nome}</div>
-                <button type="button" onClick={() => setEditando(true)} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
-                  <Pencil className="size-3" /> Editar cadastro
-                </button>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => setEditando(true)} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                    <Pencil className="size-3" /> Editar cadastro
+                  </button>
+                  <button type="button" onClick={() => { setExcluindo(true); setMotivo(""); }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-destructive hover:bg-destructive/10">
+                    <Trash2 className="size-3" /> Excluir
+                  </button>
+                </div>
               </div>
+              {excluindo && (
+                <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 p-2">
+                  <div className="text-xs font-medium text-destructive">Motivo da exclusão (obrigatório — fica registrado no log)</div>
+                  <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} autoFocus
+                    className="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm outline-none focus:border-destructive" />
+                  <div className="mt-1 flex justify-end gap-2">
+                    <button type="button" onClick={() => setExcluindo(false)} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">Cancelar</button>
+                    <button type="button" onClick={confirmarExclusao} disabled={excluindoBusy || !motivo.trim()}
+                      className="flex items-center gap-1 rounded-md bg-destructive px-2 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50">
+                      {excluindoBusy ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />} Confirmar exclusão
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {info("CNS", sel.cns)}
                 {info("CPF", sel.cpf)}
@@ -1114,6 +1202,216 @@ function NovoDestino(props: { orgId: string; onCriado: (d: TfdDestino) => void; 
           className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
           {salvando ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Salvar destino
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Painel de Destinos: listar, editar e excluir os destinos (rotas) da organização.
+// ---------------------------------------------------------------------------
+function DestinosPanel(props: { orgId: string; onFechar: () => void; onMudou: () => void }) {
+  const [lista, setLista] = useState<TfdDestino[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [ed, setEd] = useState<{ descricao: string; municipio: string; uf: string; estab: string; km: string }>({ descricao: "", municipio: "", uf: "", estab: "", km: "0" });
+  const [novo, setNovo] = useState(false);
+
+  const recarregar = async () => { setCarregando(true); setLista(await listarDestinos(props.orgId)); setCarregando(false); };
+  useEffect(() => { recarregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [props.orgId]);
+
+  const abrirEdicao = (d: TfdDestino) => {
+    setEditId(d.id);
+    setEd({ descricao: d.descricao, municipio: d.municipio_destino ?? "", uf: d.uf_destino ?? "", estab: d.estabelecimento_destino ?? "", km: String(d.distancia_km) });
+  };
+  const salvarEdicao = async () => {
+    if (!editId) return;
+    const ok = await atualizarDestino(editId, {
+      descricao: ed.descricao, municipio_destino: ed.municipio, uf_destino: ed.uf,
+      estabelecimento_destino: ed.estab, distancia_km: Number(ed.km) || 0,
+    });
+    if (!ok) { toast.error("Falha ao salvar o destino."); return; }
+    toast.success("Destino atualizado."); setEditId(null); await recarregar(); props.onMudou();
+  };
+  const remover = async (d: TfdDestino) => {
+    if (!window.confirm(`Excluir o destino "${d.descricao}"?`)) return;
+    if (await excluirDestino(d.id)) { toast.success("Destino excluído."); await recarregar(); props.onMudou(); }
+    else toast.error("Falha ao excluir o destino.");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onMouseDown={props.onFechar}>
+      <div className="mt-6 w-full max-w-2xl rounded-lg border border-border bg-card p-4 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><MapPin className="size-4 text-primary" /> Destinos (rotas)</h2>
+          <button type="button" onClick={props.onFechar} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+        </div>
+
+        <button type="button" onClick={() => setNovo((v) => !v)} className="mb-2 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+          <Plus className="size-3" /> {novo ? "Fechar" : "Cadastrar novo destino"}
+        </button>
+        {novo && (
+          <NovoDestino orgId={props.orgId} onCriado={async () => { setNovo(false); await recarregar(); props.onMudou(); }} onCancela={() => setNovo(false)} />
+        )}
+
+        <div className="mt-2 overflow-hidden rounded-md border border-border">
+          {carregando && <div className="px-3 py-6 text-center text-muted-foreground"><Loader2 className="mx-auto size-5 animate-spin" /></div>}
+          {!carregando && lista.length === 0 && <div className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhum destino cadastrado.</div>}
+          {!carregando && lista.map((d) => (
+            <div key={d.id} className="border-b border-border/50 last:border-0">
+              {editId === d.id ? (
+                <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-4">
+                  <div className="sm:col-span-2"><div className={label}>Descrição</div><input value={ed.descricao} onChange={(e) => setEd({ ...ed, descricao: e.target.value })} className={campo} /></div>
+                  <div><div className={label}>Município</div><input value={ed.municipio} onChange={(e) => setEd({ ...ed, municipio: e.target.value })} className={campo} /></div>
+                  <div><div className={label}>UF</div><input value={ed.uf} onChange={(e) => setEd({ ...ed, uf: e.target.value.toUpperCase().slice(0, 2) })} className={campo} /></div>
+                  <div className="sm:col-span-3"><div className={label}>Estabelecimento</div><input value={ed.estab} onChange={(e) => setEd({ ...ed, estab: e.target.value })} className={campo} /></div>
+                  <div><div className={label}>Distância (km)</div><input value={ed.km} onChange={(e) => setEd({ ...ed, km: e.target.value.replace(/[^\d.]/g, "") })} className={campo} /></div>
+                  <div className="flex items-end justify-end gap-2 sm:col-span-4">
+                    <button type="button" onClick={() => setEditId(null)} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted">Cancelar</button>
+                    <button type="button" onClick={salvarEdicao} className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"><Save className="size-3" /> Salvar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">{d.descricao}</div>
+                    <div className="text-[11px] text-muted-foreground">{d.distancia_km} km{d.uf_destino ? ` · ${d.uf_destino}` : ""}</div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button type="button" onClick={() => abrirEdicao(d)} title="Editar" className="rounded border border-border p-1 hover:bg-muted"><Pencil className="size-3.5" /></button>
+                    <button type="button" onClick={() => remover(d)} title="Excluir" className="rounded border border-border p-1 text-destructive hover:bg-destructive/10"><Trash2 className="size-3.5" /></button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Painel de Relatórios: filtros por período/status + agrupamentos + CSV/impressão.
+// ---------------------------------------------------------------------------
+type AgrupamentoRel = "detalhado" | "competencia" | "paciente" | "profissional" | "destino";
+const AGRUPAMENTOS: { valor: AgrupamentoRel; rotulo: string }[] = [
+  { valor: "detalhado", rotulo: "Detalhado (um por TFD)" },
+  { valor: "competencia", rotulo: "Por competência (mês)" },
+  { valor: "paciente", rotulo: "Por paciente" },
+  { valor: "profissional", rotulo: "Por profissional (faturamento)" },
+  { valor: "destino", rotulo: "Por destino" },
+];
+
+function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia: string; onFechar: () => void }) {
+  const [compDe, setCompDe] = useState(props.competencia);
+  const [compAte, setCompAte] = useState(props.competencia);
+  const [status, setStatus] = useState<"" | TfdStatus>("");
+  const [agrup, setAgrup] = useState<AgrupamentoRel>("detalhado");
+  const [rows, setRows] = useState<TfdRelatorioRow[]>([]);
+  const [carregando, setCarregando] = useState(false);
+
+  const carregar = useCallback(async () => {
+    if (!props.cnes) return;
+    setCarregando(true);
+    setRows(await carregarRelatorioTfd(props.cnes, compDe, compAte));
+    setCarregando(false);
+  }, [props.cnes, compDe, compAte]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const filtradas = useMemo(() => (status ? rows.filter((r) => r.status === status) : rows), [rows, status]);
+
+  // Colunas + linhas conforme o agrupamento.
+  const { colunas, dados, totalRS, totalViagens } = useMemo(() => {
+    const viagensDe = (r: TfdRelatorioRow) => r.qtd_com_pernoite + r.qtd_sem_pernoite;
+    const somaRS = filtradas.reduce((s, r) => s + r.total_rs, 0);
+    const somaViag = filtradas.reduce((s, r) => s + viagensDe(r), 0);
+    if (agrup === "detalhado") {
+      return {
+        colunas: ["Competência", "Paciente", "CNS", "Destino", "Profissional", "Viagens", "Status", "Total"],
+        dados: filtradas.map((r) => [compLabel(r.competencia), r.paciente_nome ?? "—", r.paciente_cns ?? "", r.destino_descricao ?? "—", r.prof_nome ?? "—", String(viagensDe(r)), STATUS_META[r.status].rotulo, brl(r.total_rs)]),
+        totalRS: somaRS, totalViagens: somaViag,
+      };
+    }
+    const chave = (r: TfdRelatorioRow) =>
+      agrup === "competencia" ? compLabel(r.competencia)
+        : agrup === "paciente" ? (r.paciente_nome ?? "—")
+          : agrup === "profissional" ? (r.prof_nome ?? "— (sem profissional)")
+            : (r.destino_descricao ?? "—");
+    const g = new Map<string, { qtd: number; viagens: number; total: number }>();
+    for (const r of filtradas) {
+      const k = chave(r);
+      const cur = g.get(k) ?? { qtd: 0, viagens: 0, total: 0 };
+      cur.qtd++; cur.viagens += viagensDe(r); cur.total += r.total_rs;
+      g.set(k, cur);
+    }
+    const rotuloChave = agrup === "competencia" ? "Competência" : agrup === "paciente" ? "Paciente" : agrup === "profissional" ? "Profissional" : "Destino";
+    return {
+      colunas: [rotuloChave, "TFDs", "Viagens", "Total"],
+      dados: [...g.entries()].sort((a, b) => b[1].total - a[1].total).map(([k, v]) => [k, String(v.qtd), String(v.viagens), brl(v.total)]),
+      totalRS: somaRS, totalViagens: somaViag,
+    };
+  }, [filtradas, agrup]);
+
+  const baixarCsv = () => {
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const linhas = [colunas, ...dados].map((l) => l.map((c) => esc(String(c))).join(";"));
+    const blob = new Blob(["﻿" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `tfd_${agrup}_${compDe}-${compAte}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onMouseDown={props.onFechar}>
+      <div className="mt-6 w-full max-w-4xl rounded-lg border border-border bg-card p-4 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><FileBarChart className="size-4 text-primary" /> Relatórios de TFD — {props.nomeUnidade}</h2>
+          <button type="button" onClick={props.onFechar} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div><div className={label}>Competência de</div><input value={compDe} onChange={(e) => setCompDe(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="AAAAMM" className={campo} /></div>
+          <div><div className={label}>até</div><input value={compAte} onChange={(e) => setCompAte(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="AAAAMM" className={campo} /></div>
+          <div><div className={label}>Status</div>
+            <select value={status} onChange={(e) => setStatus(e.target.value as "" | TfdStatus)} className={campo}>
+              <option value="">Todos</option><option value="agendada">Agendada</option><option value="realizada">Realizada</option><option value="faturada">Faturada</option><option value="cancelada">Cancelada</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2"><div className={label}>Agrupar</div>
+            <select value={agrup} onChange={(e) => setAgrup(e.target.value as AgrupamentoRel)} className={campo}>
+              {AGRUPAMENTOS.map((a) => <option key={a.valor} value={a.valor}>{a.rotulo}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs text-muted-foreground">
+            {carregando ? "Carregando…" : `${filtradas.length} TFD · ${totalViagens} viagens · total `}
+            {!carregando && <span className="font-semibold text-foreground">{brl(totalRS)}</span>}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={baixarCsv} disabled={dados.length === 0} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"><Download className="size-3" /> CSV</button>
+            <button type="button" onClick={() => window.print()} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"><FileBarChart className="size-3" /> Imprimir</button>
+          </div>
+        </div>
+
+        <div className="max-h-[55vh] overflow-auto rounded-md border border-border">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-muted/70 text-[11px] uppercase text-muted-foreground">
+              <tr>{colunas.map((c, i) => <th key={c} className={`px-2 py-1 ${i === 0 ? "text-left" : i === colunas.length - 1 ? "text-right" : "text-left"}`}>{c}</th>)}</tr>
+            </thead>
+            <tbody>
+              {!carregando && dados.length === 0 && <tr><td colSpan={colunas.length} className="px-2 py-6 text-center text-muted-foreground">Sem dados no período/filtro.</td></tr>}
+              {dados.map((linha, i) => (
+                <tr key={i} className="border-t border-border">
+                  {linha.map((c, j) => <td key={j} className={`px-2 py-1 ${j === linha.length - 1 ? "text-right font-medium" : ""}`}>{c}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

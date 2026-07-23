@@ -68,7 +68,7 @@ export async function buscarPacientes(organizacaoId: string, termo: string, apen
   const q = termo.trim();
   if (!supabase || !organizacaoId || q.length < 3) return [];
   try {
-    let req = supabase.from("pacientes").select(COLS).eq("organizacao_id", organizacaoId).limit(12);
+    let req = supabase.from("pacientes").select(COLS).eq("organizacao_id", organizacaoId).is("excluido_em", null).limit(12);
     if (apenasTfd) req = req.eq("tfd", true);
     if (/^\d+$/.test(q)) {
       req = req.or(`cns.like.${q}%,cpf.like.${q}%`);
@@ -106,7 +106,7 @@ export async function acharPacientePorDocumento(
   const p = soDigitos(cpf);
   if (!c && !p) return null;
   try {
-    let req = supabase.from("pacientes").select(COLS).eq("organizacao_id", organizacaoId).limit(1);
+    let req = supabase.from("pacientes").select(COLS).eq("organizacao_id", organizacaoId).is("excluido_em", null).limit(1);
     if (c) req = req.eq("cns", c);
     else req = req.eq("cpf", p);
     const { data, error } = await req.maybeSingle();
@@ -167,6 +167,18 @@ export async function salvarPaciente(input: PacienteInput): Promise<Paciente | n
     return error || !data ? null : (data as Paciente);
   } catch {
     return null;
+  }
+}
+
+// Exclui (soft-delete) um paciente com motivo OBRIGATÓRIO, registrado em log de auditoria.
+// Retorna true se excluiu; false se motivo vazio / sem permissão / não encontrado.
+export async function excluirPaciente(id: string, motivo: string): Promise<boolean> {
+  if (!supabase || !id || !motivo.trim()) return false;
+  try {
+    const { data, error } = await supabase.rpc("excluir_paciente", { _id: id, _motivo: motivo.trim() });
+    return !error && data === true;
+  } catch {
+    return false;
   }
 }
 

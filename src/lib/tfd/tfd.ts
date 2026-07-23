@@ -88,6 +88,27 @@ export async function salvarDestino(input: DestinoInput): Promise<TfdDestino | n
   }
 }
 
+// Atualiza um destino existente (por id).
+export async function atualizarDestino(id: string, campos: Partial<Omit<TfdDestino, "id" | "organizacao_id">>): Promise<boolean> {
+  if (!supabase || !id) return false;
+  const row: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
+  if (campos.descricao !== undefined) row.descricao = campos.descricao.trim();
+  if (campos.municipio_destino !== undefined) row.municipio_destino = campos.municipio_destino?.trim() || null;
+  if (campos.uf_destino !== undefined) row.uf_destino = campos.uf_destino?.trim().toUpperCase() || null;
+  if (campos.estabelecimento_destino !== undefined) row.estabelecimento_destino = campos.estabelecimento_destino?.trim() || null;
+  if (campos.distancia_km !== undefined) row.distancia_km = Math.max(0, campos.distancia_km || 0);
+  if (campos.ativo !== undefined) row.ativo = campos.ativo;
+  const { error } = await supabase.from("tfd_destinos").update(row).eq("id", id);
+  return !error;
+}
+
+// Exclui um destino (por id). A RLS exige gerir_tfd na org.
+export async function excluirDestino(id: string): Promise<boolean> {
+  if (!supabase || !id) return false;
+  const { error } = await supabase.from("tfd_destinos").delete().eq("id", id);
+  return !error;
+}
+
 // ---------------------------------------------------------------------------
 // Valores unitários (por org) com vigência: o valor de uma competência X é a linha
 // com competencia <= X mais recente (mesmo modelo do FPO). Devolve mapa procedimento->valor.
@@ -245,6 +266,68 @@ export async function listarTfdsDoPaciente(pacienteId: string): Promise<TfdHisto
   }
 }
 
+// Linha detalhada para relatórios (um TFD com tudo que interessa a filtros/agrupamentos).
+export interface TfdRelatorioRow {
+  id: string;
+  competencia: string;
+  status: TfdStatus;
+  distancia_km: number;
+  qtd_com_pernoite: number;
+  qtd_sem_pernoite: number;
+  data_atendimento: string | null;
+  criado_em: string | null;
+  paciente_id: string;
+  paciente_nome: string | null;
+  paciente_cns: string | null;
+  acompanhante_nome: string | null;
+  destino_descricao: string | null;
+  prof_cns: string | null;
+  prof_nome: string | null;
+  ficha_id: string | null;
+  total_rs: number;
+}
+
+// Carrega os TFDs de um CNES num intervalo de competências (AAAAMM), para relatórios.
+export async function carregarRelatorioTfd(cnes: string, compDe: string, compAte: string): Promise<TfdRelatorioRow[]> {
+  if (!supabase || !cnes) return [];
+  try {
+    let q = supabase.from("tfd")
+      .select("id, competencia, status, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, data_atendimento, criado_em, paciente_id, prof_cns, prof_nome, ficha_id, paciente:pacientes!tfd_paciente_id_fkey(nome, cns), acompanhante:pacientes!tfd_acompanhante_id_fkey(nome), tfd_destinos(descricao), tfd_linhas(quantidade, valor_unitario)")
+      .eq("cnes", cnes);
+    if (compDe) q = q.gte("competencia", compDe);
+    if (compAte) q = q.lte("competencia", compAte);
+    const { data, error } = await q.order("competencia", { ascending: false }).limit(2000);
+    if (error || !data) return [];
+    return (data as unknown as Array<Record<string, unknown>>).map((r) => {
+      const pac = (Array.isArray(r.paciente) ? r.paciente[0] : r.paciente) as { nome?: string; cns?: string } | null;
+      const ac = (Array.isArray(r.acompanhante) ? r.acompanhante[0] : r.acompanhante) as { nome?: string } | null;
+      const dest = (Array.isArray(r.tfd_destinos) ? r.tfd_destinos[0] : r.tfd_destinos) as { descricao?: string } | null;
+      const linhas = (Array.isArray(r.tfd_linhas) ? r.tfd_linhas : []) as { quantidade: number; valor_unitario: number }[];
+      return {
+        id: r.id as string,
+        competencia: r.competencia as string,
+        status: r.status as TfdStatus,
+        distancia_km: Number(r.distancia_km) || 0,
+        qtd_com_pernoite: Number(r.qtd_com_pernoite) || 0,
+        qtd_sem_pernoite: Number(r.qtd_sem_pernoite) || 0,
+        data_atendimento: (r.data_atendimento as string) ?? null,
+        criado_em: (r.criado_em as string) ?? null,
+        paciente_id: r.paciente_id as string,
+        paciente_nome: pac?.nome ?? null,
+        paciente_cns: pac?.cns ?? null,
+        acompanhante_nome: ac?.nome ?? null,
+        destino_descricao: dest?.descricao ?? null,
+        prof_cns: (r.prof_cns as string) ?? null,
+        prof_nome: (r.prof_nome as string) ?? null,
+        ficha_id: (r.ficha_id as string) ?? null,
+        total_rs: linhas.reduce((s, l) => s + (l.quantidade || 0) * Number(l.valor_unitario || 0), 0),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 export type TfdInput = Partial<Omit<TfdRegistro, "id">> & {
   organizacao_id: string;
   cnes: string;
@@ -312,6 +395,30 @@ export async function atualizarStatusTfd(id: string, status: TfdStatus): Promise
   if (!supabase) return false;
   const { error } = await supabase.from("tfd").update({ status, atualizado_em: new Date().toISOString() }).eq("id", id);
   return !error;
+}
+
+// Exclui um registro de TFD (por id). A RLS exige gerir_tfd no CNES.
+export async function excluirTfd(id: string): Promise<boolean> {
+  if (!supabase || !id) return false;
+  const { error } = await supabase.from("tfd").delete().eq("id", id);
+  return !error;
+}
+
+// Carrega um TFD completo (+ paciente e acompanhante já resolvidos) para edição.
+export interface TfdEdicao { tfd: TfdRegistro; paciente: Paciente | null; acompanhante: Paciente | null; }
+export async function carregarTfd(id: string): Promise<TfdEdicao | null> {
+  if (!supabase || !id) return null;
+  try {
+    const { data, error } = await supabase.from("tfd").select(TFD_COLS).eq("id", id).maybeSingle();
+    if (error || !data) return null;
+    const tfd = data as unknown as TfdRegistro;
+    const ids = [tfd.paciente_id, tfd.acompanhante_id].filter(Boolean) as string[];
+    const { data: pacs } = await supabase.from("pacientes").select("*").in("id", ids);
+    const map = new Map<string, Paciente>((pacs ?? []).map((p) => [(p as Paciente).id, p as Paciente]));
+    return { tfd, paciente: map.get(tfd.paciente_id) ?? null, acompanhante: tfd.acompanhante_id ? map.get(tfd.acompanhante_id) ?? null : null };
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
