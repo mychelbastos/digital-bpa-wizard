@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
 import type { Paciente } from "@/lib/pacientes";
-import { gerarProcedimentosTfd, COD_TFD, type EntradaTfd } from "./gerar-bpa-tfd";
+import { gerarProcedimentosTfd, gerarProcedimentosTfdPorData, COD_TFD, type EntradaTfd, type Viagem } from "./gerar-bpa-tfd";
 
 // Persistência do módulo TFD: destinos (catálogo por org), valores unitários (vigência à la
 // FPO), registros de TFD e a geração da ficha BPA-I a partir de um registro. Null-safe.
@@ -140,7 +140,8 @@ export interface TfdRegistro {
   competencia: string;
   qtd_com_pernoite: number;
   qtd_sem_pernoite: number;
-  data_atendimento: string | null; // data de referência das sequências BPA-I (YYYY-MM-DD)
+  viagens: Viagem[];               // lista de viagens (cada uma com data + pernoite)
+  data_atendimento: string | null; // 1ª data (legado/exibição); a geração usa `viagens`
   tem_acompanhante: boolean;
   acompanhante_id: string | null;  // pessoa cadastrada (mesmos campos do paciente/BPA-I)
   prof_cns: string | null;
@@ -170,7 +171,7 @@ export interface TfdRegistroView extends TfdRegistro {
 }
 
 const TFD_COLS =
-  "id, organizacao_id, cnes, paciente_id, destino_id, distancia_km, competencia, qtd_com_pernoite, qtd_sem_pernoite, data_atendimento, tem_acompanhante, acompanhante_id, prof_cns, prof_nome, prof_cbo, status, ficha_id, observacoes";
+  "id, organizacao_id, cnes, paciente_id, destino_id, distancia_km, competencia, qtd_com_pernoite, qtd_sem_pernoite, viagens, data_atendimento, tem_acompanhante, acompanhante_id, prof_cns, prof_nome, prof_cbo, status, ficha_id, observacoes";
 
 export async function listarTfd(cnes: string, competencia: string): Promise<TfdRegistroView[]> {
   if (!supabase || !cnes || !competencia) return [];
@@ -191,6 +192,51 @@ export async function listarTfd(cnes: string, competencia: string): Promise<TfdR
         acompanhante_nome: ac?.nome ?? null,
         acompanhante_cns: ac?.cns ?? null,
         destino_descricao: dest?.descricao ?? null,
+        total_rs: linhas.reduce((s, l) => s + (l.quantidade || 0) * Number(l.valor_unitario || 0), 0),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+// Histórico de TFDs de um paciente (como paciente OU como acompanhante), com destino e total.
+export interface TfdHistoricoItem {
+  id: string;
+  competencia: string;
+  cnes: string;
+  status: TfdStatus;
+  distancia_km: number;
+  qtd_com_pernoite: number;
+  qtd_sem_pernoite: number;
+  destino_descricao: string | null;
+  ficha_id: string | null;
+  papel: "paciente" | "acompanhante";
+  total_rs: number;
+}
+
+export async function listarTfdsDoPaciente(pacienteId: string): Promise<TfdHistoricoItem[]> {
+  if (!supabase || !pacienteId) return [];
+  try {
+    const { data, error } = await supabase.from("tfd")
+      .select("id, competencia, cnes, status, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, paciente_id, acompanhante_id, ficha_id, tfd_destinos(descricao), tfd_linhas(quantidade, valor_unitario)")
+      .or(`paciente_id.eq.${pacienteId},acompanhante_id.eq.${pacienteId}`)
+      .order("competencia", { ascending: false }).limit(100);
+    if (error || !data) return [];
+    return (data as unknown as Array<Record<string, unknown>>).map((r) => {
+      const dest = (Array.isArray(r.tfd_destinos) ? r.tfd_destinos[0] : r.tfd_destinos) as { descricao?: string } | null;
+      const linhas = (Array.isArray(r.tfd_linhas) ? r.tfd_linhas : []) as { quantidade: number; valor_unitario: number }[];
+      return {
+        id: r.id as string,
+        competencia: r.competencia as string,
+        cnes: r.cnes as string,
+        status: r.status as TfdStatus,
+        distancia_km: Number(r.distancia_km) || 0,
+        qtd_com_pernoite: Number(r.qtd_com_pernoite) || 0,
+        qtd_sem_pernoite: Number(r.qtd_sem_pernoite) || 0,
+        destino_descricao: dest?.descricao ?? null,
+        ficha_id: (r.ficha_id as string) ?? null,
+        papel: r.paciente_id === pacienteId ? "paciente" : "acompanhante",
         total_rs: linhas.reduce((s, l) => s + (l.quantidade || 0) * Number(l.valor_unitario || 0), 0),
       };
     });
@@ -220,6 +266,11 @@ async function regravarLinhas(tfdId: string, linhas: LinhaValor[]): Promise<void
 // passadas). Retorna o id, ou null em falha.
 export async function salvarTfd(id: string | null, input: TfdInput, linhas?: LinhaValor[]): Promise<string | null> {
   if (!supabase) return null;
+  // Viagens (com data por viagem). As contagens e a 1ª data são derivadas delas.
+  const viagens: Viagem[] = (input.viagens ?? []).filter((v) => v && v.data);
+  const comP = viagens.length ? viagens.filter((v) => v.pernoite === "com").length : Math.max(0, Math.floor(input.qtd_com_pernoite || 0));
+  const semP = viagens.length ? viagens.filter((v) => v.pernoite === "sem").length : Math.max(0, Math.floor(input.qtd_sem_pernoite || 0));
+  const primeiraData = viagens.length ? [...viagens.map((v) => v.data)].sort()[0] : (input.data_atendimento || null);
   const row = {
     organizacao_id: input.organizacao_id,
     cnes: input.cnes,
@@ -227,9 +278,10 @@ export async function salvarTfd(id: string | null, input: TfdInput, linhas?: Lin
     destino_id: input.destino_id ?? null,
     distancia_km: Math.max(0, input.distancia_km || 0),
     competencia: input.competencia,
-    qtd_com_pernoite: Math.max(0, Math.floor(input.qtd_com_pernoite || 0)),
-    qtd_sem_pernoite: Math.max(0, Math.floor(input.qtd_sem_pernoite || 0)),
-    data_atendimento: input.data_atendimento || null,
+    qtd_com_pernoite: comP,
+    qtd_sem_pernoite: semP,
+    viagens,
+    data_atendimento: primeiraData,
     tem_acompanhante: Boolean(input.tem_acompanhante),
     acompanhante_id: input.acompanhante_id ?? null,
     prof_cns: (input.prof_cns || "").replace(/\D/g, "") || null,
@@ -298,26 +350,35 @@ function preencherSeqPessoa(s: SeqData, pessoa: Paciente, dataAtend: string | nu
 }
 
 // Dados relevantes de um TFD para gerar as sequências.
-type TfdParaSeq = Pick<TfdRegistro, "distancia_km" | "qtd_com_pernoite" | "qtd_sem_pernoite" | "tem_acompanhante" | "data_atendimento">;
+type TfdParaSeq = Pick<TfdRegistro, "distancia_km" | "qtd_com_pernoite" | "qtd_sem_pernoite" | "tem_acompanhante" | "data_atendimento" | "viagens">;
 
 // Gera as sequências BPA-I de UM TFD (paciente + acompanhante), cada uma com demografia
-// COMPLETA e caráter de atendimento ELETIVO ("01", sempre, para TFD).
+// COMPLETA e caráter de atendimento ELETIVO ("01", sempre, para TFD). Quando há `viagens`
+// com datas próprias, gera seqs POR DATA; senão cai no agregado com a data única.
 export function montarSeqsTfd(tfd: TfdParaSeq, paciente: Paciente, acompanhante: Paciente | null): SeqData[] {
+  const criarSeq = (l: { codigo: string; quantidade: number; para: "paciente" | "acompanhante" }, dataAtend: string | null): SeqData => {
+    const s = emptySeq();
+    s.codProc = cells(l.codigo, 10);
+    s.qtde = cells(String(l.quantidade), 3);
+    s.carater = cells("01", 2); // TFD é sempre eletivo
+    const pessoa = l.para === "acompanhante" ? acompanhante : paciente;
+    if (pessoa) preencherSeqPessoa(s, pessoa, dataAtend);
+    return s;
+  };
+
+  const viagens = tfd.viagens ?? [];
+  if (viagens.length > 0) {
+    const grupos = gerarProcedimentosTfdPorData(viagens, tfd.distancia_km, tfd.tem_acompanhante);
+    return grupos.flatMap((g) => g.linhas.map((l) => criarSeq(l, g.data)));
+  }
+  // Legado / sem lista de viagens: agregado com uma data única.
   const linhas = gerarProcedimentosTfd({
     distanciaKm: tfd.distancia_km,
     qtdComPernoite: tfd.qtd_com_pernoite,
     qtdSemPernoite: tfd.qtd_sem_pernoite,
     temAcompanhante: tfd.tem_acompanhante,
   });
-  return linhas.map((l) => {
-    const s = emptySeq();
-    s.codProc = cells(l.codigo, 10);
-    s.qtde = cells(String(l.quantidade), 3);
-    s.carater = cells("01", 2); // TFD é sempre eletivo
-    const pessoa = l.para === "acompanhante" ? acompanhante : paciente;
-    if (pessoa) preencherSeqPessoa(s, pessoa, tfd.data_atendimento);
-    return s;
-  });
+  return linhas.map((l) => criarSeq(l, tfd.data_atendimento));
 }
 
 // Header do profissional + seqs -> objeto `dados` no shape do BPA-I v2. O gerador do .txt
@@ -376,7 +437,7 @@ export async function gerarFaturamentoMes(cnes: string, competencia: string, nom
   if (!supabase) return null;
   try {
     const { data: tfds, error } = await supabase.from("tfd")
-      .select("id, cnes, competencia, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, data_atendimento, tem_acompanhante, paciente_id, acompanhante_id, prof_cns, prof_nome, prof_cbo")
+      .select("id, cnes, competencia, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, viagens, data_atendimento, tem_acompanhante, paciente_id, acompanhante_id, prof_cns, prof_nome, prof_cbo")
       .eq("cnes", cnes).eq("competencia", competencia).neq("status", "cancelada");
     if (error) return null;
     if (!tfds || tfds.length === 0) return { fichas: 0, tfds: 0, seqs: 0, semProf: 0 };

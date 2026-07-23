@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Ambulance, Plus, Search, X, Loader2, Save, UserPlus, MapPin, Receipt, ChevronDown, CheckCircle2,
+  Ambulance, Plus, Search, X, Loader2, Save, UserPlus, MapPin, Receipt, ChevronDown, CheckCircle2, Users, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
@@ -14,8 +14,8 @@ import {
 } from "@/lib/pacientes";
 import {
   orgDoCnes, listarDestinos, salvarDestino, valoresVigentes, definirValorVigente,
-  listarTfd, salvarTfd, atualizarStatusTfd, gerarFaturamentoMes, previaTfd, CNES_TFD,
-  type TfdDestino, type TfdRegistroView, type TfdStatus,
+  listarTfd, salvarTfd, atualizarStatusTfd, gerarFaturamentoMes, previaTfd, listarTfdsDoPaciente, CNES_TFD,
+  type TfdDestino, type TfdRegistroView, type TfdStatus, type TfdHistoricoItem,
 } from "@/lib/tfd/tfd";
 import { COD_TFD } from "@/lib/tfd/gerar-bpa-tfd";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
@@ -126,6 +126,7 @@ function TfdPage() {
   const [loading, setLoading] = useState(false);
   const [formAberto, setFormAberto] = useState(false);
   const [valoresAberto, setValoresAberto] = useState(false);
+  const [pacientesAberto, setPacientesAberto] = useState(false);
   const [carregouUnidades, setCarregouUnidades] = useState(false);
 
   const podeGerir = cnes ? geriveis.has(cnes) : false;
@@ -223,7 +224,11 @@ function TfdPage() {
           </h1>
         </div>
         {podeGerir && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setPacientesAberto(true)}
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+              <Users className="size-4" /> Pacientes
+            </button>
             <button type="button" onClick={faturarMes} disabled={faturando || registros.length === 0}
               className="flex items-center gap-2 rounded-md border border-primary/40 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
               title="Consolida os TFDs do mês em fichas BPA-I (por profissional)">
@@ -236,6 +241,10 @@ function TfdPage() {
           </div>
         )}
       </div>
+
+      {pacientesAberto && orgId && (
+        <PacientesPanel orgId={orgId} onFechar={() => setPacientesAberto(false)} />
+      )}
 
       {/* Filtros */}
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-3">
@@ -367,9 +376,8 @@ function FormTfd(props: {
   const [paciente, setPaciente] = useState<Paciente | null>(null);
   const [destinoId, setDestinoId] = useState("");
   const [distanciaKm, setDistanciaKm] = useState("0");
-  const [comP, setComP] = useState("0");
-  const [semP, setSemP] = useState("0");
-  const [dataAtend, setDataAtend] = useState("");
+  // Lista de viagens: cada uma com data + pernoite. Começa com uma linha vazia.
+  const [viagens, setViagens] = useState<{ data: string; pernoite: "com" | "sem" }[]>([{ data: "", pernoite: "sem" }]);
   const [temAcomp, setTemAcomp] = useState(false);
   const [acompanhante, setAcompanhante] = useState<Paciente | null>(null);
   const [profCns, setProfCns] = useState("");
@@ -397,12 +405,19 @@ function FormTfd(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paciente?.id]);
 
+  const viagensValidas = viagens.filter((v) => v.data);
+  const comP = viagensValidas.filter((v) => v.pernoite === "com").length;
+  const semP = viagensValidas.filter((v) => v.pernoite === "sem").length;
   const entrada = {
     distanciaKm: Number(distanciaKm) || 0,
-    qtdComPernoite: Number(comP) || 0,
-    qtdSemPernoite: Number(semP) || 0,
+    qtdComPernoite: comP,
+    qtdSemPernoite: semP,
     temAcompanhante: temAcomp,
   };
+  const setViagem = (i: number, patch: Partial<{ data: string; pernoite: "com" | "sem" }>) =>
+    setViagens((vs) => vs.map((v, k) => (k === i ? { ...v, ...patch } : v)));
+  const addViagem = () => setViagens((vs) => [...vs, { data: "", pernoite: "sem" }]);
+  const removeViagem = (i: number) => setViagens((vs) => (vs.length > 1 ? vs.filter((_, k) => k !== i) : vs));
   const valorDe = (codigo: string) =>
     valorOverride[codigo] !== undefined ? Number(valorOverride[codigo].replace(",", ".")) || 0 : (valores[codigo] ?? 0);
   const linhas = previaTfd(entrada);
@@ -411,20 +426,19 @@ function FormTfd(props: {
 
   const salvar = async () => {
     if (!paciente) { toast.error("Selecione ou cadastre o paciente."); return; }
-    if (!dataAtend) { toast.error("Informe a data de atendimento (vira a data das sequências no BPA-I)."); return; }
+    if (viagensValidas.length === 0) { toast.error("Adicione ao menos uma viagem com data."); return; }
     if (temAcomp && !acompanhante) { toast.error("Cadastre/selecione o acompanhante (ou desmarque acompanhante)."); return; }
     setSalvando(true);
     const id = await salvarTfd(null, {
       organizacao_id: orgId, cnes, competencia, paciente_id: paciente.id,
       destino_id: destinoId || null, distancia_km: Number(distanciaKm) || 0,
-      qtd_com_pernoite: Number(comP) || 0, qtd_sem_pernoite: Number(semP) || 0,
-      data_atendimento: dataAtend, tem_acompanhante: temAcomp,
+      viagens: viagensValidas, tem_acompanhante: temAcomp,
       acompanhante_id: temAcomp ? acompanhante?.id ?? null : null,
       prof_cns: profCns, prof_nome: profNome, prof_cbo: profCbo, observacoes: obs, status: "agendada",
     }, linhasComValor);
     setSalvando(false);
     if (!id) { toast.error("Falha ao salvar o TFD."); return; }
-    toast.success("TFD registrado.");
+    toast.success("TFD salvo.");
     props.onSalvo();
   };
 
@@ -441,17 +455,17 @@ function FormTfd(props: {
       {/* Destino + distância */}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="sm:col-span-2">
-          <div className={label}>Destino (rota)</div>
-          <div className="flex gap-2">
-            <select value={destinoId} onChange={(e) => aoEscolherDestino(e.target.value)} className={campo}>
-              <option value="">— selecione —</option>
-              {props.destinos.map((d) => <option key={d.id} value={d.id}>{d.descricao} · {d.distancia_km} km</option>)}
-            </select>
+          <div className="flex items-center justify-between">
+            <div className={label}>Destino (rota)</div>
             <button type="button" onClick={() => setNovoDestino((v) => !v)}
-              className="shrink-0 rounded-md border border-border px-2 text-sm hover:bg-muted" title="Novo destino">
-              <MapPin className="size-4" />
+              className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              <MapPin className="size-3" /> {novoDestino ? "Fechar" : "Cadastrar novo destino"}
             </button>
           </div>
+          <select value={destinoId} onChange={(e) => aoEscolherDestino(e.target.value)} className={campo}>
+            <option value="">— selecione —</option>
+            {props.destinos.map((d) => <option key={d.id} value={d.id}>{d.descricao} · {d.distancia_km} km</option>)}
+          </select>
         </div>
         <div>
           <div className={label}>Distância (km, só ida)</div>
@@ -463,25 +477,35 @@ function FormTfd(props: {
         <NovoDestino orgId={orgId} onCriado={(d) => { props.onDestinosMudou(); setNovoDestino(false); aoEscolherDestino(d.id); }} onCancela={() => setNovoDestino(false)} />
       )}
 
-      {/* Viagens + data de atendimento */}
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div>
-          <div className={label}>Viagens c/ pernoite</div>
-          <input type="number" min={0} value={comP} onChange={(e) => setComP(e.target.value)} className={campo} />
+      {/* Viagens: uma linha por viagem (data + pernoite), com botão de adicionar */}
+      <div className="mt-3">
+        <div className="mb-1 flex items-center justify-between">
+          <div className={label}>Viagens ({viagensValidas.length}) — {comP} c/ pernoite, {semP} s/ pernoite</div>
+          <button type="button" onClick={addViagem} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+            <Plus className="size-3" /> Adicionar viagem
+          </button>
         </div>
-        <div>
-          <div className={label}>Viagens s/ pernoite</div>
-          <input type="number" min={0} value={semP} onChange={(e) => setSemP(e.target.value)} className={campo} />
+        <div className="space-y-2">
+          {viagens.map((v, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input type="date" value={v.data} onChange={(e) => setViagem(i, { data: e.target.value })} className={`${campo} max-w-[180px]`} />
+              <select value={v.pernoite} onChange={(e) => setViagem(i, { pernoite: e.target.value as "com" | "sem" })} className={`${campo} max-w-[190px]`}>
+                <option value="sem">Sem pernoite</option>
+                <option value="com">Com pernoite</option>
+              </select>
+              <button type="button" onClick={() => removeViagem(i)} disabled={viagens.length <= 1}
+                className="shrink-0 rounded-md border border-border p-2 text-muted-foreground hover:bg-muted disabled:opacity-40" title="Remover viagem">
+                <X className="size-4" />
+              </button>
+            </div>
+          ))}
         </div>
-        <div>
-          <div className={label}>Data de atendimento</div>
-          <input type="date" value={dataAtend} onChange={(e) => setDataAtend(e.target.value)} className={campo} />
-        </div>
-        <label className="flex items-end gap-2 pb-2 text-sm">
-          <input type="checkbox" checked={temAcomp} onChange={(e) => setTemAcomp(e.target.checked)} className="size-4" />
-          Tem acompanhante
-        </label>
       </div>
+
+      <label className="mt-3 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={temAcomp} onChange={(e) => setTemAcomp(e.target.checked)} className="size-4" />
+        Tem acompanhante
+      </label>
 
       {temAcomp && (
         <div className="mt-2">
@@ -544,7 +568,7 @@ function FormTfd(props: {
         <button type="button" onClick={props.onFecha} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Cancelar</button>
         <button type="button" onClick={salvar} disabled={salvando || !paciente}
           className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-          {salvando ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Registrar
+          {salvando ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Salvar TFD
         </button>
       </div>
     </div>
@@ -880,6 +904,143 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
           className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
           {salvando ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Salvar paciente
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Painel de Pacientes do TFD: buscar, ver/editar cadastro e histórico de viagens/fichas.
+// ---------------------------------------------------------------------------
+function PacientesPanel(props: { orgId: string; onFechar: () => void }) {
+  const [termo, setTermo] = useState("");
+  const [sugestoes, setSugestoes] = useState<Paciente[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [sel, setSel] = useState<Paciente | null>(null);
+  const [editando, setEditando] = useState(false);
+  const [historico, setHistorico] = useState<TfdHistoricoItem[]>([]);
+  const [carregandoHist, setCarregandoHist] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (sel) return;
+    if (timer.current) clearTimeout(timer.current);
+    const q = termo.trim();
+    if (q.length < 3) { setSugestoes([]); return; }
+    setBuscando(true);
+    timer.current = setTimeout(async () => { setSugestoes(await buscarPacientes(props.orgId, q, true)); setBuscando(false); }, 250);
+  }, [termo, props.orgId, sel]);
+
+  const abrir = async (p: Paciente) => {
+    registrarLeituraPaciente(p.id);
+    setSel(p); setEditando(false); setSugestoes([]);
+    setCarregandoHist(true);
+    setHistorico(await listarTfdsDoPaciente(p.id));
+    setCarregandoHist(false);
+  };
+  const recarregarHist = async (p: Paciente) => { setHistorico(await listarTfdsDoPaciente(p.id)); };
+
+  const info = (rot: string, val: string | null | undefined) => (
+    <div><div className="text-[11px] text-muted-foreground">{rot}</div><div className="text-sm">{val || "—"}</div></div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onMouseDown={props.onFechar}>
+      <div className="mt-6 w-full max-w-3xl rounded-lg border border-border bg-card p-4 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><Users className="size-4 text-primary" /> Pacientes do TFD</h2>
+          <button type="button" onClick={props.onFechar} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+        </div>
+
+        {!sel && (
+          <div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input value={termo} onChange={(e) => setTermo(e.target.value)} autoFocus placeholder="Buscar por nome, CNS ou CPF…" className={`${campo} pl-9`} />
+              {buscando && <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
+            </div>
+            <div className="mt-2 max-h-80 overflow-auto rounded-md border border-border">
+              {sugestoes.length === 0 && <div className="px-3 py-6 text-center text-sm text-muted-foreground">Digite 3+ letras para buscar.</div>}
+              {sugestoes.map((p) => {
+                const incompleto = pacienteFaltando(p).length > 0;
+                return (
+                  <button key={p.id} type="button" onClick={() => abrir(p)} className="flex w-full items-center justify-between border-b border-border/50 px-3 py-2 text-left text-sm last:border-0 hover:bg-muted">
+                    <span className="flex flex-col items-start">
+                      <span className="font-medium">{p.nome}</span>
+                      <span className="text-[11px] text-muted-foreground">{p.cns ? `CNS ${p.cns}` : p.cpf ? `CPF ${p.cpf}` : "sem documento"}</span>
+                    </span>
+                    {incompleto && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">incompleto</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {sel && !editando && (
+          <div>
+            <button type="button" onClick={() => setSel(null)} className="mb-2 text-xs text-muted-foreground hover:text-foreground">← voltar à busca</button>
+            <div className="rounded-md border border-border p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-base font-semibold text-foreground">{sel.nome}</div>
+                <button type="button" onClick={() => setEditando(true)} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                  <Pencil className="size-3" /> Editar cadastro
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {info("CNS", sel.cns)}
+                {info("CPF", sel.cpf)}
+                {info("Nascimento", sel.nascimento ? sel.nascimento.split("-").reverse().join("/") : null)}
+                {info("Sexo", sel.sexo === "M" ? "Masculino" : sel.sexo === "F" ? "Feminino" : null)}
+                {info("Telefone", sel.telefone)}
+                {info("Município", sel.municipio_nome ? `${sel.municipio_nome}${sel.uf ? "/" + sel.uf : ""}` : null)}
+                {info("Endereço", [sel.logradouro, sel.numero, sel.bairro].filter(Boolean).join(", "))}
+                {info("CEP", sel.cep)}
+              </div>
+              {pacienteFaltando(sel).length > 0 && (
+                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800">
+                  Cadastro incompleto — falta: {pacienteFaltando(sel).map((f) => ROTULO_CAMPO[f] ?? f).join(", ")}.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 text-xs font-semibold uppercase text-muted-foreground">Histórico de TFD</div>
+            <div className="mt-1 overflow-hidden rounded-md border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1 text-left">Competência</th>
+                    <th className="px-2 py-1 text-left">Papel</th>
+                    <th className="px-2 py-1 text-left">Destino</th>
+                    <th className="px-2 py-1 text-right">Viagens</th>
+                    <th className="px-2 py-1 text-center">Status</th>
+                    <th className="px-2 py-1 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {carregandoHist && <tr><td colSpan={6} className="px-2 py-4 text-center text-muted-foreground"><Loader2 className="mx-auto size-4 animate-spin" /></td></tr>}
+                  {!carregandoHist && historico.length === 0 && <tr><td colSpan={6} className="px-2 py-4 text-center text-muted-foreground">Nenhum TFD registrado para este paciente.</td></tr>}
+                  {!carregandoHist && historico.map((h) => (
+                    <tr key={h.id + h.papel} className="border-t border-border">
+                      <td className="px-2 py-1">{compLabel(h.competencia)}</td>
+                      <td className="px-2 py-1">{h.papel === "paciente" ? "Paciente" : "Acompanhante"}</td>
+                      <td className="px-2 py-1 text-muted-foreground">{h.destino_descricao || "—"}</td>
+                      <td className="px-2 py-1 text-right">{h.qtd_com_pernoite + h.qtd_sem_pernoite} <span className="text-[11px] text-muted-foreground">({h.qtd_com_pernoite}c/{h.qtd_sem_pernoite}s)</span></td>
+                      <td className="px-2 py-1 text-center"><span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_META[h.status].cor}`}>{STATUS_META[h.status].rotulo}</span></td>
+                      <td className="px-2 py-1 text-right font-medium">{brl(h.total_rs)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {sel && editando && (
+          <PacienteForm orgId={props.orgId} paciente={sel}
+            onSalvo={(p) => { setSel(p); setEditando(false); recarregarHist(p); }}
+            onCancela={() => setEditando(false)} />
+        )}
       </div>
     </div>
   );

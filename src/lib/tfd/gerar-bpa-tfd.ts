@@ -77,3 +77,37 @@ export function gerarProcedimentosTfd(e: EntradaTfd): LinhaBpaTfd[] {
 
   return linhas;
 }
+
+// Uma viagem individual: data de atendimento (YYYY-MM-DD) + se teve pernoite.
+export interface Viagem {
+  data: string;
+  pernoite: "com" | "sem";
+}
+
+export interface GrupoDataTfd {
+  data: string;             // data de atendimento das seqs deste grupo
+  linhas: LinhaBpaTfd[];
+}
+
+// Gera os procedimentos AGRUPADOS por data de atendimento — cada data vira um conjunto de
+// seqs BPA-I com aquela data. Viagens na MESMA data somam quantidades; datas diferentes viram
+// grupos separados. É a base da geração quando há várias viagens com datas distintas.
+export function gerarProcedimentosTfdPorData(
+  viagens: Viagem[], distanciaKm: number, temAcompanhante: boolean,
+): GrupoDataTfd[] {
+  const porData = new Map<string, { com: number; sem: number }>();
+  for (const v of viagens) {
+    if (!v?.data) continue;
+    const g = porData.get(v.data) ?? { com: 0, sem: 0 };
+    if (v.pernoite === "com") g.com++; else g.sem++;
+    porData.set(v.data, g);
+  }
+  const grupos: GrupoDataTfd[] = [];
+  for (const data of [...porData.keys()].sort()) {
+    const { com, sem } = porData.get(data)!;
+    // gerarProcedimentosTfd já aplica (unidade × total de viagens) por grupo.
+    const linhas = gerarProcedimentosTfd({ distanciaKm, qtdComPernoite: com, qtdSemPernoite: sem, temAcompanhante });
+    grupos.push({ data, linhas });
+  }
+  return grupos;
+}

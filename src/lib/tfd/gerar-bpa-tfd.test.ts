@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gerarProcedimentosTfd, unidadesDeslocamentoPorViagem, COD_TFD, type LinhaBpaTfd } from "./gerar-bpa-tfd";
+import { gerarProcedimentosTfd, gerarProcedimentosTfdPorData, unidadesDeslocamentoPorViagem, COD_TFD, type LinhaBpaTfd } from "./gerar-bpa-tfd";
 
 // Atalho: mapa código → quantidade, p/ asserts legíveis.
 const mapa = (linhas: LinhaBpaTfd[]) => Object.fromEntries(linhas.map((l) => [l.codigo, l.quantidade]));
@@ -76,5 +76,36 @@ describe("gerarProcedimentosTfd", () => {
     const m = mapa(linhas);
     expect(m[COD_TFD.DESLOC_PAC]).toBeUndefined();
     expect(m[COD_TFD.ALIM_PERNOITE_PAC]).toBe(2);
+  });
+});
+
+describe("gerarProcedimentosTfdPorData", () => {
+  it("agrupa por data; mesma data soma, datas diferentes viram grupos separados", () => {
+    // 200 km → 8 unidades/viagem. Viagens: 01/06 (com), 01/06 (sem), 05/06 (com).
+    const grupos = gerarProcedimentosTfdPorData(
+      [{ data: "2026-06-01", pernoite: "com" }, { data: "2026-06-01", pernoite: "sem" }, { data: "2026-06-05", pernoite: "com" }],
+      200, false,
+    );
+    expect(grupos.map((g) => g.data)).toEqual(["2026-06-01", "2026-06-05"]); // ordenadas
+    const g1 = mapa(grupos[0].linhas); // 01/06: com=1, sem=1 → 2 viagens
+    expect(g1[COD_TFD.DESLOC_PAC]).toBe(16); // 8 × 2
+    expect(g1[COD_TFD.ALIM_PERNOITE_PAC]).toBe(1);
+    expect(g1[COD_TFD.ALIM_SEM_PERNOITE_PAC]).toBe(1);
+    const g2 = mapa(grupos[1].linhas); // 05/06: com=1
+    expect(g2[COD_TFD.DESLOC_PAC]).toBe(8);
+    expect(g2[COD_TFD.ALIM_PERNOITE_PAC]).toBe(1);
+    expect(g2[COD_TFD.ALIM_SEM_PERNOITE_PAC]).toBeUndefined();
+  });
+
+  it("com acompanhante, cada grupo de data traz as linhas do acompanhante", () => {
+    const grupos = gerarProcedimentosTfdPorData([{ data: "2026-06-01", pernoite: "com" }], 240, true);
+    const m = mapa(grupos[0].linhas);
+    expect(m[COD_TFD.DESLOC_ACOMP]).toBe(10); // 240 → 10/viagem × 1
+    expect(m[COD_TFD.ALIM_PERNOITE_ACOMP]).toBe(1);
+  });
+
+  it("ignora viagens sem data e devolve [] quando não há nenhuma", () => {
+    expect(gerarProcedimentosTfdPorData([{ data: "", pernoite: "com" }], 200, false)).toEqual([]);
+    expect(gerarProcedimentosTfdPorData([], 200, false)).toEqual([]);
   });
 });
