@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Ambulance, Plus, Search, X, Loader2, Save, UserPlus, MapPin, Receipt, ChevronDown, CheckCircle2, Users, Pencil, Trash2, FileBarChart, Download,
+  Ambulance, Plus, Search, X, Loader2, Save, UserPlus, MapPin, Receipt, ChevronDown, Users, Pencil, Trash2, FileBarChart, Download, FileText, Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
@@ -25,6 +25,8 @@ import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/naciona
 import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
+import { validarCns } from "@/lib/bpa-i-v2/validacao";
+import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
 
 export const Route = createFileRoute("/tfd")({
   validateSearch: (s: Record<string, unknown>): { cnes?: string; comp?: string } => ({
@@ -148,6 +150,7 @@ function TfdPage() {
   const search = Route.useSearch();
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
   const [geriveis, setGeriveis] = useState<Set<string>>(new Set());
+  const [reabriveis, setReabriveis] = useState<Set<string>>(new Set());
   const [cnes, setCnes] = useState(search.cnes ?? "");
   const [competencia, setCompetencia] = useState(search.comp ?? competenciaAtual());
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -164,17 +167,19 @@ function TfdPage() {
   const [carregouUnidades, setCarregouUnidades] = useState(false);
 
   const podeGerir = cnes ? geriveis.has(cnes) : false;
+  const podeReabrir = cnes ? reabriveis.has(cnes) : false; // pode alterar TFD já faturado
   const nomeUnidade = cnesOpcoes.find((o) => o.cnes === cnes)?.nome ?? cnes;
   const semAcesso = carregouUnidades && cnesOpcoes.length === 0;
 
   // Só as unidades habilitadas para o TFD em que o usuário tem vínculo + onde pode gerir.
   useEffect(() => {
     (async () => {
-      const [vincs, ger] = await Promise.all([carregarVinculosUsuario(), cnesComPermissao("gerir_tfd")]);
+      const [vincs, ger, reab] = await Promise.all([carregarVinculosUsuario(), cnesComPermissao("gerir_tfd"), cnesComPermissao("reabrir_producao")]);
       const unicos = [...new Set(vincs.map((v) => v.cnes).filter(Boolean))].filter((c) => CNES_TFD.includes(c));
       const nomes = await Promise.all(unicos.map(async (c) => ({ cnes: c, nome: (await buscarEstabelecimento(c)) || c })));
       setCnesOpcoes(nomes);
       setGeriveis(new Set(ger));
+      setReabriveis(new Set(reab));
       // Padrão: Secretaria Municipal (2510375) quando o usuário tem vínculo nela.
       const padrao = unicos.includes("2510375") ? "2510375" : unicos[0];
       if (padrao) setCnes((atual) => (atual && unicos.includes(atual) ? atual : padrao));
@@ -227,14 +232,20 @@ function TfdPage() {
     carregar();
   };
 
+  // TFD faturado só pode ser alterado por quem reabre produção (trava do fechamento).
+  const travado = (r: TfdRegistroView) => r.status === "faturada" && !podeReabrir;
+  const avisoTravado = () => toast.error("TFD faturado. Só quem pode reabrir a produção do mês altera este TFD.");
+
   const mudarStatus = async (r: TfdRegistroView, status: TfdStatus) => {
     if (!podeGerir) return;
+    if (travado(r)) { avisoTravado(); return; }
     if (await atualizarStatusTfd(r.id, status)) { toast.success(`Status: ${STATUS_META[status].rotulo}.`); carregar(); }
     else toast.error("Não foi possível mudar o status.");
   };
 
   const editarTfd = async (r: TfdRegistroView) => {
     if (!podeGerir) return;
+    if (travado(r)) { avisoTravado(); return; }
     const ed = await carregarTfd(r.id);
     if (!ed) { toast.error("Não consegui carregar o TFD."); return; }
     setEditando(ed);
@@ -244,9 +255,18 @@ function TfdPage() {
 
   const removerTfd = async (r: TfdRegistroView) => {
     if (!podeGerir) return;
+    if (travado(r)) { avisoTravado(); return; }
     if (!window.confirm(`Excluir o TFD de ${r.paciente_nome || "paciente"} (${compLabel(r.competencia)})?`)) return;
     if (await excluirTfd(r.id)) { toast.success("TFD excluído."); carregar(); }
     else toast.error("Falha ao excluir o TFD.");
+  };
+
+  // Ao salvar o form: se o TFD editado já estava faturado, atualiza a MESMA ficha (sem gerar nova).
+  const aoSalvarForm = async () => {
+    const eraFaturada = Boolean(editando && (editando.tfd.ficha_id || editando.tfd.status === "faturada"));
+    fecharForm();
+    if (eraFaturada) await gerarFaturamentoMes(cnes, competencia, nomeUnidade);
+    carregar();
   };
 
   const abrirNovo = () => { setEditando(null); setFormAberto(true); };
@@ -339,7 +359,7 @@ function TfdPage() {
           edicao={editando ?? undefined}
           onFecha={fecharForm}
           onDestinosMudou={recarregarDestinos}
-          onSalvo={() => { fecharForm(); carregar(); }}
+          onSalvo={aoSalvarForm}
         />
       )}
 
@@ -392,7 +412,7 @@ function TfdPage() {
                 </td>
                 <td className="px-3 py-2 text-right font-medium">{brl(r.total_rs)}</td>
                 <td className="px-3 py-2 text-center">
-                  {podeGerir ? (
+                  {podeGerir && !travado(r) ? (
                     <select value={r.status} onChange={(e) => mudarStatus(r, e.target.value as TfdStatus)}
                       className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-medium outline-none ${STATUS_META[r.status].cor}`}>
                       <option value="agendada">Agendada</option>
@@ -408,16 +428,24 @@ function TfdPage() {
                   {podeGerir && (
                     <div className="flex justify-end gap-1">
                       {r.status === "faturada" && r.ficha_id && (
-                        <Link to="/minhas-fichas" title="Ver ficha gerada" className="rounded border border-border p-1 text-emerald-700 hover:bg-emerald-50">
-                          <CheckCircle2 className="size-3.5" />
+                        <Link to="/minhas-fichas" title="Ver ficha BPA-I gerada" className="rounded border border-border p-1 text-primary hover:bg-muted">
+                          <FileText className="size-3.5" />
                         </Link>
                       )}
-                      <button type="button" onClick={() => editarTfd(r)} title="Editar TFD" className="rounded border border-border p-1 hover:bg-muted">
-                        <Pencil className="size-3.5" />
-                      </button>
-                      <button type="button" onClick={() => removerTfd(r)} title="Excluir TFD" className="rounded border border-border p-1 text-destructive hover:bg-destructive/10">
-                        <Trash2 className="size-3.5" />
-                      </button>
+                      {travado(r) ? (
+                        <span title="TFD faturado — travado (requer permissão de reabrir produção)" className="rounded border border-border p-1 text-muted-foreground">
+                          <Lock className="size-3.5" />
+                        </span>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => editarTfd(r)} title="Editar TFD" className="rounded border border-border p-1 hover:bg-muted">
+                            <Pencil className="size-3.5" />
+                          </button>
+                          <button type="button" onClick={() => removerTfd(r)} title="Excluir TFD" className="rounded border border-border p-1 text-destructive hover:bg-destructive/10">
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </td>
@@ -825,6 +853,15 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
   const [salvando, setSalvando] = useState(false);
   const errCls = (key: string) => (faltando.includes(key) ? " !border-destructive" : "");
 
+  // Crivo CNS/CPF (dígito verificador). Curto = ainda digitando; inválido = completo e reprovado.
+  const cnsDig = digitos(cns), cpfDig = digitos(cpf);
+  const cnsInvalido = cnsDig.length === 15 && !validarCns(cnsDig);
+  const cnsCurto = cnsDig.length > 0 && cnsDig.length < 15;
+  const cnsOk = cnsDig.length === 15 && validarCns(cnsDig);
+  const cpfInvalido = cpfDig.length === 11 && !validarCpf(cpfDig);
+  const cpfCurto = cpfDig.length > 0 && cpfDig.length < 11;
+  const cpfOk = cpfDig.length === 11 && validarCpf(cpfDig);
+
   // Carrega o acompanhante habitual já vinculado a este paciente (edição).
   useEffect(() => {
     if (ini?.acompanhante_id) carregarPaciente(ini.acompanhante_id, false).then((p) => p && setAcompanhante(p));
@@ -863,6 +900,9 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
       logradouro: logradouro || null, numero: digitos(numero) || null, bairro: bairro || null,
       uf: uf || null, telefone: digitos(telefone) || null,
     };
+    // Crivo: CNS/CPF informado tem de estar completo e passar no dígito verificador.
+    if (cnsDig.length > 0 && !cnsOk) { toast.error("CNS inválido (verifique os 15 dígitos)."); return; }
+    if (cpfDig.length > 0 && !cpfOk) { toast.error("CPF inválido (verifique os 11 dígitos)."); return; }
     const faltam = pacienteFaltando(candidato);
     setFaltando(faltam);
     if (faltam.length > 0) {
@@ -908,11 +948,19 @@ function PacienteForm(props: { orgId: string; paciente?: Paciente; nomeInicial?:
         </div>
         <div>
           <div className={label}>CNS *</div>
-          <input value={cns} onChange={(e) => setCns(digitos(e.target.value).slice(0, 15))} className={campo + errCls("documento (CNS/CPF)")} />
+          <input value={cns} onChange={(e) => setCns(digitos(e.target.value).slice(0, 15))} data-nocaps inputMode="numeric"
+            className={campo + errCls("documento (CNS/CPF)") + (cnsInvalido ? " !border-destructive" : cnsOk ? " !border-emerald-500" : "")} />
+          {cnsInvalido && <div className="mt-0.5 text-[11px] text-destructive">CNS inválido</div>}
+          {cnsCurto && <div className="mt-0.5 text-[11px] text-muted-foreground">{cnsDig.length}/15 dígitos</div>}
+          {cnsOk && <div className="mt-0.5 text-[11px] text-emerald-600">CNS válido ✓</div>}
         </div>
         <div>
           <div className={label}>CPF *</div>
-          <input value={cpf} onChange={(e) => setCpf(digitos(e.target.value).slice(0, 11))} className={campo + errCls("documento (CNS/CPF)")} />
+          <input value={cpf} onChange={(e) => setCpf(digitos(e.target.value).slice(0, 11))} data-nocaps inputMode="numeric"
+            className={campo + errCls("documento (CNS/CPF)") + (cpfInvalido ? " !border-destructive" : cpfOk ? " !border-emerald-500" : "")} />
+          {cpfInvalido && <div className="mt-0.5 text-[11px] text-destructive">CPF inválido</div>}
+          {cpfCurto && <div className="mt-0.5 text-[11px] text-muted-foreground">{cpfDig.length}/11 dígitos</div>}
+          {cpfOk && <div className="mt-0.5 text-[11px] text-emerald-600">CPF válido ✓</div>}
         </div>
         <div>
           <div className={label}>Sexo *</div>
