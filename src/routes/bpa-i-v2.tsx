@@ -543,8 +543,8 @@ function BpaI() {
               </div>
             )}
             {user && (
-              <button onClick={() => setFichasOpen(true)} title="Fichas salvas na sua conta" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
-                📁 Minhas fichas
+              <button onClick={() => { if (window.confirm("Começar uma nova ficha em branco? Alterações não salvas serão perdidas.")) novaFicha(); }} title="Começar uma ficha em branco" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+                ➕ Nova ficha
               </button>
             )}
             {state.respConfirmacao && (
