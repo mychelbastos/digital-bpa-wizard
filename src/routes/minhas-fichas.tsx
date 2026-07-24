@@ -37,13 +37,17 @@ function MinhasFichasPage() {
     setEditandoId(null);
   };
 
-  // Agrupa por competência (mês de apresentação), na ordem em que aparecem (já vêm
-  // ordenadas por atualização desc).
+  // Agrupa pelo MÊS DE PRODUÇÃO (mês de apresentação = mes_producao), não pela competência
+  // de atendimento: uma ficha de atendimento de out/2025 apresentada em janeiro faz parte da
+  // PRODUÇÃO DE JANEIRO (foi lançada/importada nesse mês). A competência de atendimento de
+  // cada ficha é mostrada como detalhe na própria linha.
+  const mesProd = (f: FichaResumo) => f.mes_producao ?? f.competencia; // fallback p/ fichas antigas
   const grupos: { comp: string | null; itens: FichaResumo[] }[] = [];
   for (const f of fichas) {
-    const g = grupos.find((x) => x.comp === f.competencia);
+    const chave = mesProd(f);
+    const g = grupos.find((x) => x.comp === chave);
     if (g) g.itens.push(f);
-    else grupos.push({ comp: f.competencia, itens: [f] });
+    else grupos.push({ comp: chave, itens: [f] });
   }
   grupos.sort((a, b) => (b.comp ?? "").localeCompare(a.comp ?? ""));
 
@@ -90,11 +94,19 @@ function MinhasFichasPage() {
             </div>
             {gruposVisiveis.map((g) => (
             <section key={g.comp ?? "sem"} className="mb-6">
-              <h2 className="mb-2 text-sm font-semibold capitalize text-foreground">{labelComp(g.comp)} <span className="text-xs font-normal text-muted-foreground">· {g.itens.length} ficha{g.itens.length > 1 ? "s" : ""}</span></h2>
+              <h2 className="mb-2 text-sm font-semibold text-foreground">
+                <span className="capitalize">Produção de {labelComp(g.comp)}</span>
+                <span className="text-xs font-normal text-muted-foreground"> · {g.itens.length} ficha{g.itens.length > 1 ? "s" : ""}</span>
+              </h2>
               <div className="space-y-1.5">
                 {g.itens.map((f) => (
                   <div key={f.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
                     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${f.tipo === "BPA-C" ? "bg-teal-100 text-teal-700" : "bg-sky-100 text-sky-700"}`}>{f.tipo}</span>
+                    {f.competencia && f.competencia !== mesProd(f) && (
+                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium capitalize text-amber-800" title="Atendimento retroativo — apresentado neste mês de produção">
+                        atend. {labelComp(f.competencia)}
+                      </span>
+                    )}
                     {editandoId === f.id ? (
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
