@@ -42,6 +42,7 @@ function FpoPage() {
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [verNaoOrcaveis, setVerNaoOrcaveis] = useState(false);
+  const [tetoManualDe, setTetoManualDe] = useState<string | null>(null);
   const podeEditar = cnes ? editaveis.has(cnes) : false;
 
   // Carrega as unidades do usuário (vínculos) + em quais pode editar FPO.
@@ -258,9 +259,34 @@ function FpoPage() {
             {verNaoOrcaveis && (
               <div className="divide-y divide-border/60 border-t border-border">
                 {rowsNaoOrcaveis.map((r) => (
-                  <div key={r.procedimento} className="flex items-baseline justify-between gap-3 px-4 py-2 text-xs">
-                    <span className="min-w-0 truncate text-foreground" title={r.descricao}>{r.descricao}</span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">{int(r.produzido)} produzido{r.produzido === 1 ? "" : "s"}</span>
+                  <div key={r.procedimento} className="px-4 py-2 text-xs">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate text-foreground" title={r.descricao}>{r.descricao}</span>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="tabular-nums text-muted-foreground">{int(r.produzido)} produzido{r.produzido === 1 ? "" : "s"}</span>
+                        {podeEditar && tetoManualDe !== r.procedimento && (
+                          <button
+                            type="button"
+                            onClick={() => setTetoManualDe(r.procedimento)}
+                            className="rounded border border-border bg-background px-2 py-0.5 font-medium text-foreground hover:bg-muted"
+                          >
+                            + Teto
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {podeEditar && tetoManualDe === r.procedimento && (
+                      <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background px-3 py-2">
+                        <label className="flex items-center gap-1.5">Teto (qtd):
+                          <CampoNum valor={r.qtdOrcada} onSalvar={(v) => editarCampo(r, "qtd", v)} />
+                        </label>
+                        <label className="flex items-center gap-1.5">Valor unit.: R$
+                          <CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} />
+                        </label>
+                        <button type="button" onClick={() => setTetoManualDe(null)} className="ml-auto rounded px-2 py-0.5 text-muted-foreground hover:text-foreground">Fechar</button>
+                        <span className="w-full text-[10px] text-muted-foreground">Ao definir um teto, o procedimento passa a ser acompanhado na lista principal (vale desta competência em diante).</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
