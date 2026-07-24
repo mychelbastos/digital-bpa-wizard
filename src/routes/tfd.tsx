@@ -13,7 +13,7 @@ import {
   buscarPacientes, salvarPaciente, carregarPaciente, registrarLeituraPaciente, excluirPaciente, pacienteFaltando, type Paciente,
 } from "@/lib/pacientes";
 import {
-  orgDoCnes, listarDestinos, salvarDestino, atualizarDestino, excluirDestino, valoresVigentes, definirValorVigente,
+  orgDoCnes, listarDestinos, salvarDestino, atualizarDestino, excluirDestino, valoresVigentes, valoresTfdDetalhado, definirValorVigente,
   listarTfd, salvarTfd, atualizarStatusTfd, excluirTfd, carregarTfd, gerarFaturamentoMes, previaTfd,
   listarTfdsDoPaciente, carregarRelatorioTfd, CNES_TFD,
   type TfdDestino, type TfdRegistroView, type TfdStatus, type TfdHistoricoItem, type TfdEdicao, type TfdRelatorioRow,
@@ -205,7 +205,7 @@ function TfdPage() {
       const org = await orgDoCnes(cnes);
       setOrgId(org);
       if (org) {
-        const [dest, vals] = await Promise.all([listarDestinos(org), valoresVigentes(org, competencia)]);
+        const [dest, vals] = await Promise.all([listarDestinos(org), valoresVigentes(org, cnes, competencia)]);
         setDestinos(dest);
         setValores(vals);
       }
@@ -481,8 +481,8 @@ function TfdPage() {
           <ChevronDown className={`size-4 transition-transform ${valoresAberto ? "" : "-rotate-90"}`} />
         </button>
         {valoresAberto && orgId && (
-          <TabelaValores orgId={orgId} competencia={competencia} valores={valores} podeEditar={podeGerir}
-            onSalvo={async () => setValores(await valoresVigentes(orgId, competencia))} userId={user?.id ?? null} />
+          <TabelaValores orgId={orgId} cnes={cnes} competencia={competencia} podeEditar={podeGerir}
+            onSalvo={async () => setValores(await valoresVigentes(orgId, cnes, competencia))} userId={user?.id ?? null} />
         )}
       </div>
     </div>
@@ -1639,11 +1639,17 @@ function ProfPicker(props: {
 // Tabela de valores unitários (edição com vigência).
 // ---------------------------------------------------------------------------
 function TabelaValores(props: {
-  orgId: string; competencia: string; valores: Record<string, number>; podeEditar: boolean;
+  orgId: string; cnes: string; competencia: string; podeEditar: boolean;
   onSalvo: () => void; userId: string | null;
 }) {
+  const [det, setDet] = useState<Record<string, { valor: number; fonte: "fpo" | "override" | null }>>({});
   const [editando, setEditando] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState("");
+
+  const recarregar = useCallback(async () => {
+    setDet(await valoresTfdDetalhado(props.orgId, props.cnes, props.competencia));
+  }, [props.orgId, props.cnes, props.competencia]);
+  useEffect(() => { recarregar(); }, [recarregar]);
 
   const salvar = async (codigo: string) => {
     const v = Number((editando[codigo] ?? "").replace(",", "."));
@@ -1653,26 +1659,35 @@ function TabelaValores(props: {
     setSalvando("");
     if (!ok) { toast.error("Falha ao salvar (verifique a permissão)."); return; }
     setEditando((e) => { const n = { ...e }; delete n[codigo]; return n; });
-    toast.success(`Valor definido a partir de ${compLabel(props.competencia)}.`);
+    toast.success(`Override definido a partir de ${compLabel(props.competencia)}.`);
+    await recarregar();
     props.onSalvo();
   };
 
   return (
     <div className="border-t border-border p-3">
       <table className="w-full text-sm">
+        <thead className="text-[11px] uppercase text-muted-foreground">
+          <tr><th className="py-1 pr-2 text-left">Código</th><th className="py-1 pr-2 text-left">Procedimento</th><th className="py-1 pr-2 text-center">Fonte</th><th className="py-1 text-right">Valor</th></tr>
+        </thead>
         <tbody>
           {CODIGOS_TFD.map(({ codigo, rotulo }) => {
-            const atual = props.valores[codigo] ?? 0;
+            const info = det[codigo] ?? { valor: 0, fonte: null };
             const emEd = editando[codigo] !== undefined;
             return (
               <tr key={codigo} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-2 font-mono text-[11px] text-muted-foreground">{codigo}</td>
                 <td className="py-2 pr-2">{rotulo}</td>
+                <td className="py-2 pr-2 text-center">
+                  {info.fonte === "fpo" && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">FPO</span>}
+                  {info.fonte === "override" && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">override</span>}
+                  {!info.fonte && <span className="text-[10px] text-muted-foreground">sem valor</span>}
+                </td>
                 <td className="py-2 text-right">
                   {props.podeEditar ? (
                     <div className="flex items-center justify-end gap-2">
                       <input
-                        value={emEd ? editando[codigo] : String(atual)}
+                        value={emEd ? editando[codigo] : String(info.valor)}
                         onChange={(e) => setEditando((s) => ({ ...s, [codigo]: e.target.value.replace(/[^\d.,]/g, "") }))}
                         className="w-24 rounded border border-border bg-background px-2 py-1 text-right text-sm outline-none focus:border-primary" />
                       {emEd && (
@@ -1682,7 +1697,7 @@ function TabelaValores(props: {
                         </button>
                       )}
                     </div>
-                  ) : brl(atual)}
+                  ) : brl(info.valor)}
                 </td>
               </tr>
             );
@@ -1690,7 +1705,8 @@ function TabelaValores(props: {
         </tbody>
       </table>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        A edição define o valor vigente a partir de {compLabel(props.competencia)} (competências anteriores mantêm o valor).
+        Os valores vêm do <b>FPO</b> desta unidade (competência vigente). Editar aqui cria um <b>override</b> que
+        prevalece a partir de {compLabel(props.competencia)} — use só se precisar diferir do FPO.
       </p>
     </div>
   );

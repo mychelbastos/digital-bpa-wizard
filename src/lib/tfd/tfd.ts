@@ -112,29 +112,52 @@ export async function excluirDestino(id: string): Promise<boolean> {
   return !error;
 }
 
+// Vigente por procedimento a partir de linhas {procedimento, competencia, valor_unitario}:
+// pega a linha de MAIOR competência <= X (modelo de vigência do FPO).
+function vigentePorProcedimento(rows: { procedimento: string; competencia: string; valor_unitario: number }[] | null): Map<string, number> {
+  const vig = new Map<string, { comp: string; valor: number }>();
+  for (const r of rows ?? []) {
+    const cur = vig.get(r.procedimento);
+    if (!cur || r.competencia > cur.comp) vig.set(r.procedimento, { comp: r.competencia, valor: Number(r.valor_unitario) });
+  }
+  return new Map([...vig].map(([p, v]) => [p, v.valor]));
+}
+
+export interface ValorTfd { valor: number; fonte: "fpo" | "override" | null }
+
 // ---------------------------------------------------------------------------
-// Valores unitários (por org) com vigência: o valor de uma competência X é a linha
-// com competencia <= X mais recente (mesmo modelo do FPO). Devolve mapa procedimento->valor.
+// Valores unitários dos 6 procedimentos do TFD. FONTE DE VERDADE = FPO (fpo_teto, por CNES,
+// com vigência). `tfd_valores` (por org) é um OVERRIDE opcional que prevalece quando existe.
+// Devolve mapa procedimento -> { valor, fonte }.
 // ---------------------------------------------------------------------------
-export async function valoresVigentes(organizacaoId: string, competencia: string): Promise<Record<string, number>> {
-  if (!supabase || !organizacaoId || !competencia) return {};
+export async function valoresTfdDetalhado(organizacaoId: string, cnes: string, competencia: string): Promise<Record<string, ValorTfd>> {
+  const codigos = Object.values(COD_TFD);
+  const out: Record<string, ValorTfd> = {};
+  for (const c of codigos) out[c] = { valor: 0, fonte: null };
+  if (!supabase || !competencia) return out;
   try {
-    const { data, error } = await supabase.from("tfd_valores")
-      .select("procedimento, competencia, valor_unitario")
-      .eq("organizacao_id", organizacaoId).lte("competencia", competencia);
-    if (error || !data) return {};
-    // Vigente por procedimento = maior competência <= X.
-    const vig = new Map<string, { comp: string; valor: number }>();
-    for (const r of data as { procedimento: string; competencia: string; valor_unitario: number }[]) {
-      const cur = vig.get(r.procedimento);
-      if (!cur || r.competencia > cur.comp) vig.set(r.procedimento, { comp: r.competencia, valor: Number(r.valor_unitario) });
+    const [fpoRes, ovRes] = await Promise.all([
+      cnes ? supabase.from("fpo_teto").select("procedimento, competencia, valor_unitario").eq("cnes", cnes).in("procedimento", codigos).lte("competencia", competencia) : Promise.resolve({ data: null }),
+      organizacaoId ? supabase.from("tfd_valores").select("procedimento, competencia, valor_unitario").eq("organizacao_id", organizacaoId).in("procedimento", codigos).lte("competencia", competencia) : Promise.resolve({ data: null }),
+    ]);
+    const fpo = vigentePorProcedimento(fpoRes.data as never);
+    const ov = vigentePorProcedimento(ovRes.data as never);
+    for (const c of codigos) {
+      if (ov.has(c)) out[c] = { valor: ov.get(c)!, fonte: "override" };
+      else if (fpo.has(c)) out[c] = { valor: fpo.get(c)!, fonte: "fpo" };
     }
-    const out: Record<string, number> = {};
-    for (const [proc, v] of vig) out[proc] = v.valor;
     return out;
   } catch {
-    return {};
+    return out;
   }
+}
+
+// Só os valores efetivos (procedimento -> valor), para o cálculo dos totais.
+export async function valoresVigentes(organizacaoId: string, cnes: string, competencia: string): Promise<Record<string, number>> {
+  const det = await valoresTfdDetalhado(organizacaoId, cnes, competencia);
+  const out: Record<string, number> = {};
+  for (const [c, v] of Object.entries(det)) if (v.fonte) out[c] = v.valor;
+  return out;
 }
 
 // Define/atualiza o valor VIGENTE a partir de uma competência (cria a linha da vigência).
