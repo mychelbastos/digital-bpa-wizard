@@ -120,14 +120,22 @@ function migrarNumero(v: unknown): string[] {
   return ancorarCharsDireita(raw.replace(/\s/g, ""), 4);
 }
 
+// Garante 3 sequências (o formulário renderiza 3 fixas) e blinda campos ausentes. Fichas
+// importadas ou geradas (TFD) podem ter < 3 seqs — sem isto o render acessaria state.seqs[si]
+// indefinido e a página quebraria. Também aplica a migração de Quantidade (6->3 díg.).
+function normalizarSeqs3(seqs: SeqData[] | undefined): SeqData[] {
+  const base = seqs ?? [];
+  const arr = base.length >= 3 ? base : [...base, ...Array.from({ length: 3 - base.length }, emptySeq)];
+  return arr.map((s) => ({ ...emptySeq(), ...s, qtde: rjust((s?.qtde ?? []), 3), numero: migrarNumero(s?.numero ?? []) }));
+}
+
 function loadState(): State {
   if (typeof window === "undefined") return initialState();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState();
     const merged = { ...initialState(), ...(JSON.parse(raw) as Partial<State>) };
-    // Migração: campo Quantidade passou de 6 -> 3 dígitos (justificado à direita).
-    merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3), numero: migrarNumero(s.numero) }));
+    merged.seqs = normalizarSeqs3(merged.seqs);
     return merged;
   } catch {
     return initialState();
@@ -338,7 +346,7 @@ function BpaI() {
     const ficha = await carregarFicha(id);
     if (!ficha) return;
     const merged = { ...initialState(), ...(ficha.dados as Partial<State>) };
-    merged.seqs = merged.seqs.map((s) => ({ ...s, qtde: rjust(s.qtde, 3), numero: migrarNumero(s.numero) }));
+    merged.seqs = normalizarSeqs3(merged.seqs);
     setState(merged);
     persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-I");
     refreshStatus(id);

@@ -89,13 +89,19 @@ const initialState = (): State => ({
 
 // Normaliza Quantidade e Idade de todas as linhas para ancoradas à direita (estilo
 // calculadora), convertendo valores salvos no formato antigo (à esquerda). Idempotente.
+// Também GARANTE no mínimo 20 linhas (o formulário renderiza 20 fixas): fichas importadas
+// têm nº de linhas variável (< 20) e, sem o preenchimento, o render acessaria state.rows[i]
+// indefinido e quebraria a página. `...emptyRow()` blinda campos ausentes de fichas antigas.
 function normalizarQuantidades(s: State): State {
+  const base = s.rows ?? [];
+  const rows = base.length >= 20 ? base : [...base, ...Array.from({ length: 20 - base.length }, emptyRow)];
   return {
     ...s,
-    rows: s.rows.map((r) => ({
+    rows: rows.map((r) => ({
+      ...emptyRow(),
       ...r,
-      quantidade: ancorarDigitosDireita((r.quantidade ?? []).join(""), 5),
-      idade: ancorarDigitosDireita((r.idade ?? []).join(""), 3),
+      quantidade: ancorarDigitosDireita((r?.quantidade ?? []).join(""), 5),
+      idade: ancorarDigitosDireita((r?.idade ?? []).join(""), 3),
     })),
   };
 }
