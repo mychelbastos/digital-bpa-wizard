@@ -11,8 +11,25 @@
 //                       autoriz(13) "BPA" nomePac(30) dataNasc(8) ... cpfPac(11) sitRua(1)
 //
 // O arquivo pode misturar competências (até 4 meses de retroatividade) e CNES. Agrupamos:
-//   BPA-C -> uma ficha por (CNES + competência da linha)
-//   BPA-I -> uma ficha por (CNES + profCns + profCbo + competência da linha)
+//   BPA-C -> por (CNES + competência da linha)
+//   BPA-I -> por (CNES + profCns + profCbo + competência da linha)
+//
+// IMPORTANTE — tamanho da FICHA DIGITAL ≠ folha do BPA MAG. O BPA Magnético empacota até
+// 99 seqs por folha no .txt, mas a FICHA na tela (o formulário) só exibe/edita 3 sequências
+// (BPA-I) ou 20 linhas (BPA-C). Se gravássemos toda a produção do profissional numa ficha
+// só, o formulário mostraria apenas as 3 primeiras e o resto ficaria invisível. Por isso, ao
+// importar, QUEBRAMOS cada grupo em fichas do tamanho do formulário (uma ficha por bloco).
+// No fechamento/exportação, fechamento-mes.ts reempacota tudo em folhas de 99 (a folha/seq
+// do .txt é derivada lá, não capturada aqui).
+const SEQS_POR_FICHA_BPAI = 3;   // o BPA-I v3 exibe 3 sequências por ficha
+const ROWS_POR_FICHA_BPAC = 20;  // o BPA-C v3 exibe 20 linhas por ficha
+
+function emBlocos<T>(itens: T[], tamanho: number): T[][] {
+  if (itens.length === 0) return [[]];
+  const out: T[][] = [];
+  for (let i = 0; i < itens.length; i += tamanho) out.push(itens.slice(i, i + tamanho));
+  return out;
+}
 
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
 import { emptyRow, type RowData } from "@/lib/bpac-layout";
@@ -29,6 +46,8 @@ export interface FichaBpaCImport {
   cnes: string;
   competencia: string; // AAAAMM da linha
   rows: RowData[];
+  folha: number;       // nº do bloco (1-based) quando o grupo é quebrado em várias fichas
+  totalFolhas: number; // quantos blocos ao todo (para rotular "folha 2/5")
 }
 
 export interface FichaBpaIImport {
@@ -37,6 +56,8 @@ export interface FichaBpaIImport {
   profCns: string;
   profCbo: string;
   seqs: SeqData[];
+  folha: number;       // nº do bloco (1-based) quando o grupo é quebrado em várias fichas
+  totalFolhas: number; // quantos blocos ao todo (para rotular "folha 2/5")
 }
 
 export interface CabecalhoMagnetico {
@@ -144,8 +165,9 @@ export function parseArquivoMagnetico(txt: string): ResultadoMagnetico {
   const cabecalho = linhas[0].startsWith("01") ? parseHeader(linhas[0]) : null;
   if (!cabecalho) avisos.push("Sem cabeçalho (linha 01) — arquivo pode não ser um BPA Magnético.");
 
-  const mapaC = new Map<string, FichaBpaCImport>();
-  const mapaI = new Map<string, FichaBpaIImport>();
+  // Grupos completos (antes de quebrar em blocos do tamanho da ficha).
+  const mapaC = new Map<string, { cnes: string; competencia: string; rows: RowData[] }>();
+  const mapaI = new Map<string, { cnes: string; competencia: string; profCns: string; profCbo: string; seqs: SeqData[] }>();
   const cnesSet = new Set<string>();
   const compSet = new Set<string>();
   let l02 = 0, l03 = 0, qC = 0, qI = 0;
@@ -186,10 +208,21 @@ export function parseArquivoMagnetico(txt: string): ResultadoMagnetico {
     avisos.push(`O arquivo tem competências de atendimento diferentes da apresentação (${cabecalho.competencia}): ${comps.join(", ")}.`);
   }
 
+  // Quebra cada grupo em fichas do tamanho do formulário (BPA-I: 3 seqs; BPA-C: 20 linhas),
+  // preservando a ordem original. Uma ficha por bloco, numerada (folha 1..N de N).
+  const fichasC: FichaBpaCImport[] = [...mapaC.values()].flatMap((g) => {
+    const blocos = emBlocos(g.rows, ROWS_POR_FICHA_BPAC);
+    return blocos.map((rows, i) => ({ cnes: g.cnes, competencia: g.competencia, rows, folha: i + 1, totalFolhas: blocos.length }));
+  });
+  const fichasI: FichaBpaIImport[] = [...mapaI.values()].flatMap((g) => {
+    const blocos = emBlocos(g.seqs, SEQS_POR_FICHA_BPAI);
+    return blocos.map((seqs, i) => ({ cnes: g.cnes, competencia: g.competencia, profCns: g.profCns, profCbo: g.profCbo, seqs, folha: i + 1, totalFolhas: blocos.length }));
+  });
+
   return {
     cabecalho,
-    fichasC: [...mapaC.values()],
-    fichasI: [...mapaI.values()],
+    fichasC,
+    fichasI,
     totais: { linhas02: l02, linhas03: l03, quantidadeBpaC: qC, quantidadeBpaI: qI },
     cnes: [...cnesSet].sort(),
     competencias: comps,

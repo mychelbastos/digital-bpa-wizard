@@ -13,7 +13,7 @@ function dadosBpaC(f: FichaBpaCImport, nome: string) {
     cnes: arr(f.cnes),
     ano: arr(f.competencia.slice(0, 4)),
     mes: arr(f.competencia.slice(4, 6)),
-    folhaBase: ["1"],
+    folhaBase: arr(String(f.folha)),
     rows: f.rows,
   };
 }
@@ -27,10 +27,13 @@ function dadosBpaI(f: FichaBpaIImport, nomeEstab: string) {
     profCbo: arr(f.profCbo),
     profAno: arr(f.competencia.slice(0, 4)),
     profMes: arr(f.competencia.slice(4, 6)),
-    profFolha: ["1"],
+    profFolha: arr(String(f.folha)),
     seqs: f.seqs,
   };
 }
+
+// Sufixo "· folha 2/5" só quando o grupo foi quebrado em mais de uma ficha.
+const sufixoFolha = (folha: number, total: number) => (total > 1 ? ` · folha ${folha}/${total}` : "");
 
 export interface ResumoGravacao {
   fichas: number;
@@ -48,7 +51,7 @@ export async function gravarMagnetico(
 ): Promise<ResumoGravacao> {
   if (!supabase) return { fichas: 0, bpaC: 0, bpaI: 0, erro: "Sem conexão com o banco." };
   const payloadC = res.fichasC.map((f) => ({
-    titulo: `BPA-C · ${f.cnes} · ${labelComp(f.competencia)} (importado)`,
+    titulo: `BPA-C · ${f.cnes} · ${labelComp(f.competencia)}${sufixoFolha(f.folha, f.totalFolhas)} (importado)`,
     competencia: f.competencia,
     dados: dadosBpaC(f, nomesEstab[f.cnes]),
     tipo: "BPA-C" as const,
@@ -59,7 +62,7 @@ export async function gravarMagnetico(
     origem: "importado" as const,
   }));
   const payloadI = res.fichasI.map((f) => ({
-    titulo: `BPA-I · ${f.profCns || "s/CNS"} · ${labelComp(f.competencia)} (importado)`,
+    titulo: `BPA-I · ${f.profCns || "s/CNS"} · ${labelComp(f.competencia)}${sufixoFolha(f.folha, f.totalFolhas)} (importado)`,
     competencia: f.competencia,
     dados: dadosBpaI(f, nomesEstab[f.cnes]),
     tipo: "BPA-I" as const,
