@@ -50,6 +50,13 @@ function MinhasFichasPage() {
     else grupos.push({ comp: chave, itens: [f] });
   }
   grupos.sort((a, b) => (b.comp ?? "").localeCompare(a.comp ?? ""));
+  // Dentro de cada mês de produção, ordena pela competência de ATENDIMENTO desc (o mês
+  // vigente primeiro, depois os retroativos: jan → dez → nov → out…), depois por título.
+  for (const g of grupos) {
+    g.itens.sort((a, b) =>
+      (b.competencia ?? "").localeCompare(a.competencia ?? "") ||
+      (a.titulo ?? "").localeCompare(b.titulo ?? ""));
+  }
 
   // Chave estável de cada mês no menu (competência ou "sem"); "todos" = visão geral.
   const chaveMes = (comp: string | null) => comp ?? "sem";
