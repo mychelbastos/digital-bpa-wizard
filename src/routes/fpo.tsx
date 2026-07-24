@@ -41,6 +41,7 @@ function FpoPage() {
   const [rows, setRows] = useState<FpoComparacaoRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [verNaoOrcaveis, setVerNaoOrcaveis] = useState(false);
   const podeEditar = cnes ? editaveis.has(cnes) : false;
 
   // Carrega as unidades do usuário (vínculos) + em quais pode editar FPO.
@@ -68,7 +69,16 @@ function FpoPage() {
     tetoRS: acc.tetoRS + r.tetoRS, prodRS: acc.prodRS + r.produzidoRS, saldoRS: acc.saldoRS + r.saldoRS,
   }), { teto: 0, prod: 0, saldo: 0, tetoRS: 0, prodRS: 0, saldoRS: 0 }), [rows]);
   const pendencias = rows.filter((r) => !r.resolvido).length;
-  const semTeto = rows.filter((r) => !r.temTeto && r.produzido > 0).length;
+
+  // Procedimentos de VIGILÂNCIA EM SAÚDE (grupo 0102) têm valor SIGTAP zero — são
+  // financiados por incentivo fixo, não pelo teto MAC — então NUNCA aparecem no FPO
+  // (Espelho.txt). Produzi-los sem teto é o esperado, não uma pendência de orçamento.
+  // Separamos esses da lista principal e do alerta para não poluírem a visualização;
+  // ficam numa seção recolhível. Sem-teto de OUTROS grupos continua sendo alerta real.
+  const ehNaoOrcavel = (r: FpoComparacaoRow) => !r.temTeto && r.procedimento.startsWith("0102");
+  const rowsPrincipais = rows.filter((r) => !ehNaoOrcavel(r));
+  const rowsNaoOrcaveis = rows.filter((r) => ehNaoOrcavel(r) && r.produzido > 0);
+  const semTeto = rowsPrincipais.filter((r) => !r.temTeto && r.produzido > 0).length;
 
   // Edita o teto criando/atualizando a VIGÊNCIA na competência visualizada (vale dessa
   // competência em diante; as anteriores mantêm o valor). Funciona também em linha sem teto.
@@ -182,7 +192,7 @@ function FpoPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {rowsPrincipais.map((r) => (
                     <tr key={r.procedimento} className={`border-b border-border/60 [&>td]:align-top ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
                       <td className="px-3 py-2">
                         <div className="truncate" title={r.descricao}>{r.descricao}</div>
@@ -209,7 +219,7 @@ function FpoPage() {
 
             {/* Celular: um cartão por procedimento. */}
             <div className="space-y-2.5 lg:hidden">
-              {rows.map((r) => (
+              {rowsPrincipais.map((r) => (
                 <div key={r.procedimento} className={`rounded-xl border border-border p-3 ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : "bg-card"}`}>
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="font-medium">{r.descricao}</span>
@@ -230,6 +240,34 @@ function FpoPage() {
             </div>
           </>
         )}
+
+        {/* Vigilância em Saúde (grupo 0102): valor zero, fora do teto — produção esperada
+            sem teto. Recolhido por padrão para não competir com o quadro orçamentário. */}
+        {rowsNaoOrcaveis.length > 0 && (
+          <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-muted/30">
+            <button
+              type="button"
+              onClick={() => setVerNaoOrcaveis((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-xs text-muted-foreground hover:bg-muted/50"
+            >
+              <span>
+                <strong>{rowsNaoOrcaveis.length}</strong> procedimento(s) de <strong>vigilância em saúde</strong> produzidos — valor zero, sem teto orçado (esperado, financiados por incentivo fixo).
+              </span>
+              <span className="shrink-0 font-medium text-foreground">{verNaoOrcaveis ? "Ocultar ▲" : "Ver ▼"}</span>
+            </button>
+            {verNaoOrcaveis && (
+              <div className="divide-y divide-border/60 border-t border-border">
+                {rowsNaoOrcaveis.map((r) => (
+                  <div key={r.procedimento} className="flex items-baseline justify-between gap-3 px-4 py-2 text-xs">
+                    <span className="min-w-0 truncate text-foreground" title={r.descricao}>{r.descricao}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">{int(r.produzido)} produzido{r.produzido === 1 ? "" : "s"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <p className="mt-3 text-center text-[11px] text-muted-foreground">
           Produção casada por mês de apresentação. Saldo verde = ainda pode produzir · vermelho = estourou o teto.
           {podeEditar && " Clique no Teto ou no valor unit. para editar — vale desta competência em diante; as anteriores mantêm o valor antigo."}
