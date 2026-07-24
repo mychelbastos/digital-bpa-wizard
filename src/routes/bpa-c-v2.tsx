@@ -133,6 +133,7 @@ function BpaCV2() {
   const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
   const [zerarAtendOpen, setZerarAtendOpen] = useState(false);
   const [zerarTudoOpen, setZerarTudoOpen] = useState(false);
+  const [novaFichaOpen, setNovaFichaOpen] = useState(false);
   const [salvarOpen, setSalvarOpen] = useState(false);
   const [salvarComoNovo, setSalvarComoNovo] = useState(false);
   const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
@@ -372,6 +373,9 @@ function BpaCV2() {
       <ConfirmModal open={zerarAtendOpen} title="Zerar atendimentos" confirmLabel="Zerar atendimentos" onCancel={() => setZerarAtendOpen(false)} onConfirm={confirmarZerarAtend}>
         <p>Isto vai apagar as 20 linhas de Atendimento Realizado (mantém o cabeçalho).</p>
       </ConfirmModal>
+      <ConfirmModal open={novaFichaOpen} title="Nova ficha" confirmLabel="Começar nova ficha" onCancel={() => setNovaFichaOpen(false)} onConfirm={() => { setNovaFichaOpen(false); novaFicha(); }}>
+        Começar uma nova ficha em branco? Alterações não salvas serão perdidas.
+      </ConfirmModal>
       <ConfirmModal open={zerarTudoOpen} title="Zerar tudo" confirmLabel="Zerar tudo" danger onCancel={() => setZerarTudoOpen(false)} onConfirm={confirmarZerarTudo}>
         <p>Isto vai apagar <strong>todas</strong> as informações do formulário (cabeçalho e as 20 linhas).</p>
       </ConfirmModal>
@@ -427,7 +431,7 @@ function BpaCV2() {
               </div>
             )}
             {user && (
-              <button onClick={() => { if (window.confirm("Começar uma nova ficha em branco? Alterações não salvas serão perdidas.")) novaFicha(); }} title="Começar uma ficha em branco" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+              <button onClick={() => setNovaFichaOpen(true)} title="Começar uma ficha em branco" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
                 ➕ Nova ficha
               </button>
             )}

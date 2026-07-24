@@ -151,6 +151,7 @@ function BpaI() {
   const [cboOpcoes, setCboOpcoes] = useState<CboVinculo[]>([]);
   // Modais de confirmação (substituem o confirm() nativo).
   const [zerarSeqsOpen, setZerarSeqsOpen] = useState(false);
+  const [novaFichaOpen, setNovaFichaOpen] = useState(false);
   const [manterProf, setManterProf] = useState(true);
   const [zerarTudoOpen, setZerarTudoOpen] = useState(false);
   // Snapshot do que havia antes de zerar, p/ desfazer (restaurar profissional ou tudo).
@@ -608,6 +609,16 @@ function BpaI() {
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
       <ConfirmModal
+        open={novaFichaOpen}
+        title="Nova ficha"
+        confirmLabel="Começar nova ficha"
+        onCancel={() => setNovaFichaOpen(false)}
+        onConfirm={() => { setNovaFichaOpen(false); novaFicha(); }}
+      >
+        Começar uma nova ficha em branco? Alterações não salvas serão perdidas.
+      </ConfirmModal>
+
+      <ConfirmModal
         open={zerarSeqsOpen}
         title="Zerar sequências"
         confirmLabel="Zerar sequências"
@@ -683,7 +694,7 @@ function BpaI() {
               </div>
             )}
             {user && (
-              <button onClick={() => { if (window.confirm("Começar uma nova ficha em branco? Alterações não salvas serão perdidas.")) novaFicha(); }} title="Começar uma ficha em branco" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+              <button onClick={() => setNovaFichaOpen(true)} title="Começar uma ficha em branco" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
                 ➕ Nova ficha
               </button>
             )}

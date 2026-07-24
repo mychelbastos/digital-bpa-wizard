@@ -55,8 +55,14 @@ export function useValidacaoLinhaBpaC(row: RowData, competencia: string | null):
   const naoEncontrado = procCompleto && resolvido && proc === null;
 
   // BPA-C guarda a idade em ANOS; o SIGTAP compara em meses (aprox.: anos × 12).
+  // No BPA-C consolidado, idade "000" (toda zerada) NÃO é "recém-nascido": é
+  // "não informada / não se aplica" — o boletim é consolidado, não por paciente,
+  // e o DATASUS aceita essas linhas normalmente. Nesses casos não rodamos o crivo
+  // de faixa etária (idadeMeses = null). Se o digitador realmente informar uma
+  // idade (ex.: "045"), a faixa etária volta a ser validada.
   const idadeAnos = Number(row.idade.join("")) || 0;
-  const idadeMeses = row.idade.some(Boolean) ? idadeAnos * 12 : null;
+  const idadeInformada = row.idade.join("").replace(/0/g, "").length > 0;
+  const idadeMeses = idadeInformada ? idadeAnos * 12 : null;
   const qtde = Number(row.quantidade.join("")) || 0;
 
   const idadeInvalida = Boolean(proc) && idadeForaDaFaixa(proc!.idadeMinimaMeses, proc!.idadeMaximaMeses, idadeMeses);
