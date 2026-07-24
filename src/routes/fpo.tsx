@@ -1,15 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { parseFpoHtml, type FpoArquivoParsed } from "@/lib/fpo/parse-fpo";
 import {
-  carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, definirTetoVigente,
+  carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, definirTetoVigente, excluirTetoFpo,
   cnesEditaveisFpo, type FpoComparacaoRow, type FpoItemResolvido,
 } from "@/lib/fpo/fpo";
+import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { gerarRelatorioFpo } from "@/lib/fpo/relatorio-fpo";
 import { carregarLogoOrg } from "@/lib/org-logo";
 
@@ -43,6 +44,7 @@ function FpoPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [verNaoOrcaveis, setVerNaoOrcaveis] = useState(false);
   const [tetoManualDe, setTetoManualDe] = useState<string | null>(null);
+  const [limparAlvo, setLimparAlvo] = useState<FpoComparacaoRow | null>(null);
   const podeEditar = cnes ? editaveis.has(cnes) : false;
 
   // Carrega as unidades do usuário (vínculos) + em quais pode editar FPO.
@@ -96,6 +98,21 @@ function FpoPage() {
     if (r.herdado || !r.temTeto) toast.success(`Teto definido a partir de ${compLabel(competencia)}.`);
     carregar();
   };
+
+  // Remove o teto DESTA competência (a linha de vigência criada aqui). Se houver uma base
+  // herdada de competência anterior, o teto volta a ela; senão, o procedimento fica "sem teto".
+  // Só faz sentido quando existe uma linha própria nesta competência (r.tetoCompetencia === competencia).
+  const confirmarLimpar = async () => {
+    const r = limparAlvo;
+    if (!r || !podeEditar) { setLimparAlvo(null); return; }
+    const ok = await excluirTetoFpo(cnes, r.procedimento, competencia);
+    setLimparAlvo(null);
+    if (!ok) { toast.error("Não foi possível limpar o teto. Verifique sua permissão de edição nesta unidade."); return; }
+    toast.success("Teto removido desta competência.");
+    carregar();
+  };
+  // Mostra o botão "limpar" só quando a linha tem um teto PRÓPRIO nesta competência (não herdado).
+  const podeLimpar = (r: FpoComparacaoRow) => podeEditar && r.temTeto && !r.herdado && r.tetoCompetencia === competencia;
 
   const nomeUnidade = cnesOpcoes.find((o) => o.cnes === cnes)?.nome ?? cnes;
 
@@ -199,6 +216,16 @@ function FpoPage() {
                         <div className="truncate" title={r.descricao}>{r.descricao}</div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           <Badges r={r} />
+                          {podeLimpar(r) && (
+                            <button
+                              type="button"
+                              onClick={() => setLimparAlvo(r)}
+                              title="Limpar o teto desta competência"
+                              className="inline-flex items-center gap-1 rounded border border-rose-200 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="size-3" /> limpar teto
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
@@ -225,6 +252,16 @@ function FpoPage() {
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="font-medium">{r.descricao}</span>
                     <Badges r={r} />
+                    {podeLimpar(r) && (
+                      <button
+                        type="button"
+                        onClick={() => setLimparAlvo(r)}
+                        title="Limpar o teto desta competência"
+                        className="inline-flex items-center gap-1 rounded border border-rose-200 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 className="size-3" /> limpar teto
+                      </button>
+                    )}
                   </div>
                   <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
                     Valor unit.: {podeEditar ? <><span>R$</span><CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} /></> : brl(r.valorUnitario)}
@@ -309,6 +346,18 @@ function FpoPage() {
           onImportado={(comp) => { setImportOpen(false); if (comp) setCompetencia(comp); carregar(); }}
         />
       )}
+
+      <ConfirmModal
+        open={limparAlvo !== null}
+        title="Limpar teto"
+        confirmLabel="Limpar teto"
+        danger
+        onCancel={() => setLimparAlvo(null)}
+        onConfirm={confirmarLimpar}
+      >
+        Remover o teto de <strong>{limparAlvo?.descricao}</strong> em {compLabel(competencia)}?
+        {limparAlvo?.herdado === false && " Se houver um valor de competência anterior, ele volta a valer; senão, o procedimento fica sem teto."}
+      </ConfirmModal>
     </div>
   );
 }
