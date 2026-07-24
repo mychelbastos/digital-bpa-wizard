@@ -125,6 +125,7 @@ export interface SeqData {
   idade?: string[]; // 3 díg. CAPTURADO da folha (pré-preenchido pelo cálculo, editável). Vazio => gerador calcula.
   cpfPac?: string[]; // 11 díg. cauda v04.11 — CAPTURADO (hipótese: CPF do paciente). Vazio => brancos.
   situacaoRua?: string; // 1 char S/N — cauda v04.11 CAPTURADO (hipótese: situação de rua). Vazio => branco.
+  semCpf?: string; // 1 char S/N — v05.00 (pos 351): "Pessoa sem CPF/Registro Civil". Só ≥ 202607. Vazio => branco.
   codProc: string[];
   qtde: string[];
   cnpj: string[];
@@ -158,6 +159,7 @@ export const emptySeq = (): SeqData => ({
   idade: Array(3).fill(""),
   cpfPac: Array(11).fill(""),
   situacaoRua: "",
+  semCpf: "",
   codProc: Array(10).fill(""),
   qtde: Array(3).fill(""),
   cnpj: Array(14).fill(""),

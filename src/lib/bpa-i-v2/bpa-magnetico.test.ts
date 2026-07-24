@@ -36,7 +36,16 @@ const cfg = () => ({ ...configVazia(), orgaoOrigemNome: "PREF MUN EXEMPLO", sigl
 
 describe("linhaBpaI", () => {
   const l = linhaBpaI(dados(), seqExemplo(), 1, 1);
-  it("tem 350 caracteres (v04.11)", () => expect(l.length).toBe(350));
+  it("tem 350 caracteres (v04.11, competência < 07/2026)", () => expect(l.length).toBe(350));
+  it("v05.00 (≥ 202607): 351 chars com prd_sem_cpf na pos 351", () => {
+    const d07 = { ...dados(), profMes: cells("07", 2), profAno: cells("2026", 4) };
+    const s = { ...seqExemplo(), semCpf: "S" };
+    const l07 = linhaBpaI(d07, s, 1, 1);
+    expect(l07.length).toBe(351);
+    expect(l07.slice(350, 351)).toBe("S"); // pos 351 (1-based) = prd_sem_cpf
+    // Antes de 07/2026 permanece 350 (campo não existe).
+    expect(linhaBpaI({ ...dados(), profMes: cells("06", 2) }, s, 1, 1).length).toBe(350);
+  });
   it("começa com 03 + CNES + competência", () => {
     expect(l.slice(0, 2)).toBe("03");
     expect(l.slice(2, 9)).toBe("2510332"); // CNES pos 3-9

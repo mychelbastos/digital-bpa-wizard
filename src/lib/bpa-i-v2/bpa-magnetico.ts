@@ -154,8 +154,16 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     // que não coletam), mas passam fiéis quando informados — foi o que fechou 556/556 do
     // PA292720.MAR (1 registro traz "N" aqui e o DATASUS aceitou).
     [11, numF(s.cpfPac ?? [], 11, true)], // CPF do paciente (hipótese)
-    [1, s.situacaoRua === "S" || s.situacaoRua === "N" ? s.situacaoRua : " "], // situação de rua (hipótese)
+    [1, s.situacaoRua === "S" || s.situacaoRua === "N" ? s.situacaoRua : " "], // situação de rua (hipótese, ≥ 12/2024)
   ];
+  // v05.00 (BPA MAG 5.00, obrigatória 07/2026): novo campo prd_sem_cpf na pos 351 — "Pessoa
+  // sem CPF/Registro Civil" (S/N), válido A PARTIR da competência 07/2026. Antes disso a linha
+  // mantém 350 chars (confirmado byte a byte nos .MAR/.JUN reais de mar/jun 2026).
+  const comp = competencia(d.profAno, d.profMes);
+  if (comp >= "202607") {
+    campos.push([1, s.semCpf === "S" || s.semCpf === "N" ? s.semCpf : " "]);
+    return montar(campos, 351);
+  }
   return montar(campos, 350);
 }
 
