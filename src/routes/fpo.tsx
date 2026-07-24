@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2 } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
@@ -43,8 +43,12 @@ function FpoPage() {
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [verNaoOrcaveis, setVerNaoOrcaveis] = useState(false);
-  const [tetoManualDe, setTetoManualDe] = useState<string | null>(null);
   const [limparAlvo, setLimparAlvo] = useState<FpoComparacaoRow | null>(null);
+  // Edição por linha: guarda o procedimento em edição e um rascunho local (texto) dos campos.
+  // Nada é salvo até clicar em "Salvar" — evita gravar sem querer só por clicar/sair do campo.
+  const [editando, setEditando] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ qtd: string; valor: string }>({ qtd: "", valor: "" });
+  const [salvando, setSalvando] = useState(false);
   const podeEditar = cnes ? editaveis.has(cnes) : false;
 
   // Carrega as unidades do usuário (vínculos) + em quais pode editar FPO.
@@ -83,20 +87,33 @@ function FpoPage() {
   const rowsNaoOrcaveis = rows.filter((r) => ehNaoOrcavel(r) && r.produzido > 0);
   const semTeto = rowsPrincipais.filter((r) => !r.temTeto && r.produzido > 0).length;
 
-  // Edita o teto criando/atualizando a VIGÊNCIA na competência visualizada (vale dessa
-  // competência em diante; as anteriores mantêm o valor). Funciona também em linha sem teto.
-  const editarCampo = async (r: FpoComparacaoRow, campo: "qtd" | "valor", valor: number) => {
+  // Abre a edição de UMA linha (destrava os campos com um rascunho local). Só uma por vez.
+  const abrirEdicao = (r: FpoComparacaoRow) => {
     if (!podeEditar) return;
+    setEditando(r.procedimento);
+    setDraft({ qtd: String(r.qtdOrcada), valor: String(r.valorUnitario) });
+  };
+  const cancelarEdicao = () => { setEditando(null); setSalvando(false); };
+  // Salva o teto (qtd + valor de uma vez) criando/atualizando a VIGÊNCIA na competência
+  // visualizada (vale dessa competência em diante; as anteriores mantêm o valor).
+  const salvarEdicao = async (r: FpoComparacaoRow) => {
+    if (!podeEditar || salvando) return;
+    const qtd = Math.max(0, Math.round(Number(draft.qtd.replace(",", ".")) || 0));
+    const valor = Math.max(0, Number(draft.valor.replace(",", ".")) || 0);
+    setSalvando(true);
     const ok = await definirTetoVigente(cnes, r.procedimento, competencia, {
-      qtdOrcada: campo === "qtd" ? Math.max(0, Math.round(valor)) : r.qtdOrcada,
-      valorUnitario: campo === "valor" ? Math.max(0, valor) : r.valorUnitario,
-      codigoFpo: r.codigoFpo,
-      descricaoFpo: r.descricao,
-      resolvido: r.resolvido,
+      qtdOrcada: qtd, valorUnitario: valor, codigoFpo: r.codigoFpo, descricaoFpo: r.descricao, resolvido: r.resolvido,
     }, user?.id ?? null);
+    setSalvando(false);
     if (!ok) { toast.error("Não foi possível salvar. Verifique sua permissão de edição nesta unidade."); return; }
-    if (r.herdado || !r.temTeto) toast.success(`Teto definido a partir de ${compLabel(competencia)}.`);
+    toast.success(r.herdado || !r.temTeto ? `Teto definido a partir de ${compLabel(competencia)}.` : "Teto atualizado.");
+    setEditando(null);
     carregar();
+  };
+  // Enter salva, Esc cancela — atalhos nos campos em edição.
+  const teclaEdicao = (r: FpoComparacaoRow) => (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); salvarEdicao(r); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelarEdicao(); }
   };
 
   // Remove o teto DESTA competência (a linha de vigência criada aqui). Se houver uma base
@@ -210,13 +227,38 @@ function FpoPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rowsPrincipais.map((r) => (
-                    <tr key={r.procedimento} className={`border-b border-border/60 [&>td]:align-top ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
+                  {rowsPrincipais.map((r) => {
+                    const emEdicao = editando === r.procedimento;
+                    return (
+                    <tr key={r.procedimento} className={`border-b border-border/60 [&>td]:align-top ${emEdicao ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : !r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : ""}`}>
                       <td className="px-3 py-2">
                         <div className="truncate" title={r.descricao}>{r.descricao}</div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           <Badges r={r} />
-                          {podeLimpar(r) && (
+                          {podeEditar && !emEdicao && (
+                            <button
+                              type="button"
+                              onClick={() => abrirEdicao(r)}
+                              title="Editar o teto desta linha"
+                              className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-foreground hover:bg-muted"
+                            >
+                              <Pencil className="size-3" /> editar
+                            </button>
+                          )}
+                          {emEdicao && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => salvarEdicao(r)}
+                                disabled={salvando}
+                                className="inline-flex items-center gap-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                              >
+                                {salvando ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} salvar
+                              </button>
+                              <button type="button" onClick={cancelarEdicao} className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground">cancelar</button>
+                            </>
+                          )}
+                          {podeLimpar(r) && !emEdicao && (
                             <button
                               type="button"
                               onClick={() => setLimparAlvo(r)}
@@ -229,30 +271,39 @@ function FpoPage() {
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
-                        {podeEditar ? <CampoNum valor={r.qtdOrcada} onSalvar={(v) => editarCampo(r, "qtd", v)} /> : int(r.qtdOrcada)}
+                        {emEdicao ? <CampoEdit autoFocus value={draft.qtd} onChange={(v) => setDraft((d) => ({ ...d, qtd: v }))} onKeyDown={teclaEdicao(r)} /> : int(r.qtdOrcada)}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{int(r.produzido)}</td>
                       <td className={`whitespace-nowrap px-2 py-2 text-right font-semibold tabular-nums ${r.saldo < 0 ? "text-rose-600" : r.saldo === 0 ? "text-muted-foreground" : "text-emerald-600"}`}>{int(r.saldo)}</td>
                       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
-                        {podeEditar ? <CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} /> : brl(r.valorUnitario)}
+                        {emEdicao ? <CampoEdit decimal value={draft.valor} onChange={(v) => setDraft((d) => ({ ...d, valor: v }))} onKeyDown={teclaEdicao(r)} /> : brl(r.valorUnitario)}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{brl(r.tetoRS)}</td>
                       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{brl(r.produzidoRS)}</td>
                       <td className={`whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums ${r.saldoRS < 0 ? "text-rose-600" : "text-foreground"}`}>{brl(r.saldoRS)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             {/* Celular: um cartão por procedimento. */}
             <div className="space-y-2.5 lg:hidden">
-              {rowsPrincipais.map((r) => (
-                <div key={r.procedimento} className={`rounded-xl border border-border p-3 ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : "bg-card"}`}>
+              {rowsPrincipais.map((r) => {
+                const emEdicao = editando === r.procedimento;
+                return (
+                <div key={r.procedimento} className={`rounded-xl border p-3 ${emEdicao ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20" : `border-border ${!r.resolvido ? "bg-amber-50/60" : !r.temTeto ? "bg-sky-50/50" : "bg-card"}`}`}>
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="font-medium">{r.descricao}</span>
                     <Badges r={r} />
-                    {podeLimpar(r) && (
+                    {podeEditar && !emEdicao && (
+                      <button type="button" onClick={() => abrirEdicao(r)}
+                        className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-foreground hover:bg-muted">
+                        <Pencil className="size-3" /> editar
+                      </button>
+                    )}
+                    {podeLimpar(r) && !emEdicao && (
                       <button
                         type="button"
                         onClick={() => setLimparAlvo(r)}
@@ -264,17 +315,27 @@ function FpoPage() {
                     )}
                   </div>
                   <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-                    Valor unit.: {podeEditar ? <><span>R$</span><CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} /></> : brl(r.valorUnitario)}
+                    Valor unit.: {emEdicao ? <><span>R$</span><CampoEdit decimal value={draft.valor} onChange={(v) => setDraft((d) => ({ ...d, valor: v }))} onKeyDown={teclaEdicao(r)} /></> : brl(r.valorUnitario)}
                   </div>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                    <ColunaCartao titulo="Teto" qtd={podeEditar ? <CampoNum valor={r.qtdOrcada} center onSalvar={(v) => editarCampo(r, "qtd", v)} /> : int(r.qtdOrcada)} reais={brl(r.tetoRS)} />
+                    <ColunaCartao titulo="Teto" qtd={emEdicao ? <CampoEdit center value={draft.qtd} onChange={(v) => setDraft((d) => ({ ...d, qtd: v }))} onKeyDown={teclaEdicao(r)} /> : int(r.qtdOrcada)} reais={brl(r.tetoRS)} />
                     <ColunaCartao titulo="Produzido" qtd={int(r.produzido)} reais={brl(r.produzidoRS)} />
                     <ColunaCartao titulo="Saldo" qtd={int(r.saldo)} reais={brl(r.saldoRS)}
                       cor={r.saldo < 0 ? "text-rose-600" : r.saldo === 0 ? "text-muted-foreground" : "text-emerald-600"}
                       corReais={r.saldoRS < 0 ? "text-rose-600" : "text-muted-foreground"} />
                   </div>
+                  {emEdicao && (
+                    <div className="mt-2 flex justify-end gap-2">
+                      <button type="button" onClick={cancelarEdicao} className="rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Cancelar</button>
+                      <button type="button" onClick={() => salvarEdicao(r)} disabled={salvando}
+                        className="inline-flex items-center gap-1 rounded bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                        {salvando ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Salvar
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -295,16 +356,18 @@ function FpoPage() {
             </button>
             {verNaoOrcaveis && (
               <div className="divide-y divide-border/60 border-t border-border">
-                {rowsNaoOrcaveis.map((r) => (
+                {rowsNaoOrcaveis.map((r) => {
+                  const emEdicao = editando === r.procedimento;
+                  return (
                   <div key={r.procedimento} className="px-4 py-2 text-xs">
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="min-w-0 truncate text-foreground" title={r.descricao}>{r.descricao}</span>
                       <div className="flex shrink-0 items-center gap-3">
                         <span className="tabular-nums text-muted-foreground">{int(r.produzido)} produzido{r.produzido === 1 ? "" : "s"}</span>
-                        {podeEditar && tetoManualDe !== r.procedimento && (
+                        {podeEditar && !emEdicao && (
                           <button
                             type="button"
-                            onClick={() => setTetoManualDe(r.procedimento)}
+                            onClick={() => abrirEdicao(r)}
                             className="rounded border border-border bg-background px-2 py-0.5 font-medium text-foreground hover:bg-muted"
                           >
                             + Teto
@@ -312,20 +375,27 @@ function FpoPage() {
                         )}
                       </div>
                     </div>
-                    {podeEditar && tetoManualDe === r.procedimento && (
-                      <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background px-3 py-2">
+                    {emEdicao && (
+                      <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-primary/40 bg-background px-3 py-2">
                         <label className="flex items-center gap-1.5">Teto (qtd):
-                          <CampoNum valor={r.qtdOrcada} onSalvar={(v) => editarCampo(r, "qtd", v)} />
+                          <CampoEdit autoFocus value={draft.qtd} onChange={(v) => setDraft((d) => ({ ...d, qtd: v }))} onKeyDown={teclaEdicao(r)} />
                         </label>
                         <label className="flex items-center gap-1.5">Valor unit.: R$
-                          <CampoNum valor={r.valorUnitario} decimal onSalvar={(v) => editarCampo(r, "valor", v)} />
+                          <CampoEdit decimal value={draft.valor} onChange={(v) => setDraft((d) => ({ ...d, valor: v }))} onKeyDown={teclaEdicao(r)} />
                         </label>
-                        <button type="button" onClick={() => setTetoManualDe(null)} className="ml-auto rounded px-2 py-0.5 text-muted-foreground hover:text-foreground">Fechar</button>
-                        <span className="w-full text-[10px] text-muted-foreground">Ao definir um teto, o procedimento passa a ser acompanhado na lista principal (vale desta competência em diante).</span>
+                        <div className="ml-auto flex items-center gap-2">
+                          <button type="button" onClick={cancelarEdicao} className="rounded px-2 py-0.5 text-muted-foreground hover:text-foreground">Cancelar</button>
+                          <button type="button" onClick={() => salvarEdicao(r)} disabled={salvando}
+                            className="inline-flex items-center gap-1 rounded bg-primary px-2.5 py-0.5 font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                            {salvando ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Salvar
+                          </button>
+                        </div>
+                        <span className="w-full text-[10px] text-muted-foreground">Ao salvar um teto, o procedimento passa a ser acompanhado na lista principal (vale desta competência em diante).</span>
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -333,7 +403,7 @@ function FpoPage() {
 
         <p className="mt-3 text-center text-[11px] text-muted-foreground">
           Produção casada por mês de apresentação. Saldo verde = ainda pode produzir · vermelho = estourou o teto.
-          {podeEditar && " Clique no Teto ou no valor unit. para editar — vale desta competência em diante; as anteriores mantêm o valor antigo."}
+          {podeEditar && " Clique em “editar” na linha para alterar o teto/valor — só grava ao clicar em “salvar”. Vale desta competência em diante; as anteriores mantêm o valor antigo."}
         </p>
       </main>
 
@@ -400,22 +470,18 @@ function ColunaCartao({ titulo, qtd, reais, cor = "text-foreground", corReais = 
 
 // Campo numérico editável inline (salva no blur / Enter). `decimal` p/ valores em R$; `center`
 // centraliza (cartões do celular) em vez de alinhar à direita (tabela).
-function CampoNum({ valor, onSalvar, decimal, center }: { valor: number; onSalvar: (v: number) => void; decimal?: boolean; center?: boolean }) {
-  const [txt, setTxt] = useState(String(valor));
-  useEffect(() => { setTxt(String(valor)); }, [valor]);
-  const commit = () => {
-    const n = Number(txt.replace(",", "."));
-    if (Number.isFinite(n) && n !== valor) onSalvar(n);
-    else setTxt(String(valor));
-  };
+// Campo controlado da edição por linha (não salva sozinho — o rascunho vive no estado do pai).
+function CampoEdit({ value, onChange, onKeyDown, decimal, autoFocus, center }: {
+  value: string; onChange: (v: string) => void; onKeyDown?: (e: React.KeyboardEvent) => void; decimal?: boolean; autoFocus?: boolean; center?: boolean;
+}) {
   return (
     <input
-      value={txt}
+      value={value}
       inputMode={decimal ? "decimal" : "numeric"}
-      onChange={(e) => setTxt(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      className={`rounded border border-transparent bg-transparent px-1 py-0.5 tabular-nums hover:border-border focus:border-primary focus:bg-background focus:outline-none ${center ? "w-full text-center" : "w-16 max-w-full text-right"}`}
+      autoFocus={autoFocus}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      className={`rounded border border-primary bg-background px-1 py-0.5 tabular-nums outline-none ring-1 ring-primary/30 ${center ? "w-full text-center" : "w-16 max-w-full text-right"}`}
     />
   );
 }
