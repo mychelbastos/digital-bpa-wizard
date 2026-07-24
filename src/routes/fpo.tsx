@@ -250,12 +250,12 @@ function FpoPage() {
 }
 
 function Card({ titulo, qtd, valor, saldo }: { titulo: string; qtd: number; valor: number; saldo?: boolean }) {
-  const cor = saldo ? (qtd < 0 ? "text-rose-600" : qtd === 0 ? "text-muted-foreground" : "text-emerald-600") : "text-foreground";
+  const cor = saldo ? (valor < 0 ? "text-rose-600" : valor === 0 ? "text-muted-foreground" : "text-emerald-600") : "text-foreground";
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <p className="text-xs font-medium text-muted-foreground">{titulo}</p>
-      <p className={`mt-1 text-2xl font-bold tabular-nums ${cor}`}>{int(qtd)}</p>
-      <p className="text-xs text-muted-foreground tabular-nums">{brl(valor)}</p>
+      <p className={`mt-1 text-2xl font-bold tabular-nums ${cor}`}>{brl(valor)}</p>
+      <p className="text-xs text-muted-foreground tabular-nums">{int(qtd)} procedimento{qtd === 1 ? "" : "s"}</p>
     </div>
   );
 }
