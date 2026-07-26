@@ -13,6 +13,7 @@ import { Route as TfdRouteImport } from './routes/tfd'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as MinhasFichasRouteImport } from './routes/minhas-fichas'
 import { Route as LaudoAihRouteImport } from './routes/laudo-aih'
+import { Route as ImprimirRouteImport } from './routes/imprimir'
 import { Route as ImportarRouteImport } from './routes/importar'
 import { Route as FpoRouteImport } from './routes/fpo'
 import { Route as FechamentoRouteImport } from './routes/fechamento'
@@ -42,6 +43,11 @@ const MinhasFichasRoute = MinhasFichasRouteImport.update({
 const LaudoAihRoute = LaudoAihRouteImport.update({
   id: '/laudo-aih',
   path: '/laudo-aih',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImprimirRoute = ImprimirRouteImport.update({
+  id: '/imprimir',
+  path: '/imprimir',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImportarRoute = ImportarRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
   '/importar': typeof ImportarRoute
+  '/imprimir': typeof ImprimirRoute
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
   '/importar': typeof ImportarRoute
+  '/imprimir': typeof ImprimirRoute
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
   '/importar': typeof ImportarRoute
+  '/imprimir': typeof ImprimirRoute
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/fechamento'
     | '/fpo'
     | '/importar'
+    | '/imprimir'
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/fechamento'
     | '/fpo'
     | '/importar'
+    | '/imprimir'
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | '/fechamento'
     | '/fpo'
     | '/importar'
+    | '/imprimir'
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
@@ -206,6 +218,7 @@ export interface RootRouteChildren {
   FechamentoRoute: typeof FechamentoRoute
   FpoRoute: typeof FpoRoute
   ImportarRoute: typeof ImportarRoute
+  ImprimirRoute: typeof ImprimirRoute
   LaudoAihRoute: typeof LaudoAihRoute
   MinhasFichasRoute: typeof MinhasFichasRoute
   PerfilRoute: typeof PerfilRoute
@@ -240,6 +253,13 @@ declare module '@tanstack/react-router' {
       path: '/laudo-aih'
       fullPath: '/laudo-aih'
       preLoaderRoute: typeof LaudoAihRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/imprimir': {
+      id: '/imprimir'
+      path: '/imprimir'
+      fullPath: '/imprimir'
+      preLoaderRoute: typeof ImprimirRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/importar': {
@@ -326,6 +346,7 @@ const rootRouteChildren: RootRouteChildren = {
   FechamentoRoute: FechamentoRoute,
   FpoRoute: FpoRoute,
   ImportarRoute: ImportarRoute,
+  ImprimirRoute: ImprimirRoute,
   LaudoAihRoute: LaudoAihRoute,
   MinhasFichasRoute: MinhasFichasRoute,
   PerfilRoute: PerfilRoute,

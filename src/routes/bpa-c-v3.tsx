@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { exportSheetPdf } from "@/lib/export-pdf";
+import { exportSheetPdf, rasterizarFolhaJpeg } from "@/lib/export-pdf";
 import bpacBg from "@/assets/bpa-c (profissional).png";
 import { DigitBoxes, DigitBoxesClearableContext } from "@/components/DigitBoxes";
 import { ancorarDigitosDireita } from "@/lib/digitos-direita";
@@ -135,6 +135,9 @@ function BpaCV3() {
   // Impressão a partir de "Minhas fichas" (?print=1): carrega, renderiza e gera o PDF sozinho.
   // BPA-C é consolidado (sem PII de paciente), então não passa pelo log F4.
   const autoPrintRef = useRef(false);
+  // Modo captura (?capture=1): dentro de um iframe da página /imprimir. Rasteriza a folha e
+  // devolve a imagem por postMessage (impressão em lote) em vez de baixar o PDF.
+  const capturaRef = useRef(false);
   const [prontoImprimir, setProntoImprimir] = useState(false);
   const fichaIdRef = useRef<string | null>(null);
   const fichaTituloRef = useRef<string | null>(null);
@@ -173,7 +176,10 @@ function BpaCV3() {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const fichaParam = params?.get("ficha") ?? null;
     autoPrintRef.current = params?.get("print") === "1";
-    if (fichaParam) {
+    capturaRef.current = params?.get("capture") === "1";
+    if (fichaParam && capturaRef.current) {
+      carregarParaCaptura(fichaParam);
+    } else if (fichaParam) {
       carregarFichaSalva(fichaParam);
     } else {
       setState(loadState());
@@ -337,13 +343,38 @@ function BpaCV3() {
     refreshStatus(id);
     if (autoPrintRef.current) setProntoImprimir(true);
   };
+  // Carrega uma ficha só p/ CAPTURA (iframe de /imprimir): popula o estado e dispara a
+  // rasterização, SEM persistir no localStorage.
+  const carregarParaCaptura = async (id: string) => {
+    const ficha = await carregarFicha(id);
+    if (!ficha) { avisarCapturaFalhou(id, "ficha não encontrada"); return; }
+    fichaIdRef.current = id;
+    setState(normalizarQuantidades({ ...initialState(), ...(ficha.dados as Partial<State>) }));
+    setProntoImprimir(true);
+  };
+  const avisarCapturaFalhou = (id: string, erro: string) => {
+    try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: id, erro }, window.location.origin); } catch { /* noop */ }
+  };
+  const capturarEEnviar = async () => {
+    if (!sheetRef.current) return avisarCapturaFalhou(fichaIdRef.current ?? "", "sem folha");
+    setPrinting(true); // form-sheet--print: folha limpa como no PDF
+    await new Promise((r) => setTimeout(r, 80));
+    try {
+      await document.fonts?.ready;
+      const img = await rasterizarFolhaJpeg(sheetRef.current);
+      try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: fichaIdRef.current, img }, window.location.origin); } catch { /* noop */ }
+    } catch (err) {
+      avisarCapturaFalhou(fichaIdRef.current ?? "", err instanceof Error ? err.message : "falha ao rasterizar");
+    } finally { setPrinting(false); }
+  };
   // Auto-impressão (?print=1): quando a ficha carregou, espera a folha pintar e gera o PDF.
   useEffect(() => {
     if (!prontoImprimir) return;
     setProntoImprimir(false);
     (async () => {
       await new Promise((r) => setTimeout(r, 350));
-      await exportPdf();
+      if (capturaRef.current) await capturarEEnviar();
+      else await exportPdf();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prontoImprimir]);

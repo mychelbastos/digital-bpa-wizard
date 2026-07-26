@@ -57,6 +57,14 @@ async function rasterizarFolha(sheet: HTMLElement): Promise<HTMLCanvasElement> {
   });
 }
 
+// Rasteriza uma folha para um data URL JPEG (mesmo tratamento de <input> do PDF).
+// Usado pela impressão em lote (/imprimir): cada folha vira uma imagem enviada à página
+// de impressão, que junta tudo e chama window.print() — impressão nativa, sem download.
+export async function rasterizarFolhaJpeg(sheet: HTMLElement, quality = 0.95): Promise<string> {
+  const canvas = await rasterizarFolha(sheet);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
 // Render a form-sheet element to an A4 PDF.
 export async function exportSheetPdf(sheet: HTMLElement, filename: string) {
   const canvas = await rasterizarFolha(sheet);

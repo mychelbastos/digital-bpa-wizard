@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { statusDaFicha, retificarFicha, registrarLeituraFicha, type FichaStatus } from "@/lib/producoes";
 import { Snowflake, GitBranch } from "lucide-react";
-import { exportSheetPdf } from "@/lib/export-pdf";
+import { exportSheetPdf, rasterizarFolhaJpeg } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
@@ -205,6 +205,9 @@ function BpaI() {
   // Impressão a partir de "Minhas fichas" (?print=1): carrega, renderiza e gera o PDF
   // sozinho. autoPrintRef marca o modo; prontoImprimir dispara após a ficha carregar.
   const autoPrintRef = useRef(false);
+  // Modo captura (?capture=1): usado dentro de um iframe pela página /imprimir. Em vez de
+  // baixar o PDF, rasteriza a folha e devolve a imagem via postMessage — impressão em lote.
+  const capturaRef = useRef(false);
   const [prontoImprimir, setProntoImprimir] = useState(false);
   // Último CNS já resolvido p/ nome/CBO — evita reconsultar a cada render e não repete o
   // que o onPick do autocomplete já fez.
@@ -228,7 +231,11 @@ function BpaI() {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const fichaParam = params?.get("ficha") ?? null;
     autoPrintRef.current = params?.get("print") === "1";
-    if (fichaParam) {
+    capturaRef.current = params?.get("capture") === "1";
+    if (fichaParam && capturaRef.current) {
+      // Dentro do iframe de /imprimir: carrega só p/ rasterizar (sem mexer no localStorage).
+      carregarParaCaptura(fichaParam);
+    } else if (fichaParam) {
       // Aberta a partir de "Minhas fichas" (?ficha=<id>) — carrega direto do Supabase.
       carregarFichaSalva(fichaParam);
     } else {
@@ -355,6 +362,35 @@ function BpaI() {
     registrarLeituraFicha(id);
     // Aberta só p/ imprimir (?print=1): dispara o PDF depois que a folha renderizar.
     if (autoPrintRef.current) setProntoImprimir(true);
+  };
+  // Carrega uma ficha só p/ CAPTURA (iframe de /imprimir): popula o estado e dispara a
+  // rasterização, SEM persistir no localStorage (não sequestra a ficha aberta no editor).
+  const carregarParaCaptura = async (id: string) => {
+    const ficha = await carregarFicha(id);
+    if (!ficha) { avisarCapturaFalhou(id, "ficha não encontrada"); return; }
+    const merged = { ...initialState(), ...(ficha.dados as Partial<State>) };
+    merged.seqs = normalizarSeqs3(merged.seqs);
+    fichaIdRef.current = id; // só p/ o log LGPD abaixo
+    setState(merged);
+    setProntoImprimir(true);
+  };
+  // Envia à página /imprimir (pai) o resultado da captura desta folha.
+  const avisarCapturaFalhou = (id: string, erro: string) => {
+    try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: id, erro }, window.location.origin); } catch { /* noop */ }
+  };
+  const capturarEEnviar = async () => {
+    if (!sheetRef.current) return avisarCapturaFalhou(fichaIdRef.current ?? "", "sem folha");
+    setPrinting(true); // form-sheet--print: zera bordas/validação, folha limpa como no PDF
+    await new Promise((r) => setTimeout(r, 80));
+    try {
+      await document.fonts?.ready;
+      const img = await rasterizarFolhaJpeg(sheetRef.current);
+      // LGPD: imprimir é o dado do paciente saindo — registra no mesmo log (motivo='impressao').
+      if (fichaIdRef.current) registrarLeituraFicha(fichaIdRef.current, "impressao");
+      try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: fichaIdRef.current, img }, window.location.origin); } catch { /* noop */ }
+    } catch (err) {
+      avisarCapturaFalhou(fichaIdRef.current ?? "", err instanceof Error ? err.message : "falha ao rasterizar");
+    } finally { setPrinting(false); }
   };
   const novaFicha = () => {
     setState(initialState());
@@ -540,7 +576,8 @@ function BpaI() {
     setProntoImprimir(false);
     (async () => {
       await new Promise((r) => setTimeout(r, 350));
-      await exportPdf();
+      if (capturaRef.current) await capturarEEnviar();
+      else await exportPdf();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prontoImprimir]);
