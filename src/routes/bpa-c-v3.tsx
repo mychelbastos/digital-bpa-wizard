@@ -10,6 +10,7 @@ import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
@@ -310,10 +311,12 @@ function BpaCV3() {
   const nomeSugerido = (): string => {
     if (salvarComoNovo && fichaTituloRef.current) return `${fichaTituloRef.current} (cópia)`;
     if (fichaTituloRef.current) return fichaTituloRef.current;
-    const hoje = new Date().toLocaleDateString("pt-BR");
-    const folha = state.folha.join("").replace(/^0+(?=\d)/, "");
-    const partes = [state.profNome.trim().split(/\s+/)[0] || state.nome.trim().split(/\s+/)[0] || "", hoje, folha ? `Folha ${folha}` : ""].filter(Boolean);
-    return partes.join(" · ") || "Ficha BPA-C";
+    return montarTituloFicha({
+      cnes: state.cnes.join(""),
+      profNome: state.profNome,
+      competencia: competencia(),
+      folha: state.folha.join(""),
+    }) || "Ficha BPA-C";
   };
   const salvarNaNuvem = async (titulo: string) => {
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
@@ -361,8 +364,12 @@ function BpaCV3() {
     await new Promise((r) => setTimeout(r, 80));
     try {
       await document.fonts?.ready;
-      const img = await rasterizarFolhaJpeg(sheetRef.current);
-      try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: fichaIdRef.current, img }, window.location.origin); } catch { /* noop */ }
+      // Rasteriza TODAS as folhas (.form-sheet) — robusto a formulário de 2 páginas.
+      const folhas = Array.from(document.querySelectorAll<HTMLElement>(".form-sheet"));
+      const alvos = folhas.length ? folhas : [sheetRef.current];
+      const imgs: string[] = [];
+      for (const el of alvos) imgs.push(await rasterizarFolhaJpeg(el));
+      try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: fichaIdRef.current, imgs }, window.location.origin); } catch { /* noop */ }
     } catch (err) {
       avisarCapturaFalhou(fichaIdRef.current ?? "", err instanceof Error ? err.message : "falha ao rasterizar");
     } finally { setPrinting(false); }

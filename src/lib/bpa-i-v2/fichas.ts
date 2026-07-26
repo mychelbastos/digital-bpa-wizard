@@ -10,6 +10,12 @@ export interface FichaResumo {
   mes_producao: string | null;
   updated_at: string;
   tipo: "BPA-I" | "BPA-C";
+  // Campos p/ o rótulo padronizado da lista (CNES · nome/CNS · comp · folha). Vêm de
+  // subcampos do jsonb `dados`; profNome/profCns só existem no BPA-I.
+  origem?: string | null;
+  cnes?: string | null;
+  profNome?: string | null;
+  profCns?: string | null;
   // Ciclo de vida (Fase 3): congelada = produção do mês exportada/transmitida; substituída
   // = existe versão mais nova (retificação).
   congelada?: boolean;
@@ -102,13 +108,16 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
     const data = await buscarTodasPaginado<Record<string, unknown>>((de, ate) => {
       let req = supabase!
         .from("fichas")
-        .select("id, titulo, competencia, mes_producao, updated_at, tipo, substituida_por, producoes(status)")
+        // Subcampos do jsonb `dados` (CNES/nome/CNS) alimentam o rótulo padronizado da lista.
+        // São leves (não trazem o `dados` inteiro nem PII de paciente).
+        .select("id, titulo, competencia, mes_producao, updated_at, tipo, origem, substituida_por, cnesArr:dados->cnes, profNomeD:dados->>profNome, profCnsArr:dados->profCns, producoes(status)")
         .order("updated_at", { ascending: false })
         .order("id", { ascending: true })
         .range(de, ate);
       if (tipo) req = req.eq("tipo", tipo);
       return req;
     });
+    const juntar = (v: unknown) => (Array.isArray(v) ? v.join("") : "");
     return data.map((r) => {
       const prod = Array.isArray(r.producoes) ? r.producoes[0] : r.producoes;
       const st = (prod as { status?: string } | null | undefined)?.status;
@@ -119,6 +128,10 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
         mes_producao: (r.mes_producao as string) ?? null,
         updated_at: r.updated_at as string,
         tipo: r.tipo as "BPA-I" | "BPA-C",
+        origem: (r.origem as string) ?? null,
+        cnes: juntar(r.cnesArr),
+        profNome: (r.profNomeD as string) ?? "",
+        profCns: juntar(r.profCnsArr),
         congelada: st === "exportada" || st === "transmitida",
         substituida: Boolean(r.substituida_por),
       };

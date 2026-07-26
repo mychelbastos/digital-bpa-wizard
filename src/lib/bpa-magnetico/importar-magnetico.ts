@@ -2,10 +2,10 @@
 // view producao_dashboard e o Fechamento esperam (ver 20260715120000_producao_origem_e_descarte)
 // e insere em `fichas` marcando origem='importado' e mes_producao = competência de apresentação.
 import { supabase } from "@/lib/supabase";
+import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import type { ResultadoMagnetico, FichaBpaCImport, FichaBpaIImport } from "./parse-magnetico";
 
 const arr = (s: string) => s.split("");
-const labelComp = (c: string) => `${c.slice(4, 6)}/${c.slice(0, 4)}`;
 
 function dadosBpaC(f: FichaBpaCImport, nome: string) {
   return {
@@ -32,9 +32,6 @@ function dadosBpaI(f: FichaBpaIImport, nomeEstab: string) {
   };
 }
 
-// Sufixo "· folha 2/5" só quando o grupo foi quebrado em mais de uma ficha.
-const sufixoFolha = (folha: number, total: number) => (total > 1 ? ` · folha ${folha}/${total}` : "");
-
 export interface ResumoGravacao {
   fichas: number;
   bpaC: number;
@@ -51,7 +48,7 @@ export async function gravarMagnetico(
 ): Promise<ResumoGravacao> {
   if (!supabase) return { fichas: 0, bpaC: 0, bpaI: 0, erro: "Sem conexão com o banco." };
   const payloadC = res.fichasC.map((f) => ({
-    titulo: `BPA-C · ${f.cnes} · ${labelComp(f.competencia)}${sufixoFolha(f.folha, f.totalFolhas)} (importado)`,
+    titulo: montarTituloFicha({ cnes: f.cnes, competencia: f.competencia, folha: f.folha, totalFolhas: f.totalFolhas, importado: true }),
     competencia: f.competencia,
     dados: dadosBpaC(f, nomesEstab[f.cnes]),
     tipo: "BPA-C" as const,
@@ -62,7 +59,7 @@ export async function gravarMagnetico(
     origem: "importado" as const,
   }));
   const payloadI = res.fichasI.map((f) => ({
-    titulo: `BPA-I · ${f.profCns || "s/CNS"} · ${labelComp(f.competencia)}${sufixoFolha(f.folha, f.totalFolhas)} (importado)`,
+    titulo: montarTituloFicha({ cnes: f.cnes, profCns: f.profCns, competencia: f.competencia, folha: f.folha, totalFolhas: f.totalFolhas, importado: true }),
     competencia: f.competencia,
     dados: dadosBpaI(f, nomesEstab[f.cnes]),
     tipo: "BPA-I" as const,

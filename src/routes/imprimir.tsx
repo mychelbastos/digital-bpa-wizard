@@ -19,49 +19,50 @@ function parseItens(): Item[] {
 }
 const rotaEditor = (it: Item) => (it.tipo === "BPA-C" ? "/bpa-c-v3" : "/bpa-i-v3");
 
-const TIMEOUT_MS = 25000; // trava de segurança por folha
+const TIMEOUT_MS = 30000; // trava de segurança por ficha
+
+// pages = imagens A4 acumuladas (uma ficha pode devolver mais de uma folha);
+// done = quantas fichas já foram processadas (define qual é a próxima a capturar).
+interface Estado { pages: (string | null)[]; done: number }
 
 function ImprimirPage() {
   const [itens] = useState<Item[]>(() => (typeof window !== "undefined" ? parseItens() : []));
-  // Resultado por folha, na ordem: dataURL da imagem ou null (falhou). O próximo a capturar
-  // é sempre o de índice = capturas.length (captura sequencial, um iframe por vez).
-  const [capturas, setCapturas] = useState<(string | null)[]>([]);
-  const [pronto, setPronto] = useState(false);
+  const [estado, setEstado] = useState<Estado>({ pages: [], done: 0 });
   const jaImprimiu = useRef(false);
-  const idx = capturas.length;
-  const concluido = itens.length > 0 && idx >= itens.length;
+  const idx = estado.done;
+  const concluido = itens.length > 0 && estado.done >= itens.length;
 
-  // Escuta as imagens que cada iframe (folha) devolve.
+  // Recebe as imagens que cada iframe (ficha) devolve. Uma ficha pode mandar N folhas.
   useEffect(() => {
     function onMsg(e: MessageEvent) {
       if (e.origin !== window.location.origin) return;
-      const d = e.data as { tipo?: string; img?: string } | null;
+      const d = e.data as { tipo?: string; imgs?: string[]; img?: string } | null;
       if (!d || d.tipo !== "bpa-captura") return;
-      setCapturas((prev) => [...prev, d.img ?? null]);
+      const pages = Array.isArray(d.imgs) ? d.imgs : d.img ? [d.img] : [];
+      setEstado((s) => ({ pages: [...s.pages, ...(pages.length ? pages : [null])], done: s.done + 1 }));
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, []);
 
-  // Trava de segurança: se a folha atual não responder a tempo, marca como falha e avança.
+  // Trava de segurança: se a ficha atual não responder a tempo, marca falha e avança.
   useEffect(() => {
     if (concluido || itens.length === 0) return;
     const alvo = idx;
-    const t = window.setTimeout(() => setCapturas((prev) => (prev.length === alvo ? [...prev, null] : prev)), TIMEOUT_MS);
+    const t = window.setTimeout(() => setEstado((s) => (s.done === alvo ? { pages: [...s.pages, null], done: s.done + 1 } : s)), TIMEOUT_MS);
     return () => clearTimeout(t);
   }, [idx, concluido, itens.length]);
 
-  // Terminou de capturar tudo → abre a impressão do navegador (uma vez).
+  // Terminou tudo → abre a impressão do navegador (uma vez).
   useEffect(() => {
     if (!concluido || jaImprimiu.current) return;
     jaImprimiu.current = true;
-    setPronto(true);
     const t = window.setTimeout(() => window.print(), 600);
     return () => clearTimeout(t);
   }, [concluido]);
 
-  const okCount = capturas.filter(Boolean).length;
-  const falhas = capturas.filter((c) => c === null).length;
+  const okCount = estado.pages.filter(Boolean).length;
+  const falhas = estado.pages.filter((c) => c === null).length;
 
   if (itens.length === 0) {
     return (
@@ -98,7 +99,7 @@ function ImprimirPage() {
       <div className="no-print sticky top-0 z-10 flex items-center gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <a href="/minhas-fichas" className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"><ArrowLeft className="size-4" /> Voltar</a>
         {!concluido ? (
-          <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Preparando folha {Math.min(idx + 1, itens.length)} de {itens.length}…</span>
+          <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Preparando ficha {Math.min(idx + 1, itens.length)} de {itens.length}…</span>
         ) : (
           <span className="text-sm text-foreground">{okCount} folha{okCount === 1 ? "" : "s"} pronta{okCount === 1 ? "" : "s"}{falhas > 0 ? ` · ${falhas} falhou(aram)` : ""}.</span>
         )}
@@ -109,7 +110,7 @@ function ImprimirPage() {
         ><Printer className="size-4" /> Imprimir</button>
       </div>
 
-      {/* Iframe de captura da folha atual: oculto e fora da impressão. Um por vez (key=idx). */}
+      {/* Iframe de captura da ficha atual: oculto e fora da impressão. Uma por vez (key=idx). */}
       {!concluido && (
         <iframe
           key={idx}
@@ -122,18 +123,18 @@ function ImprimirPage() {
 
       {/* Folhas capturadas — uma por página A4 na impressão. */}
       <div className="folhas-wrap mx-auto max-w-[820px] py-4">
-        {capturas.map((img, i) =>
+        {estado.pages.map((img, i) =>
           img ? (
             <div key={i} className="folha-print mx-auto mb-4 bg-white shadow">
               <img src={img} alt={`Folha ${i + 1}`} className="block w-full" />
             </div>
           ) : (
             <div key={i} className="no-print mx-auto mb-4 flex h-24 items-center justify-center rounded border border-dashed border-rose-300 bg-rose-50 text-xs text-rose-600">
-              Folha {i + 1}: falha ao preparar (pulada).
+              Uma ficha falhou ao preparar (pulada).
             </div>
           ),
         )}
-        {!pronto && (
+        {!concluido && (
           <div className="no-print flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Montando as folhas…
           </div>

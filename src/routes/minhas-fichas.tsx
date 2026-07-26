@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, Square, CheckSquare, X } from "lucide-react";
+import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X } from "lucide-react";
 import { listarFichas, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { rotuloExibicao } from "@/lib/bpa-i-v2/titulo-ficha";
 
 export const Route = createFileRoute("/minhas-fichas")({
   head: () => ({ meta: [{ title: "Minhas fichas — BPA" }] }),
@@ -32,6 +33,7 @@ function MinhasFichasPage() {
   const [mesSel, setMesSel] = useState<string | null>(null);
   const [tipoSel, setTipoSel] = useState<TipoFiltro>("todos");
   const [pagina, setPagina] = useState(1);
+  const [verTodas, setVerTodas] = useState(false);
   const [menuMesesAberto, setMenuMesesAberto] = useState(false);
   // Modo "imprimir várias": caixinhas por ficha + seleção da página inteira.
   const [selMode, setSelMode] = useState(false);
@@ -98,7 +100,9 @@ function MinhasFichasPage() {
   const totalPaginas = Math.max(1, Math.ceil(itensFiltrados.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
   const inicio = (paginaAtual - 1) * PAGE_SIZE;
-  const itensPagina = itensFiltrados.slice(inicio, inicio + PAGE_SIZE);
+  // "Ver todas": mostra a lista inteira do filtro (sem paginar). Aí "selecionar todas"
+  // passa a abranger TODAS as fichas visíveis, independentemente da quantidade.
+  const itensPagina = verTodas ? itensFiltrados : itensFiltrados.slice(inicio, inicio + PAGE_SIZE);
 
   // Agrupa a fatia da página por mês, só para exibir os cabeçalhos "Produção de …".
   const secoesPagina: { comp: string | null; itens: FichaResumo[] }[] = [];
@@ -133,6 +137,34 @@ function MinhasFichasPage() {
     window.open(`/imprimir?itens=${toks.join(",")}`, "_blank", "noopener");
   };
 
+  // Barra de paginação (renderizada acima e abaixo da lista). Traz o "Ver todas as fichas":
+  // ao ativar, some a paginação e a lista inteira do filtro aparece — e "selecionar todas"
+  // passa a abranger tudo que está visível.
+  const barraPaginacao = (totalPaginas > 1 || verTodas) ? (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      {verTodas ? (
+        <>
+          <span className="px-2 text-xs text-muted-foreground">Mostrando todas as {itensFiltrados.length} fichas</span>
+          <button onClick={() => setVerTodas(false)} className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">Mostrar paginado</button>
+        </>
+      ) : (
+        <>
+          <button disabled={paginaAtual === 1} onClick={() => setPagina((p) => Math.max(1, p - 1))} className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40">
+            <ChevronLeft className="size-4" /> Anterior
+          </button>
+          <span className="px-2 text-xs text-muted-foreground">Página {paginaAtual} de {totalPaginas} · {itensFiltrados.length} fichas</span>
+          <button disabled={paginaAtual === totalPaginas} onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40">
+            Próxima <ChevronRight className="size-4" />
+          </button>
+          <span className="mx-1 h-4 w-px bg-border" />
+          <button onClick={() => setVerTodas(true)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
+            <FileText className="size-3.5" /> Ver todas as fichas
+          </button>
+        </>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
       <header className="border-b bg-background/95 px-4 py-3 backdrop-blur">
@@ -160,33 +192,11 @@ function MinhasFichasPage() {
                 </button>
               ))}
               <span className="ml-auto text-xs text-muted-foreground">{itensFiltrados.length} ficha{itensFiltrados.length === 1 ? "" : "s"}</span>
-              {!selMode && (
-                <button onClick={() => setSelMode(true)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
-                  <Printer className="size-3.5" /> Imprimir várias
-                </button>
-              )}
-            </div>
-
-            {/* Menu por mês/ano — carrossel em linha própria (largura total) para caberem
-                muitos meses; "Geral" fixo à esquerda, setas e dropdown "Meses" nas pontas. */}
-            <div className="mb-5 flex items-center gap-1.5">
-              <button onClick={() => setMesSel("todos")} className={pill(mesAtivo === "todos")}>
-                Geral <span className="opacity-70">({fichas.length})</span>
-              </button>
-              <span className="mx-0.5 h-4 w-px bg-border" />
-              <button onClick={() => rolar(-1)} aria-label="Anterior" className="shrink-0 rounded-full border border-border bg-card p-1 text-muted-foreground hover:bg-muted"><ChevronLeft className="size-4" /></button>
-              <div ref={stripRef} className="flex flex-1 gap-1.5 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {grupos.map((g) => (
-                  <button key={chaveMes(g.comp)} onClick={() => setMesSel(chaveMes(g.comp))} className={`${pill(mesAtivo === chaveMes(g.comp))} capitalize`}>
-                    {labelComp(g.comp)} <span className="opacity-70">({g.itens.length})</span>
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => rolar(1)} aria-label="Próximo" className="shrink-0 rounded-full border border-border bg-card p-1 text-muted-foreground hover:bg-muted"><ChevronRight className="size-4" /></button>
-              {/* Ver todos os meses (dropdown) — útil quando há muitos meses. */}
+              {/* Ver todos os meses (dropdown) — fica aqui em cima p/ não roubar largura do
+                  carrossel; útil quando há muitos meses. */}
               <div className="relative shrink-0">
-                <button onClick={() => setMenuMesesAberto((v) => !v)} className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground hover:bg-muted">
-                  Meses <ChevronDown className="size-3.5" />
+                <button onClick={() => setMenuMesesAberto((v) => !v)} className="flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
+                  <CalendarDays className="size-3.5" /> Meses <ChevronDown className="size-3.5" />
                 </button>
                 {menuMesesAberto && (
                   <>
@@ -204,6 +214,29 @@ function MinhasFichasPage() {
                   </>
                 )}
               </div>
+              {!selMode && (
+                <button onClick={() => setSelMode(true)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
+                  <Printer className="size-3.5" /> Imprimir várias
+                </button>
+              )}
+            </div>
+
+            {/* Menu por mês/ano — carrossel em linha própria (largura total). "Geral" fixo à
+                esquerda, setas nas pontas; o "Meses" (dropdown) fica na linha de cima. */}
+            <div className="mb-5 flex items-center gap-1.5">
+              <button onClick={() => setMesSel("todos")} className={pill(mesAtivo === "todos")}>
+                Geral <span className="opacity-70">({fichas.length})</span>
+              </button>
+              <span className="mx-0.5 h-4 w-px bg-border" />
+              <button onClick={() => rolar(-1)} aria-label="Anterior" className="shrink-0 rounded-full border border-border bg-card p-1 text-muted-foreground hover:bg-muted"><ChevronLeft className="size-4" /></button>
+              <div ref={stripRef} className="flex flex-1 gap-1.5 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {grupos.map((g) => (
+                  <button key={chaveMes(g.comp)} onClick={() => setMesSel(chaveMes(g.comp))} className={`${pill(mesAtivo === chaveMes(g.comp))} capitalize`}>
+                    {labelComp(g.comp)} <span className="opacity-70">({g.itens.length})</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => rolar(1)} aria-label="Próximo" className="shrink-0 rounded-full border border-border bg-card p-1 text-muted-foreground hover:bg-muted"><ChevronRight className="size-4" /></button>
             </div>
 
             {/* Barra de seleção (modo imprimir várias). */}
@@ -211,7 +244,9 @@ function MinhasFichasPage() {
               <div className="sticky top-0 z-10 mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 backdrop-blur">
                 <button onClick={toggleTodasPagina} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
                   {todasPaginaSel ? <CheckSquare className="size-3.5 text-primary" /> : <Square className="size-3.5" />}
-                  {todasPaginaSel ? "Desmarcar página" : "Selecionar todas (página)"}
+                  {todasPaginaSel
+                    ? (verTodas ? "Desmarcar todas" : "Desmarcar página")
+                    : (verTodas ? `Selecionar todas (${itensFiltrados.length})` : "Selecionar todas (página)")}
                 </button>
                 <span className="text-xs text-muted-foreground">{sel.size} selecionada{sel.size === 1 ? "" : "s"}</span>
                 <button onClick={imprimirSelecionadas} disabled={sel.size === 0} className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
@@ -227,6 +262,7 @@ function MinhasFichasPage() {
               <p className="py-12 text-center text-sm text-muted-foreground">Nenhuma ficha para este filtro.</p>
             ) : (
               <>
+                {barraPaginacao && <div className="mb-4">{barraPaginacao}</div>}
                 {secoesPagina.map((g) => (
                   <section key={g.comp ?? "sem"} className="mb-6">
                     <h2 className="mb-2 text-sm font-semibold text-foreground">
@@ -254,7 +290,7 @@ function MinhasFichasPage() {
                           )}
                           {selMode ? (
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium text-foreground">{f.titulo || "Ficha sem nome"}</div>
+                              <div className="truncate text-sm font-medium text-foreground">{rotuloExibicao(f)}</div>
                               <div className="text-xs text-muted-foreground">Atualizada {new Date(f.updated_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</div>
                             </div>
                           ) : editandoId === f.id ? (
@@ -267,7 +303,7 @@ function MinhasFichasPage() {
                           ) : (
                             <>
                               <a href={rotaDoTipo(f.tipo, f.id)} className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium text-foreground">{f.titulo || "Ficha sem nome"}</div>
+                                <div className="truncate text-sm font-medium text-foreground">{rotuloExibicao(f)}</div>
                                 <div className="text-xs text-muted-foreground">Atualizada {new Date(f.updated_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</div>
                               </a>
                               <a href={rotaDoTipo(f.tipo, f.id)} className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"><FileText className="mr-1 inline size-3.5" />Abrir</a>
@@ -289,18 +325,7 @@ function MinhasFichasPage() {
                   </section>
                 ))}
 
-                {/* Paginação. */}
-                {totalPaginas > 1 && (
-                  <div className="mt-4 flex items-center justify-center gap-2">
-                    <button disabled={paginaAtual === 1} onClick={() => setPagina((p) => Math.max(1, p - 1))} className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40">
-                      <ChevronLeft className="size-4" /> Anterior
-                    </button>
-                    <span className="px-2 text-xs text-muted-foreground">Página {paginaAtual} de {totalPaginas} · {itensFiltrados.length} fichas</span>
-                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40">
-                      Próxima <ChevronRight className="size-4" />
-                    </button>
-                  </div>
-                )}
+                {barraPaginacao && <div className="mt-4">{barraPaginacao}</div>}
               </>
             )}
           </>

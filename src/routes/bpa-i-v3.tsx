@@ -17,6 +17,7 @@ import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -251,16 +252,18 @@ function BpaI() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Nome sugerido ao salvar: "primeiro nome do profissional · data de hoje · Folha nnn".
+  // Nome sugerido ao salvar (padrão): "CNES · Nome prof (1º+último) · MM/AAAA · folha N".
   // Se a ficha já foi salva antes, sugere o título atual (para não trocar sem querer).
   const nomeSugerido = (): string => {
     if (salvarComoNovo && fichaTituloRef.current) return `${fichaTituloRef.current} (cópia)`;
     if (fichaTituloRef.current) return fichaTituloRef.current;
-    const primeiroNome = state.profNome.trim().split(/\s+/)[0] ?? "";
-    const hoje = new Date().toLocaleDateString("pt-BR");
-    const folha = state.profFolha.join("").replace(/^0+(?=\d)/, "");
-    const partes = [primeiroNome, hoje, folha ? `Folha ${folha}` : ""].filter(Boolean);
-    return partes.join(" · ") || "Ficha BPA-I";
+    return montarTituloFicha({
+      cnes: state.cnes.join(""),
+      profNome: state.profNome,
+      profCns: state.profCns.join(""),
+      competencia: competencia(),
+      folha: state.profFolha.join(""),
+    }) || "Ficha BPA-I";
   };
 
   // Mantém os refs e o localStorage sincronizados (sobrevive a reload da página).
@@ -384,10 +387,15 @@ function BpaI() {
     await new Promise((r) => setTimeout(r, 80));
     try {
       await document.fonts?.ready;
-      const img = await rasterizarFolhaJpeg(sheetRef.current);
+      // Rasteriza TODAS as folhas (.form-sheet) — hoje o BPA-I tem 1, mas se um formulário
+      // tiver 2 páginas, as duas vão juntas na impressão.
+      const folhas = Array.from(document.querySelectorAll<HTMLElement>(".form-sheet"));
+      const alvos = folhas.length ? folhas : [sheetRef.current];
+      const imgs: string[] = [];
+      for (const el of alvos) imgs.push(await rasterizarFolhaJpeg(el));
       // LGPD: imprimir é o dado do paciente saindo — registra no mesmo log (motivo='impressao').
       if (fichaIdRef.current) registrarLeituraFicha(fichaIdRef.current, "impressao");
-      try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: fichaIdRef.current, img }, window.location.origin); } catch { /* noop */ }
+      try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: fichaIdRef.current, imgs }, window.location.origin); } catch { /* noop */ }
     } catch (err) {
       avisarCapturaFalhou(fichaIdRef.current ?? "", err instanceof Error ? err.message : "falha ao rasterizar");
     } finally { setPrinting(false); }
