@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, buscarTodasPaginado } from "@/lib/supabase";
 
 export type TipoBpa = "BPA-C" | "BPA-I";
 
@@ -35,15 +35,20 @@ const COLS =
   "id,tipo,competencia,mes_producao,cnes,estabelecimento_nome,profissional_cns,profissional_nome,cbo,procedimento,quantidade,servico,classificacao,cid,carater,idade";
 
 // Produção de um MÊS DE PRODUÇÃO, já no escopo do usuário (RLS). Sem mês, vazio.
+// Pagina para pegar TODAS as linhas: a produção de um mês passa fácil de 1.000 linhas
+// (teto do PostgREST por resposta) e o total é somado no cliente — truncar aqui subnotifica
+// a dashboard (foi a causa do "5.990 em vez de 12.560"). Ordena por id (único e estável).
 export async function carregarProducaoDashboard(mesProducao?: string): Promise<ProducaoBpaRow[]> {
   if (!supabase || !mesProducao) return [];
   try {
-    const { data, error } = await supabase
-      .from("producao_dashboard")
-      .select(COLS)
-      .eq("mes_producao", mesProducao)
-      .limit(10000);
-    return error || !data ? [] : (data as ProducaoBpaRow[]);
+    return await buscarTodasPaginado<ProducaoBpaRow>((de, ate) =>
+      supabase!
+        .from("producao_dashboard")
+        .select(COLS)
+        .eq("mes_producao", mesProducao)
+        .order("id", { ascending: true })
+        .range(de, ate),
+    );
   } catch {
     return [];
   }

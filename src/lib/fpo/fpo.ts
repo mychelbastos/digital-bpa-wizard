@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, buscarTodasPaginado } from "@/lib/supabase";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { carregarNomesProcedimentos } from "@/lib/dashboard-producao";
 import type { FpoLinhaParsed } from "./parse-fpo";
@@ -122,16 +122,19 @@ export interface FpoComparacaoRow {
 // e produção de procedimento sem teto (estouro de item não orçado).
 export async function carregarComparacaoFpo(cnes: string, competencia: string): Promise<FpoComparacaoRow[]> {
   if (!supabase || !cnes || !competencia) return [];
-  const [{ data: tetos }, { data: prod }] = await Promise.all([
+  const [{ data: tetos }, prod] = await Promise.all([
     supabase.from("fpo_teto").select("procedimento, competencia, qtd_orcada, valor_unitario, codigo_fpo, descricao_fpo, resolvido")
       .eq("cnes", cnes).lte("competencia", competencia),
-    supabase.from("producao_dashboard").select("procedimento, quantidade")
-      .eq("cnes", cnes).eq("mes_producao", competencia),
+    // Pagina: a produção de um mês passa de 1.000 linhas (teto do PostgREST) e é somada
+    // no cliente — truncar subnotifica o "produzido" da FPO.
+    buscarTodasPaginado<{ procedimento: string; quantidade: number }>((de, ate) =>
+      supabase!.from("producao_dashboard").select("procedimento, quantidade")
+        .eq("cnes", cnes).eq("mes_producao", competencia).order("id", { ascending: true }).range(de, ate)),
   ]);
 
   // Produção somada por procedimento (10 díg.).
   const produzidoPor = new Map<string, number>();
-  for (const r of (prod ?? []) as { procedimento: string; quantidade: number }[]) {
+  for (const r of prod as { procedimento: string; quantidade: number }[]) {
     produzidoPor.set(r.procedimento, (produzidoPor.get(r.procedimento) ?? 0) + (r.quantidade || 0));
   }
 
@@ -198,11 +201,13 @@ export interface FpoResumoUnidade {
 export async function carregarResumoFpo(cnesList: string[], competencia: string): Promise<FpoResumoUnidade[]> {
   const cnes = [...new Set(cnesList.filter(Boolean))];
   if (!supabase || cnes.length === 0 || !competencia) return [];
-  const [{ data: tetos }, { data: prod }] = await Promise.all([
+  const [{ data: tetos }, prod] = await Promise.all([
     supabase.from("fpo_teto").select("cnes, procedimento, competencia, qtd_orcada, valor_unitario")
       .in("cnes", cnes).lte("competencia", competencia),
-    supabase.from("producao_dashboard").select("cnes, procedimento, quantidade")
-      .in("cnes", cnes).eq("mes_producao", competencia),
+    // Pagina: junho passa de 1.000 linhas somando todas as unidades (teto do PostgREST).
+    buscarTodasPaginado<{ cnes: string; procedimento: string; quantidade: number }>((de, ate) =>
+      supabase!.from("producao_dashboard").select("cnes, procedimento, quantidade")
+        .in("cnes", cnes).eq("mes_producao", competencia).order("id", { ascending: true }).range(de, ate)),
   ]);
 
   // Teto vigente por (cnes, procedimento) = maior competência ≤ X.
@@ -216,7 +221,7 @@ export async function carregarResumoFpo(cnesList: string[], competencia: string)
 
   // Produção somada por (cnes, procedimento).
   const prodPor = new Map<string, number>();
-  for (const p of (prod ?? []) as { cnes: string; procedimento: string; quantidade: number }[]) {
+  for (const p of prod as { cnes: string; procedimento: string; quantidade: number }[]) {
     const k = `${p.cnes}|${p.procedimento}`;
     prodPor.set(k, (prodPor.get(k) ?? 0) + (p.quantidade || 0));
   }

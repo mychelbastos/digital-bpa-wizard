@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, buscarTodasPaginado } from "@/lib/supabase";
 
 // Persistência das fichas do BPA-I v2 no Supabase (tabela `fichas`, RLS dono-apenas).
 // Tudo null-safe: sem config/login/erro, degrada p/ localStorage sem quebrar o form.
@@ -95,15 +95,21 @@ export async function renomearFicha(id: string, titulo: string): Promise<boolean
 export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResumo[]> {
   if (!supabase) return [];
   try {
-    let req = supabase
-      .from("fichas")
-      .select("id, titulo, competencia, mes_producao, updated_at, tipo, substituida_por, producoes(status)")
-      .order("updated_at", { ascending: false })
-      .limit(200);
-    if (tipo) req = req.eq("tipo", tipo);
-    const { data, error } = await req;
-    if (error || !data) return [];
-    return (data as unknown as Array<Record<string, unknown>>).map((r) => {
+    // Pagina TODAS as fichas: antes havia um .limit(200) por updated_at desc, então uma
+    // importação grande (ex.: complemento de junho, 369 fichas) empurrava os meses antigos
+    // para fora da lista ("jan–maio sumiram"). A tela agrupa por mês no cliente, então
+    // precisamos de todas. Ordena por updated_at desc como chave estável da paginação.
+    const data = await buscarTodasPaginado<Record<string, unknown>>((de, ate) => {
+      let req = supabase!
+        .from("fichas")
+        .select("id, titulo, competencia, mes_producao, updated_at, tipo, substituida_por, producoes(status)")
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(de, ate);
+      if (tipo) req = req.eq("tipo", tipo);
+      return req;
+    });
+    return data.map((r) => {
       const prod = Array.isArray(r.producoes) ? r.producoes[0] : r.producoes;
       const st = (prod as { status?: string } | null | undefined)?.status;
       return {
@@ -129,10 +135,19 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
 export async function fichasDoMes(mesProducao: string, cnes?: string): Promise<FichaCompleta[]> {
   if (!supabase) return [];
   try {
-    let req = supabase.from("fichas").select("id, tipo, mes_producao, dados").eq("mes_producao", mesProducao).limit(500);
-    if (cnes) req = req.eq("cnes", cnes);
-    const { data, error } = await req;
-    return error || !data ? [] : (data as FichaCompleta[]);
+    // Pagina TODAS as fichas do mês: isto alimenta o Fechamento/exportação do .txt, então
+    // truncar (havia .limit(500)) geraria arquivo INCOMPLETO para o SIA quando o mês passa
+    // de 500/1.000 fichas. Ordena por id (estável) para a paginação.
+    return await buscarTodasPaginado<FichaCompleta>((de, ate) => {
+      let req = supabase!
+        .from("fichas")
+        .select("id, tipo, mes_producao, dados")
+        .eq("mes_producao", mesProducao)
+        .order("id", { ascending: true })
+        .range(de, ate);
+      if (cnes) req = req.eq("cnes", cnes);
+      return req;
+    });
   } catch {
     return [];
   }

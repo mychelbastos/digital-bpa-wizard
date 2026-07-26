@@ -14,3 +14,22 @@ export const supabase: SupabaseClient | null = supabaseConfigured
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
     })
   : null;
+
+// Busca TODAS as linhas de uma consulta, contornando o teto de linhas do PostgREST
+// (o Supabase corta em 1.000 por resposta, mesmo com .limit() maior). Recebe uma função
+// que monta a query para o intervalo [de, ate] (via .range) e itera páginas até esgotar.
+// IMPORTANTE: a query montada DEVE ter um .order() estável, senão a paginação pode
+// repetir/pular linhas entre as páginas. Nunca lança: em erro, devolve o que já juntou.
+export async function buscarTodasPaginado<T>(
+  montar: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  tamanhoPagina = 1000,
+): Promise<T[]> {
+  const todas: T[] = [];
+  for (let de = 0; ; de += tamanhoPagina) {
+    const { data, error } = await montar(de, de + tamanhoPagina - 1);
+    if (error || !data) break;
+    todas.push(...data);
+    if (data.length < tamanhoPagina) break;
+  }
+  return todas;
+}
