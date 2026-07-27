@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X } from "lucide-react";
 import { listarFichas, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { buscarNomesPorCns } from "@/lib/bpa-i-v2/profissionais";
 import { rotuloExibicao } from "@/lib/bpa-i-v2/titulo-ficha";
 
 export const Route = createFileRoute("/minhas-fichas")({
@@ -41,7 +42,23 @@ function MinhasFichasPage() {
   const stripRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    listarFichas().then((f) => { setFichas(f); setCarregando(false); });
+    listarFichas().then(async (f) => {
+      setFichas(f);
+      setCarregando(false);
+      // Fichas importadas guardam só o CNS — resolve o nome do profissional (na tabela
+      // `profissionais`) p/ o rótulo mostrar o nome no lugar do CNS. Uma consulta em lote.
+      const pares = f
+        .filter((x) => !x.profNome && x.profCns && x.cnes)
+        .map((x) => ({ cnes: x.cnes!, cns: x.profCns! }));
+      if (pares.length === 0) return;
+      const mapa = await buscarNomesPorCns(pares);
+      if (mapa.size === 0) return;
+      setFichas((prev) => prev.map((x) => {
+        if (x.profNome || !x.profCns) return x;
+        const nome = mapa.get(`${x.cnes}|${x.profCns}`) ?? mapa.get(x.profCns);
+        return nome ? { ...x, profNome: nome } : x;
+      }));
+    });
   }, []);
 
   const confirmarRenomeio = async (id: string) => {

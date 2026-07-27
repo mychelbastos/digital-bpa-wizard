@@ -61,6 +61,25 @@ export async function buscarNomePorCns(cnes: string, cns: string): Promise<strin
   }
 }
 
+// Lote CNS -> nome, p/ o rótulo das fichas importadas em "Minhas fichas" (que guardam só o
+// CNS). Uma consulta só, por conjunto de CNS. Retorna um mapa com DUAS chaves por acerto:
+// "cnes|cns" (exata) e "cns" (fallback p/ quem trocou de unidade). Nunca lança.
+export async function buscarNomesPorCns(pares: { cnes: string; cns: string }[]): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>();
+  if (!supabase || pares.length === 0) return mapa;
+  const cnsSet = [...new Set(pares.map((p) => p.cns).filter((c) => /^[0-9]{15}$/.test(c)))];
+  if (cnsSet.length === 0) return mapa;
+  try {
+    const { data } = await supabase.from("profissionais").select("cnes, cns, nome").in("cns", cnsSet);
+    for (const r of (data ?? []) as { cnes: string; cns: string; nome: string }[]) {
+      if (!r.nome) continue;
+      mapa.set(`${r.cnes}|${r.cns}`, r.nome);
+      if (!mapa.has(r.cns)) mapa.set(r.cns, r.nome); // fallback: primeiro nome achado p/ o CNS
+    }
+  } catch { /* noop */ }
+  return mapa;
+}
+
 // Busca (sob demanda) os CBOs do VÍNCULO do profissional NAQUELE estabelecimento
 // (CNS + CNES), via a Edge Function (VinculacaoProfissionalService) + cache.
 // Pode retornar 0, 1 ou mais CBOs (profissional com múltiplos vínculos no estabelecimento).
