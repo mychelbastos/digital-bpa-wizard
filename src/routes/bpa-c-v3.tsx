@@ -11,6 +11,7 @@ import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
+import { proximaFolhaBpaC, assinaturaBpaC, acharDuplicataBpaC, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
@@ -19,7 +20,7 @@ import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { statusDaFicha, retificarFicha, type FichaStatus } from "@/lib/producoes";
-import { Snowflake, GitBranch } from "lucide-react";
+import { Snowflake, GitBranch, Undo2 } from "lucide-react";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   NOME_PROFISSIONAL_FIELD,
@@ -154,6 +155,7 @@ function BpaCV3() {
   const [salvarComoNovo, setSalvarComoNovo] = useState(false);
   const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
   const [salvandoDireto, setSalvandoDireto] = useState(false);
+  const [dupModal, setDupModal] = useState<{ dup: FichaDuplicada; prosseguir: () => void } | null>(null);
   const [fichasOpen, setFichasOpen] = useState(false);
   // Ciclo de vida da ficha (Fase 3).
   const [ficStatus, setFicStatus] = useState<FichaStatus | null>(null);
@@ -164,6 +166,44 @@ function BpaCV3() {
     if (!id) { setFicStatus(null); return; }
     statusDaFicha(id).then(setFicStatus);
   }, []);
+  // ----- Desfazer (undo) — reverte a ÚLTIMA alteração do formulário (ex.: apagou/errou
+  // um dígito). Guardamos snapshots do estado; cada edição empilha o estado anterior.
+  // `skipHist` marca as transições que NÃO devem virar ponto de undo (o próprio desfazer,
+  // carregar/zerar-tudo/nova ficha). Limite de 60 passos p/ não crescer sem fim.
+  const undoStack = useRef<State[]>([]);
+  const skipHist = useRef(false);
+  const prevStateRef = useRef<State>(state);
+  const [podeDesfazer, setPodeDesfazer] = useState(false);
+  const resetHistorico = () => { undoStack.current = []; skipHist.current = true; setPodeDesfazer(false); };
+  useEffect(() => {
+    if (!hydrated) { prevStateRef.current = state; return; }
+    if (skipHist.current) { skipHist.current = false; prevStateRef.current = state; return; }
+    undoStack.current.push(prevStateRef.current);
+    if (undoStack.current.length > 60) undoStack.current.shift();
+    prevStateRef.current = state;
+    setPodeDesfazer(true);
+  }, [state, hydrated]);
+  const desfazer = useCallback(() => {
+    const anterior = undoStack.current.pop();
+    if (!anterior) return;
+    skipHist.current = true;
+    setState(anterior);
+    setPodeDesfazer(undoStack.current.length > 0);
+  }, []);
+  // Ctrl/Cmd+Z também desfaz — exceto quando o foco está num campo de texto livre
+  // (nome do estabelecimento/profissional), onde o undo nativo do navegador é mais útil.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.key === "z" || e.key === "Z") || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+      const alvo = document.activeElement as HTMLElement | null;
+      if (alvo?.classList.contains("form-text")) return; // deixa o undo nativo do texto livre
+      e.preventDefault();
+      desfazer();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [desfazer]);
+
   // Crivo SIGTAP por linha (procedimento/idade/qtde/CBO) — cada LinhaBpaC reporta seus
   // motivos; aqui agregamos p/ acender o aviso e bloquear a geração.
   const [errosLinha, setErrosLinha] = useState<Record<number, string[]>>({});
@@ -238,6 +278,31 @@ function BpaCV3() {
     return () => { cancelled = true; };
   }, [cnesEstab, hydrated]);
 
+  // Folha automática (organizacional; NÃO vai para o .txt). Fichas NOVAS (sem id) recebem a
+  // próxima folha da sequência: por profissional (Nome) quando houver, senão pela unidade
+  // (CNES) — reiniciando por competência. Fichas salvas/importadas mantêm a folha original.
+  const folhaAutoChaveRef = useRef("");
+  useEffect(() => {
+    if (!hydrated || fichaIdRef.current) return;
+    const cnes = state.cnes.join("");
+    const comp = competencia();
+    if (!/^\d{7}$/.test(cnes) || !/^\d{6}$/.test(comp)) return;
+    const nome = state.profNome.trim();
+    const chave = `${cnes}:${comp}:${nome}`;
+    if (folhaAutoChaveRef.current === chave) return;
+    folhaAutoChaveRef.current = chave;
+    // Debounce: o Nome do profissional é texto livre (dispara a cada tecla) — espera a
+    // digitação assentar antes de consultar a próxima folha.
+    const t = setTimeout(() => {
+      proximaFolhaBpaC(cnes, comp, nome).then((n) => {
+        if (folhaAutoChaveRef.current !== chave) return;
+        setState((p) => ({ ...p, folha: ancorarDigitosDireita(String(n), FOLHA_BOXES.length) }));
+      });
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.cnes, state.mes, state.ano, state.profNome, hydrated]);
+
   const set = <K extends keyof State>(key: K, value: State[K]) =>
     setState((prev) => ({ ...prev, [key]: value }));
 
@@ -302,6 +367,7 @@ function BpaCV3() {
     setZerarAtendOpen(false);
   };
   const confirmarZerarTudo = () => {
+    folhaAutoChaveRef.current = "";
     setState(initialState());
     limparFichaPersistida();
     setZerarTudoOpen(false);
@@ -318,7 +384,14 @@ function BpaCV3() {
       folha: state.folha.join(""),
     }) || "Ficha BPA-C";
   };
-  const salvarNaNuvem = async (titulo: string) => {
+  // Crivo de duplicidade: procura uma ficha BPA-C 100% idêntica já salva (mesma unidade/
+  // profissional/competência e mesmo conjunto de linhas). `idAtual` é excluído.
+  const checarDuplicidade = async (idAtual: string | null): Promise<FichaDuplicada | null> => {
+    const assinatura = assinaturaBpaC(state.rows);
+    if (!assinatura) return null;
+    return acharDuplicataBpaC(state.cnes.join(""), competencia(), state.profNome, assinatura, idAtual);
+  };
+  const gravarNaNuvem = async (titulo: string) => {
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
     const id = await salvarFicha(idAlvo, titulo, competencia(), state, metaFicha());
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
@@ -327,20 +400,35 @@ function BpaCV3() {
     setSalvarComoNovo(false);
     toast.success(idAlvo ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
+  const salvarNaNuvem = async (titulo: string) => {
+    const dup = await checarDuplicidade(salvarComoNovo ? null : fichaIdRef.current);
+    if (dup) {
+      setSalvarOpen(false);
+      setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaNuvem(titulo); } });
+      return;
+    }
+    await gravarNaNuvem(titulo);
+  };
+  const gravarNaFichaAtual = async () => {
+    setSalvandoDireto(true);
+    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current!, competencia(), state, metaFicha());
+    setSalvandoDireto(false);
+    if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
+    persistFicha(id, fichaTituloRef.current!);
+    toast.success("Alterações salvas na nuvem.");
+  };
   const salvarClique = async () => {
     if (congelada) { toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar."); return; }
     if (!fichaIdRef.current || !fichaTituloRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
-    setSalvandoDireto(true);
-    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current, competencia(), state, metaFicha());
-    setSalvandoDireto(false);
-    if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
-    persistFicha(id, fichaTituloRef.current);
-    toast.success("Alterações salvas na nuvem.");
+    const dup = await checarDuplicidade(fichaIdRef.current);
+    if (dup) { setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaFichaAtual(); } }); return; }
+    await gravarNaFichaAtual();
   };
   const salvarComoClique = () => { setSalvarComoNovo(true); setSalvarOpen(true); setSalvarMenuOpen(false); };
   const carregarFichaSalva = async (id: string, titulo?: string) => {
     const ficha = await carregarFicha(id);
     if (!ficha) return;
+    resetHistorico();
     setState(normalizarQuantidades({ ...initialState(), ...(ficha.dados as Partial<State>) }));
     persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-C");
     refreshStatus(id);
@@ -352,6 +440,7 @@ function BpaCV3() {
     const ficha = await carregarFicha(id);
     if (!ficha) { avisarCapturaFalhou(id, "ficha não encontrada"); return; }
     fichaIdRef.current = id;
+    resetHistorico();
     setState(normalizarQuantidades({ ...initialState(), ...(ficha.dados as Partial<State>) }));
     setProntoImprimir(true);
   };
@@ -385,7 +474,7 @@ function BpaCV3() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prontoImprimir]);
-  const novaFicha = () => { setState(initialState()); limparFichaPersistida(); setFicStatus(null); };
+  const novaFicha = () => { resetHistorico(); folhaAutoChaveRef.current = ""; setState(initialState()); limparFichaPersistida(); setFicStatus(null); };
   const retificar = async () => {
     if (!fichaIdRef.current) return;
     setRetificando(true);
@@ -428,6 +517,11 @@ function BpaCV3() {
       </ConfirmModal>
       <ConfirmModal open={zerarTudoOpen} title="Zerar tudo" confirmLabel="Zerar tudo" danger onCancel={() => setZerarTudoOpen(false)} onConfirm={confirmarZerarTudo}>
         <p>Isto vai apagar <strong>todas</strong> as informações do formulário (cabeçalho e as 20 linhas).</p>
+      </ConfirmModal>
+      <ConfirmModal open={Boolean(dupModal)} title="Ficha duplicada" confirmLabel="Salvar mesmo assim" onCancel={() => setDupModal(null)} onConfirm={() => dupModal?.prosseguir()}>
+        <p>Já existe uma ficha <strong>idêntica</strong> salva (mesma unidade/profissional, competência e produção):</p>
+        <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">{dupModal?.dup.titulo}</p>
+        <p className="mt-2 text-sm text-muted-foreground">Salvar assim mesmo cria uma duplicata. Cancele se não for isso que você quer.</p>
       </ConfirmModal>
       <SalvarFichaModal
         open={salvarOpen}
@@ -485,6 +579,14 @@ function BpaCV3() {
                 ➕ Nova ficha
               </button>
             )}
+            <button
+              onClick={desfazer}
+              disabled={!podeDesfazer}
+              title={podeDesfazer ? "Desfazer a última alteração (Ctrl+Z)" : "Nada para desfazer"}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Undo2 className="size-3.5" /> Desfazer
+            </button>
             {state.respConfirmacao && (
               <button onClick={() => set("respConfirmacao", null)} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 hover:bg-amber-100">
                 Desfazer confirmação
@@ -588,7 +690,8 @@ function BpaCV3() {
             nome={state.profNome}
             onChangeNome={(v) => set("profNome", v)}
           />
-          <DigitBoxes id="folha" top={UF_TOP} height={UF_HEIGHT} boxes={FOLHA_BOXES} values={state.folha} onChange={(v) => set("folha", v)} rightAlign compact />
+          {/* Folha: automática e bloqueada (sequencial por profissional/unidade, reinicia por competência). */}
+          <DigitBoxes id="folha" top={UF_TOP} height={UF_HEIGHT} boxes={FOLHA_BOXES} values={state.folha} onChange={() => {}} rightAlign compact readOnly />
 
           {/* 20 linhas — com Procedimento (SIGTAP) e CBO inteligentes */}
           {ROW_TOPS.map((top, i) => (

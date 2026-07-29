@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FolderOpen, X, FilePlus2, Loader2, Pencil, Check } from "lucide-react";
 import { listarFichas, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { rotuloExibicao } from "@/lib/bpa-i-v2/titulo-ficha";
+import { buscarNomesPorCns } from "@/lib/bpa-i-v2/profissionais";
 
 interface Props {
   open: boolean;
@@ -29,7 +31,20 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
     if (!open) return;
     setCarregando(true);
     setEditandoId(null);
-    listarFichas(tipo).then((f) => { setFichas(f); setCarregando(false); });
+    listarFichas(tipo).then(async (f) => {
+      setFichas(f); setCarregando(false);
+      // Resolve CNS -> nome do profissional (fichas importadas guardam só o CNS) para o
+      // rótulo mostrar o nome, e não o número. Mesma resolução da página /minhas-fichas.
+      const pares = f.filter((x) => !x.profNome && x.profCns && x.cnes).map((x) => ({ cnes: x.cnes!, cns: x.profCns! }));
+      if (pares.length === 0) return;
+      const mapa = await buscarNomesPorCns(pares);
+      if (mapa.size === 0) return;
+      setFichas((prev) => prev.map((x) => {
+        if (x.profNome || !x.profCns) return x;
+        const nome = mapa.get(`${x.cnes}|${x.profCns}`) ?? mapa.get(x.profCns);
+        return nome ? { ...x, profNome: nome } : x;
+      }));
+    });
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -37,9 +52,13 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
 
   if (!open) return null;
 
+  // Rótulo exibido: resolve tipo duplicado e CNS -> nome (fichas importadas). Cai no
+  // título salvo para fichas renomeadas/digitadas.
+  const rotulo = (f: FichaResumo) => rotuloExibicao(f) || (tipo === "BPA-C" ? "Ficha BPA-C" : "Ficha BPA-I");
+
   const iniciarRenomeio = (f: FichaResumo) => {
     setEditandoId(f.id);
-    setNovoNome(f.titulo || "");
+    setNovoNome(rotulo(f));
     setTimeout(() => { editInputRef.current?.focus(); editInputRef.current?.select(); }, 30);
   };
 
@@ -113,7 +132,7 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
                   <>
                     <button onClick={() => { onCarregar(f.id, f.titulo || "Ficha BPA-I"); onClose(); }} className="min-w-0 flex-1 text-left">
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm font-medium text-foreground">{f.titulo || "Ficha BPA-I"}</span>
+                        <span className="truncate text-sm font-medium text-foreground">{rotulo(f)}</span>
                         {f.substituida && <span className="shrink-0 rounded-full border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">substituída</span>}
                         {f.congelada && !f.substituida && <span className="shrink-0 rounded-full border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">congelada</span>}
                       </div>

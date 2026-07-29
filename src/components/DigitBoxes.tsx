@@ -101,6 +101,12 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
 
   const rightEdge = boxes.reduce((m, b) => Math.max(m, b.left + b.width), 0);
 
+  // Lixeira (limpar) e ↑ (repetir) um pouco menores que a altura da linha, centradas na
+  // vertical — antes ocupavam a linha inteira e ficavam grandes demais ao lado do campo.
+  const BTN_ESCALA = 0.8;
+  const btnH = height * BTN_ESCALA;
+  const btnTop = top + (height - btnH) / 2;
+
   // Aplica um valor justificado à direita nas caixinhas e foca a última. Campos numéricos
   // descartam não-dígitos; alfanuméricos (ex.: Número "S/N") preservam os caracteres.
   const setRightAligned = (raw: string) => {
@@ -230,9 +236,9 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           className="flex items-center justify-center rounded-full bg-rose-500 text-white shadow-md ring-2 ring-white transition-transform duration-150 hover:bg-rose-600 hover:scale-110 active:scale-90"
           style={{
             position: "absolute",
-            top: `${top}%`,
+            top: `${btnTop}%`,
             left: `${rightEdge + 0.5}%`,
-            height: `${height}%`,
+            height: `${btnH}%`,
             aspectRatio: "1", // círculo (largura = altura da linha)
             zIndex: 50, // acima das caixinhas vizinhas (transitório: só enquanto focado)
             border: "none",
@@ -255,9 +261,9 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           className="flex items-center justify-center rounded-full bg-sky-600 text-white shadow-md ring-2 ring-white transition-transform duration-150 hover:bg-sky-700 hover:scale-110 active:scale-90"
           style={{
             position: "absolute",
-            top: `${top}%`,
+            top: `${btnTop}%`,
             left: `${rightEdge + 0.5}%`,
-            height: `${height}%`,
+            height: `${btnH}%`,
             aspectRatio: "1",
             zIndex: 50,
             border: "none",

@@ -18,6 +18,7 @@ import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
+import { proximaFolhaBpaI, assinaturaBpaI, acharDuplicataBpaI, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -165,6 +166,9 @@ function BpaI() {
   const [salvarComoNovo, setSalvarComoNovo] = useState(false);
   const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
   const [salvandoDireto, setSalvandoDireto] = useState(false);
+  // Aviso de duplicidade: ficha 100% idêntica a uma já salva encontrada ao salvar. Guarda a
+  // ficha achada e a continuação (salvar mesmo assim).
+  const [dupModal, setDupModal] = useState<{ dup: FichaDuplicada; prosseguir: () => void } | null>(null);
   // Ciclo de vida da ficha (Fase 3): congelada (produção fechada) e/ou substituída.
   const [ficStatus, setFicStatus] = useState<FichaStatus | null>(null);
   const [retificando, setRetificando] = useState(false);
@@ -286,9 +290,17 @@ function BpaI() {
     } catch { /* noop */ }
   };
 
-  // Salva (cria ou atualiza) a ficha na nuvem com o nome informado no diálogo.
-  // Quando comoNovo=true, ignora a ficha atual e sempre cria uma cópia nova.
-  const salvarNaNuvem = async (titulo: string) => {
+  // Crivo de duplicidade: procura uma ficha 100% idêntica já salva (mesma chave e conteúdo).
+  // `idAtual` é excluído da busca (não é duplicata de si mesma). Vazio quando a ficha nem
+  // tem produção preenchida (nada a crivar).
+  const checarDuplicidade = async (idAtual: string | null): Promise<FichaDuplicada | null> => {
+    const assinatura = assinaturaBpaI(state.profCbo, state.seqs);
+    if (!assinatura) return null;
+    return acharDuplicataBpaI(state.cnes.join(""), state.profCns.join(""), competencia(), assinatura, idAtual);
+  };
+
+  // Grava efetivamente na nuvem (cria/atualiza). Não faz o crivo — quem chama já cuidou.
+  const gravarNaNuvem = async (titulo: string) => {
     const comp = competencia();
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
     const id = await salvarFicha(idAlvo, titulo, comp, state, {
@@ -308,6 +320,36 @@ function BpaI() {
     toast.success(atualizou ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
 
+  // Salva (cria ou atualiza) com o nome do diálogo, passando antes pelo crivo de duplicidade.
+  const salvarNaNuvem = async (titulo: string) => {
+    const dup = await checarDuplicidade(salvarComoNovo ? null : fichaIdRef.current);
+    if (dup) {
+      setSalvarOpen(false);
+      setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaNuvem(titulo); } });
+      return;
+    }
+    await gravarNaNuvem(titulo);
+  };
+
+  // Gravação direta na ficha já existente (botão "Salvar" quando já tem id/título).
+  const gravarNaFichaAtual = async () => {
+    setSalvandoDireto(true);
+    const comp = competencia();
+    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current!, comp, state, {
+      tipo: "BPA-I",
+      cnes: state.cnes.join(""),
+      profissionalCns: state.profCns.join(""),
+      profissionalNome: state.profNome,
+    });
+    setSalvandoDireto(false);
+    if (!id) {
+      toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
+      return;
+    }
+    persistFicha(id, fichaTituloRef.current!);
+    toast.success("Alterações salvas na nuvem.");
+  };
+
   // Clique direto no botão "Salvar": se a ficha já existe, grava sem pedir nome de
   // novo. Se ainda não foi salva, abre o diálogo (primeira vez precisa de nome).
   const salvarClique = async () => {
@@ -324,21 +366,12 @@ function BpaI() {
       setSalvarOpen(true);
       return;
     }
-    setSalvandoDireto(true);
-    const comp = competencia();
-    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current, comp, state, {
-      tipo: "BPA-I",
-      cnes: state.cnes.join(""),
-      profissionalCns: state.profCns.join(""),
-      profissionalNome: state.profNome,
-    });
-    setSalvandoDireto(false);
-    if (!id) {
-      toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
+    const dup = await checarDuplicidade(fichaIdRef.current);
+    if (dup) {
+      setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaFichaAtual(); } });
       return;
     }
-    persistFicha(id, fichaTituloRef.current);
-    toast.success("Alterações salvas na nuvem.");
+    await gravarNaFichaAtual();
   };
 
   // "Salvar como…": sempre abre o diálogo pedindo um nome novo p/ criar uma cópia.
@@ -401,6 +434,7 @@ function BpaI() {
     } finally { setPrinting(false); }
   };
   const novaFicha = () => {
+    folhaAutoChaveRef.current = ""; // renumera a folha do zero na próxima chave
     setState(initialState());
     limparFichaPersistida();
     setFicStatus(null);
@@ -467,6 +501,27 @@ function BpaI() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.profCns, cnesEstab, hydrated]);
+
+  // Folha automática (organizacional; NÃO vai para o .txt — a folha do BPA Magnético é
+  // derivada no fechamento). Fichas NOVAS (ainda sem id) recebem a próxima folha da sequência
+  // do profissional naquela competência (reinicia por competência). Ao trocar de profissional/
+  // competência, renumera. Fichas salvas/importadas (fichaIdRef preenchido) mantêm a folha.
+  const folhaAutoChaveRef = useRef("");
+  useEffect(() => {
+    if (!hydrated || fichaIdRef.current) return;
+    const cnes = state.cnes.join("");
+    const profCns = state.profCns.join("");
+    const comp = competencia();
+    if (!/^\d{7}$/.test(cnes) || !/^\d{15}$/.test(profCns) || cnsInvalido(profCns) || !/^\d{6}$/.test(comp)) return;
+    const chave = `${cnes}:${profCns}:${comp}`;
+    if (folhaAutoChaveRef.current === chave) return;
+    folhaAutoChaveRef.current = chave;
+    proximaFolhaBpaI(cnes, profCns, comp).then((n) => {
+      if (folhaAutoChaveRef.current !== chave) return; // trocou de chave enquanto buscava
+      setState((p) => ({ ...p, profFolha: rjust(String(n).split(""), 3) }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.cnes, state.profCns, state.profMes, state.profAno, hydrated]);
 
   // Fonte cursiva (Caveat) para a "assinatura" eletrônica do Responsável — injetada
   // uma vez (mantém isolado no v2, sem mexer no HTML global).
@@ -661,6 +716,18 @@ function BpaI() {
         onConfirm={() => { setNovaFichaOpen(false); novaFicha(); }}
       >
         Começar uma nova ficha em branco? Alterações não salvas serão perdidas.
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={Boolean(dupModal)}
+        title="Ficha duplicada"
+        confirmLabel="Salvar mesmo assim"
+        onCancel={() => setDupModal(null)}
+        onConfirm={() => dupModal?.prosseguir()}
+      >
+        <p>Já existe uma ficha <strong>idêntica</strong> salva (mesmo profissional, competência e produção):</p>
+        <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">{dupModal?.dup.titulo}</p>
+        <p className="mt-2 text-sm text-muted-foreground">Salvar assim mesmo cria uma duplicata. Cancele se não for isso que você quer.</p>
       </ConfirmModal>
 
       <ConfirmModal
@@ -933,7 +1000,9 @@ function BpaI() {
             getInputs={() => inputsOf("pmes", "pano")}
             onClear={() => setState((p) => ({ ...p, profMes: Array(2).fill(""), profAno: Array(4).fill("") }))} />
           <TextField {...L.PROF_EQUIPE} value={state.profEquipe} onChange={(v) => set("profEquipe", v)} uppercase />
-          <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} rightAlign compact />
+          {/* Folha: automática e bloqueada. Preenchida em sequência por profissional/competência
+              (fichas novas) ou mantida como veio (fichas salvas/importadas). */}
+          <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={() => {}} rightAlign compact readOnly />
 
           {/* 3 Sequências */}
           {L.SEQ_TOPS.map((seqTop, si) => (
