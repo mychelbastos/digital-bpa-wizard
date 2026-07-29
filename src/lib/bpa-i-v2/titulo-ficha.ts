@@ -50,8 +50,12 @@ export interface FichaRotulo {
   profCns?: string | null;
 }
 
-// Um título importado antigo começa pelo tipo ("BPA-C …" / "BPA-I …").
-const ehTituloAutoImportado = (t: string) => /^BPA-[CI][\s·]/.test(t);
+// Título AUTO-gerado de uma ficha importada. Cobre os dois formatos que já gravamos:
+//  - antigo: começa pelo tipo ("BPA-C …" / "BPA-I …")
+//  - novo (montarTituloFicha): começa pelo CNES, mas SEMPRE termina em "(importado)"
+// Uma renomeação manual perde o sufixo "(importado)" e o prefixo "BPA-", então NÃO é
+// recomposta (respeita a edição). É o que distingue auto-gerado de renomeado.
+const ehTituloAutoImportado = (t: string) => /^BPA-[CI][\s·]/.test(t) || /\(importado\)\s*$/.test(t);
 
 // Rótulo para EXIBIR na lista. Fichas importadas com título auto-gerado são recompostas no
 // padrão novo (some o tipo duplicado, entra o CNES, CNS vira nome quando houver). Fichas
