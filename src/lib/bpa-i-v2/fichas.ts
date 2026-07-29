@@ -110,7 +110,7 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
         .from("fichas")
         // Subcampos do jsonb `dados` (CNES/nome/CNS) alimentam o rótulo padronizado da lista.
         // São leves (não trazem o `dados` inteiro nem PII de paciente).
-        .select("id, titulo, competencia, mes_producao, updated_at, tipo, origem, substituida_por, cnesArr:dados->cnes, profNomeD:dados->>profNome, profCnsArr:dados->profCns, producoes(status)")
+        .select("id, titulo, competencia, mes_producao, updated_at, tipo, origem, substituida_por, cnesArr:dados->cnes, profNomeV:dados->profNome, profCnsArr:dados->profCns, producoes(status)")
         .order("updated_at", { ascending: false })
         .order("id", { ascending: true })
         .range(de, ate);
@@ -130,7 +130,9 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
         tipo: r.tipo as "BPA-I" | "BPA-C",
         origem: (r.origem as string) ?? null,
         cnes: juntar(r.cnesArr),
-        profNome: (r.profNomeD as string) ?? "",
+        // `dados->profNome` (seta `->`, igual a cnes/profCns) — o alias com `->>` retornava
+        // vazio no PostgREST. Valor é uma string JSON; string vazia/ausente vira "".
+        profNome: typeof r.profNomeV === "string" ? r.profNomeV : "",
         profCns: juntar(r.profCnsArr),
         congelada: st === "exportada" || st === "transmitida",
         substituida: Boolean(r.substituida_por),
