@@ -36,14 +36,19 @@ export async function proximaFolhaBpaI(cnes: string, profCns: string, competenci
 export async function proximaFolhaBpaC(cnes: string, competencia: string, profNome?: string): Promise<number> {
   if (!supabase || !/^\d{7}$/.test(cnes) || !/^\d{6}$/.test(competencia)) return 1;
   try {
+    // Lê os DOIS campos de folha: `folha` (fichas digitadas guardam o State.folha) e
+    // `folhaBase` (fichas importadas). Antes lia só `folhaBase` -> digitadas sempre davam 1.
     let req = supabase.from("fichas")
-      .select("f:dados->folhaBase")
+      .select("fa:dados->folha, fb:dados->folhaBase")
       .eq("tipo", "BPA-C").eq("cnes", cnes).eq("competencia", competencia);
     const nome = (profNome ?? "").trim();
     if (nome) req = req.eq("dados->>profNome", nome);
     const { data, error } = await req;
     if (error || !data) return 1;
-    return data.reduce((m, r) => Math.max(m, folhaNum((r as { f: unknown }).f)), 0) + 1;
+    return data.reduce((m, r) => {
+      const row = r as { fa: unknown; fb: unknown };
+      return Math.max(m, folhaNum(row.fa), folhaNum(row.fb));
+    }, 0) + 1;
   } catch {
     return 1;
   }
