@@ -13,6 +13,7 @@ import {
   Files,
   ShieldCheck,
   Ambulance,
+  FileBarChart,
 } from "lucide-react";
 import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { souAdmin } from "@/lib/permissoes";
@@ -93,6 +94,9 @@ export function AppSidebar() {
         </Link>
         <Link to="/fpo" search={{}} className={linkCls(pathname.startsWith("/fpo"))}>
           <FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)
+        </Link>
+        <Link to="/relatorios" className={linkCls(pathname.startsWith("/relatorios"))}>
+          <FileBarChart className="size-4 shrink-0" /> Relatórios
         </Link>
         {podeTfd && (
           <Link to="/tfd" search={{}} className={linkCls(pathname.startsWith("/tfd"))}>
