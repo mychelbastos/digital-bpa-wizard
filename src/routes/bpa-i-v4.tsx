@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Copy, Trash2, FileText, Save, Loader2, UserRound, AlertTriangle, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { useBpaIEngine, cells, type State } from "@/lib/bpa-i-v3/engine";
+import { useBpaIEngine, cells, loadState, type State } from "@/lib/bpa-i-v3/engine";
 import { PacienteSeqCard } from "@/components/bpa-i-v3/PacienteSeqCard";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
@@ -47,19 +47,40 @@ const TEAL = "#0f6e6e";
 const dig = (a: string[] | undefined) => (a ?? []).join("");
 
 function BpaIV4() {
-  const eng = useBpaIEngine({ origemUi: "v4" });
+  const eng = useBpaIEngine({
+    origemUi: "v4",
+    storageKey: "bpa-i-v4-state-v1",
+    fichaIdKey: "bpa-i-v4-ficha-id",
+    fichaTituloKey: "bpa-i-v4-ficha-titulo",
+  });
   const {
     state, setState, orgId, cboOpcoes, congelada, substituidaPor, retificar, retificando,
     fichaTitulo, temCamposInvalidos, motivosInvalidos, competencia, profCnsDig, profCboDig,
-    onValidacaoChangeSeq, set, updateSeq,
+    onValidacaoChangeSeq, set, updateSeq, setHydrated, setFichaTitulo, refreshStatus,
     vincularPaciente, desvincularPaciente, reidratarPaciente, usarUltimoProc,
     adicionarSeq, duplicarUltimaSeq, removerSeq,
     reconciliarESalvar, checarDuplicidade, novaFicha,
+    storageKey, fichaIdKey, fichaTituloKey,
   } = eng;
   void cboOpcoes; void checarDuplicidade;
 
   const [salvando, setSalvando] = useState(false);
   const [visualizando, setVisualizando] = useState(false);
+
+  // Montagem: carrega o rascunho/ficha persistida (chaves PRÓPRIAS do V4, isoladas do V3) e
+  // LIBERA os efeitos do motor (folha automática, CNES→nome, CNS→nome/CBO, autosave) — todos
+  // são gated por `hydrated`.
+  useEffect(() => {
+    setState(loadState(storageKey));
+    try {
+      eng.fichaIdRef.current = localStorage.getItem(fichaIdKey);
+      eng.fichaTituloRef.current = localStorage.getItem(fichaTituloKey);
+      setFichaTitulo(eng.fichaTituloRef.current);
+    } catch { /* noop */ }
+    refreshStatus(eng.fichaIdRef.current);
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Autosave já é do engine (localStorage). Aqui só a apresentação.
   const totalQtd = state.seqs.reduce((s, sq) => s + (Number(dig(sq.qtde)) || 0), 0);

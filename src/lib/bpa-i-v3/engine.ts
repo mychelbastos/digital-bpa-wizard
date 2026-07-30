@@ -123,10 +123,10 @@ export function normalizarSeqs3(seqs: SeqData[] | undefined): SeqData[] {
   return arr.map((s) => ({ ...emptySeq(), ...s, qtde: rjust((s?.qtde ?? []), 3), numero: migrarNumero(s?.numero ?? []) }));
 }
 
-export function loadState(): State {
+export function loadState(key: string = STORAGE_KEY): State {
   if (typeof window === "undefined") return initialState();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return initialState();
     const merged = { ...initialState(), ...(JSON.parse(raw) as Partial<State>) };
     merged.seqs = normalizarSeqs3(merged.seqs);
@@ -143,8 +143,13 @@ export function loadState(): State {
 // as funções que só orquestram diálogos (salvarClique etc., que chamam as primitivas daqui).
 // ---------------------------------------------------------------------------
 // `opts.origemUi` (ex.: 'v4') é só auditoria — carimbada no save, nunca ramifica lógica.
-export function useBpaIEngine(opts?: { origemUi?: string }) {
+// `opts.storageKey`/`fichaIdKey`/`fichaTituloKey` isolam o rascunho (localStorage) por tela
+// (o V4 usa chaves próprias p/ não colidir com o rascunho do V3). Defaults = chaves do V3.
+export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; fichaIdKey?: string; fichaTituloKey?: string }) {
   const origemUi = opts?.origemUi;
+  const storageKey = opts?.storageKey ?? STORAGE_KEY;
+  const fichaIdKey = opts?.fichaIdKey ?? FICHA_ID_KEY;
+  const fichaTituloKey = opts?.fichaTituloKey ?? FICHA_TITULO_KEY;
   const [state, setState] = useState<State>(initialState);
   const [hydrated, setHydrated] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -201,13 +206,13 @@ export function useBpaIEngine(opts?: { origemUi?: string }) {
     fichaIdRef.current = id;
     fichaTituloRef.current = titulo;
     setFichaTitulo(titulo);
-    try { localStorage.setItem(FICHA_ID_KEY, id); localStorage.setItem(FICHA_TITULO_KEY, titulo); } catch { /* noop */ }
+    try { localStorage.setItem(fichaIdKey, id); localStorage.setItem(fichaTituloKey, titulo); } catch { /* noop */ }
   };
   const limparFichaPersistida = () => {
     fichaIdRef.current = null;
     fichaTituloRef.current = null;
     setFichaTitulo(null);
-    try { localStorage.removeItem(FICHA_ID_KEY); localStorage.removeItem(FICHA_TITULO_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(fichaIdKey); localStorage.removeItem(fichaTituloKey); } catch { /* noop */ }
   };
 
   const nomeSugerido = (comoNovo: boolean): string => {
@@ -231,7 +236,7 @@ export function useBpaIEngine(opts?: { origemUi?: string }) {
   // Autosave (localStorage) — e marca que o PDF desta versão ainda não foi gerado.
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* noop */ }
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { /* noop */ }
     setPdfPendente(true);
   }, [state, hydrated]);
 
@@ -464,6 +469,7 @@ export function useBpaIEngine(opts?: { origemUi?: string }) {
     cnsProfInvalido, temSeqAtiva, motivosInvalidos, temCamposInvalidos,
     competencia, cnesEstab, profCnsDig, profCboDig,
     estabAutoCnesRef, cnsResolvidoRef, folhaAutoChaveRef,
+    storageKey, fichaIdKey, fichaTituloKey,
     persistFicha, limparFichaPersistida, nomeSugerido,
     set, updateSeq, repetirPaciente, prevTemPaciente,
     vincularPaciente, desvincularPaciente, reidratarPaciente, usarUltimoProc,
