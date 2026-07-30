@@ -31,6 +31,8 @@ import * as L from "@/lib/bpai-v2-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
 import { ancorarCharsDireita } from "@/lib/digitos-direita";
 import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
+import { orgDoCnes } from "@/lib/tfd/tfd";
+import { reconciliarPacientesDasSeqs } from "@/lib/bpa-i-v3/paciente-seq";
 
 export const Route = createFileRoute("/bpa-i-v3")({
   head: () => ({
@@ -148,6 +150,8 @@ function BpaI() {
   const [state, setState] = useState<State>(initialState);
   const [hydrated, setHydrated] = useState(false);
   const [printing, setPrinting] = useState(false);
+  // Organização (prefeitura) resolvida pelo CNES — escopo do cadastro de pacientes.
+  const [orgId, setOrgId] = useState<string | null>(null);
   // Quando o profissional escolhido tem >1 CBO no estabelecimento, guardamos as opções
   // para a pessoa escolher (em vez de preencher um qualquer automaticamente).
   const [cboOpcoes, setCboOpcoes] = useState<CboVinculo[]>([]);
@@ -256,6 +260,16 @@ function BpaI() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Resolve a organização (prefeitura) a partir do CNES — escopo da busca/cadastro de
+  // pacientes. Só quando o CNES está completo (7 dígitos).
+  const cnesStr = state.cnes.join("");
+  useEffect(() => {
+    if (!/^\d{7}$/.test(cnesStr)) { setOrgId(null); return; }
+    let cancel = false;
+    orgDoCnes(cnesStr).then((o) => { if (!cancel) setOrgId(o); });
+    return () => { cancel = true; };
+  }, [cnesStr]);
+
   // Nome sugerido ao salvar (padrão): "CNES · Nome prof (1º+último) · MM/AAAA · folha N".
   // Se a ficha já foi salva antes, sugere o título atual (para não trocar sem querer).
   const nomeSugerido = (): string => {
@@ -303,11 +317,21 @@ function BpaI() {
   const gravarNaNuvem = async (titulo: string) => {
     const comp = competencia();
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
-    const id = await salvarFicha(idAlvo, titulo, comp, state, {
+    // Rede de segurança (idempotente): garante que toda seq com identidade tenha pacienteId.
+    // Só linka/cria; nunca sobrescreve cadastro. O carimbo do id é persistido no jsonb.
+    let estadoSalvar = state;
+    if (orgId) {
+      const seqsReconc = await reconciliarPacientesDasSeqs(state.seqs, orgId);
+      if (seqsReconc !== state.seqs) {
+        estadoSalvar = { ...state, seqs: seqsReconc };
+        setState(estadoSalvar);
+      }
+    }
+    const id = await salvarFicha(idAlvo, titulo, comp, estadoSalvar, {
       tipo: "BPA-I",
-      cnes: state.cnes.join(""),
-      profissionalCns: state.profCns.join(""),
-      profissionalNome: state.profNome,
+      cnes: estadoSalvar.cnes.join(""),
+      profissionalCns: estadoSalvar.profCns.join(""),
+      profissionalNome: estadoSalvar.profNome,
     });
     if (!id) {
       toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");

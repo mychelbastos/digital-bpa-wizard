@@ -33,11 +33,13 @@ export interface Paciente {
 }
 
 // Campos gravável. `id` presente = atualiza aquele registro; `tfd` marca paciente do TFD.
+// `origem` (primeira aparição: 'bpa_i' | 'tfd' | 'manual') é gravada SÓ na criação.
 export type PacienteInput = Partial<Omit<Paciente, "id" | "organizacao_id">> & {
   organizacao_id: string;
   nome: string;
   id?: string;
   tfd?: boolean;
+  origem?: "bpa_i" | "tfd" | "manual";
 };
 
 // Campos exigidos para um cadastro "completo" de paciente (paridade com o BPA-I). Além
@@ -62,20 +64,19 @@ const COLS =
 
 const soDigitos = (s: string | null | undefined) => (s || "").replace(/\D/g, "");
 
-// Autocomplete de paciente dentro de uma org: por nome (ilike) ou, se o termo for numérico,
-// por CNS/CPF (prefixo). Não loga leitura — a lista é um índice; o log é ao ABRIR o paciente.
+// Autocomplete de paciente dentro de uma org: nome ACENTO-INSENSÍVEL (unaccent+trigram) ou,
+// se o termo for numérico, por CNS/CPF (prefixo). Via RPC `buscar_pacientes` (security
+// invoker → respeita a RLS por vínculo). Não loga leitura — a lista é um índice; o log é ao
+// ABRIR o paciente. Devolve as linhas completas de `pacientes` (superset de COLS).
 export async function buscarPacientes(organizacaoId: string, termo: string, apenasTfd = false): Promise<Paciente[]> {
   const q = termo.trim();
   if (!supabase || !organizacaoId || q.length < 3) return [];
   try {
-    let req = supabase.from("pacientes").select(COLS).eq("organizacao_id", organizacaoId).is("excluido_em", null).limit(12);
-    if (apenasTfd) req = req.eq("tfd", true);
-    if (/^\d+$/.test(q)) {
-      req = req.or(`cns.like.${q}%,cpf.like.${q}%`);
-    } else {
-      req = req.ilike("nome", `%${q}%`).order("nome");
-    }
-    const { data, error } = await req;
+    const { data, error } = await supabase.rpc("buscar_pacientes", {
+      _org: organizacaoId,
+      _termo: q,
+      _apenas_tfd: apenasTfd,
+    });
     return error || !data ? [] : (data as Paciente[]);
   } catch {
     return [];
@@ -175,7 +176,9 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
       const { data, error } = await supabase.from("pacientes").update(row).eq("id", existente.id).select(COLS).single();
       return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
     }
-    const { data, error } = await supabase.from("pacientes").insert(row).select(COLS).single();
+    // Criação: carimba `origem` (primeira aparição) quando informada.
+    const rowInsert = input.origem ? { ...row, origem: input.origem } : row;
+    const { data, error } = await supabase.from("pacientes").insert(rowInsert).select(COLS).single();
     return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
   } catch {
     return { paciente: null, erro: "Falha ao salvar." };

@@ -126,6 +126,11 @@ export interface SeqData {
   cpfPac?: string[]; // 11 díg. cauda v04.11 — CAPTURADO (hipótese: CPF do paciente). Vazio => brancos.
   situacaoRua?: string; // 1 char S/N — cauda v04.11 CAPTURADO (hipótese: situação de rua). Vazio => branco.
   semCpf?: string; // 1 char S/N — v05.00 (pos 351): "Pessoa sem CPF/Registro Civil". Só ≥ 202607. Vazio => branco.
+  // Vínculo ao cadastro central `pacientes` (por organização). A identidade continua INLINE
+  // nos campos acima (é o que o gerador do .MAR lê e o que congela na exportação — o snapshot);
+  // este id só liga a seq ao paciente vivo p/ autofill, "mesmo procedimento" e re-hidratação
+  // ao EDITAR PACIENTE. Vazio/ausente = seq sem vínculo (ex.: fichas históricas/importadas).
+  pacienteId?: string;
   codProc: string[];
   qtde: string[];
   cnpj: string[];
