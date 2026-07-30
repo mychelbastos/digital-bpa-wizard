@@ -186,6 +186,16 @@ export function useBpaIEngine(opts?: { origemUi?: string }) {
   const profCnsDig = state.profCns.join("").replace(/\D/g, "");
   const profCboDig = state.profCbo.join("").replace(/\D/g, "");
 
+  // Lista de sequências dinâmica (usada pelo V4: "nova sequência"/"duplicar última"/remover).
+  // O V3 não chama; o .MAR só usa as seqs preenchidas, então a contagem não o afeta.
+  const adicionarSeq = () => setState((p) => ({ ...p, seqs: [...p.seqs, emptySeq()] }));
+  const duplicarUltimaSeq = () => setState((p) => {
+    const last = p.seqs[p.seqs.length - 1];
+    const copia = JSON.parse(JSON.stringify(last)) as SeqData; // cópia profunda (arrays/strings)
+    return { ...p, seqs: [...p.seqs, copia] };
+  });
+  const removerSeq = (i: number) => setState((p) => (p.seqs.length <= 1 ? p : { ...p, seqs: p.seqs.filter((_, idx) => idx !== i) }));
+
   // Refs + localStorage sincronizados (sobrevive a reload da página).
   const persistFicha = (id: string, titulo: string) => {
     fichaIdRef.current = id;
@@ -457,6 +467,7 @@ export function useBpaIEngine(opts?: { origemUi?: string }) {
     persistFicha, limparFichaPersistida, nomeSugerido,
     set, updateSeq, repetirPaciente, prevTemPaciente,
     vincularPaciente, desvincularPaciente, reidratarPaciente, usarUltimoProc,
+    adicionarSeq, duplicarUltimaSeq, removerSeq,
     checarDuplicidade, reconciliarESalvar, garantirFichaExportada, registrarExportacao, registrarUsoDaFicha,
     carregarFichaSalva, novaFicha,
   };
