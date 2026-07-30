@@ -12,7 +12,7 @@ import { carregarLogoOrg } from "@/lib/org-logo";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { CNES_TFD, carregarRelatorioTfd, type TfdStatus } from "@/lib/tfd/tfd";
-import { carregarComparacaoFpo } from "@/lib/fpo/fpo";
+import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
 import { gerarRelatorioFpo } from "@/lib/fpo/relatorio-fpo";
 import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
@@ -324,19 +324,40 @@ const ultimosMesesMod = (n: number): string[] => {
   return out;
 };
 
-// ---- FPO: unidade + competência → PDF (timbre) gerado aqui ----
+// Agrega linhas de FPO×Produção de várias unidades por procedimento (consolidado municipal).
+function agregarFpo(rows: FpoComparacaoRow[]): FpoComparacaoRow[] {
+  const m = new Map<string, FpoComparacaoRow>();
+  for (const r of rows) {
+    const e = m.get(r.procedimento);
+    if (!e) { m.set(r.procedimento, { ...r, herdado: false, tetoCompetencia: null }); continue; }
+    e.qtdOrcada += r.qtdOrcada; e.produzido += r.produzido; e.saldo += r.saldo;
+    e.tetoRS += r.tetoRS; e.produzidoRS += r.produzidoRS; e.saldoRS += r.saldoRS;
+    e.temTeto = e.temTeto || r.temTeto;
+    e.resolvido = e.resolvido && r.resolvido;
+  }
+  return [...m.values()].sort((a, b) => a.descricao.localeCompare(b.descricao));
+}
+
+// ---- FPO: unidade (ou todas) + competência → PDF (timbre) gerado aqui ----
 function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; responsavel: string | null; onClose: () => void }) {
-  const [cnes, setCnes] = useState(unidades[0]?.cnes ?? "");
+  const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
   const [competencia, setCompetencia] = useState(competenciaAtual());
   const [gerando, setGerando] = useState(false);
   const gerar = async () => {
     if (!cnes) { toast.error("Selecione uma unidade."); return; }
     setGerando(true);
     try {
-      const rows = await carregarComparacaoFpo(cnes, competencia);
-      if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta unidade/competência."); return; }
-      const nomeUnidade = unidades.find((u) => u.cnes === cnes)?.nome ?? cnes;
-      gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel, logo });
+      if (cnes === "todas") {
+        const todas = await Promise.all(unidades.map((u) => carregarComparacaoFpo(u.cnes, competencia)));
+        const rows = agregarFpo(todas.flat());
+        if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta competência."); return; }
+        gerarRelatorioFpo({ nomeUnidade: `Todas as unidades (${unidades.length})`, cnes: "TODAS", competencia, rows, responsavel, logo });
+      } else {
+        const rows = await carregarComparacaoFpo(cnes, competencia);
+        if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta unidade/competência."); return; }
+        const nomeUnidade = unidades.find((u) => u.cnes === cnes)?.nome ?? cnes;
+        gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel, logo });
+      }
       toast.success("PDF do FPO gerado.");
       onClose();
     } finally { setGerando(false); }
@@ -348,6 +369,7 @@ function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: 
           <span className={lblCls2}>Unidade</span>
           <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}>
             {unidades.length === 0 && <option value="">Sem unidade vinculada</option>}
+            {unidades.length > 1 && <option value="todas">Todas as unidades ({unidades.length})</option>}
             {unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome} ({u.cnes})</option>)}
           </select>
         </label>
@@ -369,24 +391,27 @@ function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: 
 
 // ---- TFD: unidade + faixa de competência + status + agrupamento → CSV/PDF aqui ----
 function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; onClose: () => void }) {
-  const [cnes, setCnes] = useState(unidades[0]?.cnes ?? "");
+  const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
   const [compDe, setCompDe] = useState(competenciaAtual());
   const [compAte, setCompAte] = useState(competenciaAtual());
   const [status, setStatus] = useState<"" | TfdStatus>("");
   const [agrup, setAgrup] = useState<AgrupamentoRel>("detalhado");
   const [rows, setRows] = useState<Awaited<ReturnType<typeof carregarRelatorioTfd>>>([]);
   const [carregando, setCarregando] = useState(false);
+  const unidadesKey = unidades.map((u) => u.cnes).join(",");
 
   useEffect(() => {
     if (!cnes) { setRows([]); return; }
     let cancel = false;
     setCarregando(true);
-    carregarRelatorioTfd(cnes, compDe, compAte).then((r) => { if (!cancel) { setRows(r); setCarregando(false); } });
+    const alvos = cnes === "todas" ? unidadesKey.split(",").filter(Boolean) : [cnes];
+    Promise.all(alvos.map((c) => carregarRelatorioTfd(c, compDe, compAte)))
+      .then((res) => { if (!cancel) { setRows(res.flat()); setCarregando(false); } });
     return () => { cancel = true; };
-  }, [cnes, compDe, compAte]);
+  }, [cnes, compDe, compAte, unidadesKey]);
 
   const montado = useMemo(() => montarRelatorioTfd(rows, status, agrup), [rows, status, agrup]);
-  const nomeUnidade = unidades.find((u) => u.cnes === cnes)?.nome ?? cnes;
+  const nomeUnidade = cnes === "todas" ? `Todas as unidades (${unidades.length})` : (unidades.find((u) => u.cnes === cnes)?.nome ?? cnes);
   const periodo = compDe === compAte ? compLabelTfd(compDe) : `${compLabelTfd(compDe)} a ${compLabelTfd(compAte)}`;
 
   const baixarCsvTfd = () => {
@@ -413,6 +438,7 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
           <span className={lblCls2}>Unidade</span>
           <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}>
             {unidades.length === 0 && <option value="">Sem unidade de TFD</option>}
+            {unidades.length > 1 && <option value="todas">Todas as unidades ({unidades.length})</option>}
             {unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome} ({u.cnes})</option>)}
           </select>
         </label>
