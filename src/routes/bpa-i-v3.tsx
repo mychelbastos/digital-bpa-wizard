@@ -1,38 +1,30 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { statusDaFicha, retificarFicha, registrarLeituraFicha, type FichaStatus } from "@/lib/producoes";
+import { useEffect, useRef, useState } from "react";
+import { registrarLeituraFicha } from "@/lib/producoes";
 import { Snowflake, GitBranch } from "lucide-react";
 import { exportSheetPdf, rasterizarFolhaJpeg } from "@/lib/export-pdf";
 import bpaiBg from "@/assets/bpa-i.png";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
-import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
-import { sincronizarProfissionais, buscarCbosVinculo, buscarNomePorCns, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
+import { buscarCbosVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAutocomplete";
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
-import { cnsInvalido } from "@/lib/bpa-i-v2/validacao";
 import { SequenciaFields } from "@/components/bpa-i-v3/SequenciaFields";
 import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
-import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
-import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
-import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
-import { proximaFolhaBpaI, assinaturaBpaI, acharDuplicataBpaI, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
+import { carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { CboField } from "@/components/bpa-i-v3/CboField";
-import { registrarUso } from "@/lib/bpa-i-v2/historico";
-import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
-import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
-import { orgDoCnes } from "@/lib/tfd/tfd";
-import { reconciliarPacientesDasSeqs, pacienteParaIdentidade, type UltimoProcedimento } from "@/lib/bpa-i-v3/paciente-seq";
 import {
-  STORAGE_KEY, CAMPOS_PACIENTE, initialState, rjust, normalizarSeqs3, loadState, cells, type State,
+  useBpaIEngine, initialState, normalizarSeqs3, loadState, cells,
+  FICHA_ID_KEY, FICHA_TITULO_KEY, type State,
 } from "@/lib/bpa-i-v3/engine";
 import { PacienteSeqCard } from "@/components/bpa-i-v3/PacienteSeqCard";
 import type { Paciente } from "@/lib/pacientes";
@@ -48,105 +40,63 @@ export const Route = createFileRoute("/bpa-i-v3")({
 });
 
 function BpaI() {
-  const [state, setState] = useState<State>(initialState);
-  const [hydrated, setHydrated] = useState(false);
+  // ===== MOTOR compartilhado (mesmo do V4). A tela abaixo é só apresentação. =====
+  const eng = useBpaIEngine();
+  const {
+    state, setState, hydrated, setHydrated,
+    orgId, cboOpcoes, setCboOpcoes,
+    congelada, substituidaPor, refreshStatus, retificando, retificar,
+    fichaIdRef, fichaTituloRef, fichaTitulo, setFichaTitulo,
+    pdfPendente, setPdfPendente,
+    errosSeq, onValidacaoChangeSeq,
+    cnsProfInvalido, temSeqAtiva, motivosInvalidos, temCamposInvalidos,
+    competencia, cnesEstab, profCnsDig, profCboDig,
+    estabAutoCnesRef, cnsResolvidoRef,
+    persistFicha, nomeSugerido: nomeSugeridoEng,
+    set, updateSeq, repetirPaciente, prevTemPaciente,
+    vincularPaciente, desvincularPaciente, reidratarPaciente, usarUltimoProc,
+    checarDuplicidade, reconciliarESalvar, registrarExportacao,
+    carregarFichaSalva: engCarregarFichaSalva, novaFicha,
+  } = eng;
+  void hydrated; void errosSeq;
+
+  // ---- Estado só de UI (fica na tela; o V4 tem a própria apresentação) ----
   const [printing, setPrinting] = useState(false);
-  // Organização (prefeitura) resolvida pelo CNES — escopo do cadastro de pacientes.
-  const [orgId, setOrgId] = useState<string | null>(null);
-  // Quando o profissional escolhido tem >1 CBO no estabelecimento, guardamos as opções
-  // para a pessoa escolher (em vez de preencher um qualquer automaticamente).
-  const [cboOpcoes, setCboOpcoes] = useState<CboVinculo[]>([]);
-  // Modais de confirmação (substituem o confirm() nativo).
   const [zerarSeqsOpen, setZerarSeqsOpen] = useState(false);
   const [novaFichaOpen, setNovaFichaOpen] = useState(false);
   const [manterProf, setManterProf] = useState(true);
   const [zerarTudoOpen, setZerarTudoOpen] = useState(false);
-  // Snapshot do que havia antes de zerar, p/ desfazer (restaurar profissional ou tudo).
   const [snapshot, setSnapshot] = useState<State | null>(null);
   const [undoOpen, setUndoOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [fichasOpen, setFichasOpen] = useState(false);
   const [salvarOpen, setSalvarOpen] = useState(false);
-  // true = diálogo está em modo "Salvar como" (força criar uma cópia nova).
   const [salvarComoNovo, setSalvarComoNovo] = useState(false);
   const [salvarMenuOpen, setSalvarMenuOpen] = useState(false);
   const [salvandoDireto, setSalvandoDireto] = useState(false);
-  // Aviso de duplicidade: ficha 100% idêntica a uma já salva encontrada ao salvar. Guarda a
-  // ficha achada e a continuação (salvar mesmo assim).
   const [dupModal, setDupModal] = useState<{ dup: FichaDuplicada; prosseguir: () => void } | null>(null);
-  // Ciclo de vida da ficha (Fase 3): congelada (produção fechada) e/ou substituída.
-  const [ficStatus, setFicStatus] = useState<FichaStatus | null>(null);
-  const [retificando, setRetificando] = useState(false);
-  const congelada = ficStatus?.congelada ?? false;
-  const substituidaPor = ficStatus?.substituida_por ?? null;
-  const refreshStatus = useCallback((id: string | null) => {
-    if (!id) { setFicStatus(null); return; }
-    statusDaFicha(id).then(setFicStatus);
-  }, []);
-  // Id da ficha no Supabase (persistido p/ continuar atualizando a mesma após reload).
-  const fichaIdRef = useRef<string | null>(null);
-  // Título da ficha atual (quando já salva/carregada), p/ pré-preencher o "Salvar".
-  const fichaTituloRef = useRef<string | null>(null);
-  // Espelho reativo do título (o ref não re-renderiza) — usado no cabeçalho.
-  const [fichaTitulo, setFichaTitulo] = useState<string | null>(null);
-  const FICHA_ID_KEY = "bpa-i-v3-ficha-id";
-  const FICHA_TITULO_KEY = "bpa-i-v3-ficha-titulo";
-  // Houve alterações desde a última geração de PDF? (p/ avisar antes de zerar tudo)
-  const [pdfPendente, setPdfPendente] = useState(false);
-  // Motivos de erro reportados por cada sequência (SequenciaFields) — agregados aqui
-  // p/ bloquear Salvar/Gerar .txt/Gerar PDF enquanto houver qualquer campo em vermelho.
-  const [errosSeq, setErrosSeq] = useState<Record<number, string[]>>({});
-  const onValidacaoChangeSeq = useCallback((si: number, motivos: string[]) => {
-    setErrosSeq((prev) => (prev[si]?.join("|") === motivos.join("|") ? prev : { ...prev, [si]: motivos }));
-  }, []);
-  const cnsProfInvalido = hydrated && cnsInvalido(state.profCns.join(""));
-  // v3: cabeçalho obrigatório (estabelecimento + profissional + competência). Só cobra
-  // quando já há alguma sequência com procedimento — o formulário vazio não acende nada.
-  const temSeqAtiva = state.seqs.some(seqPreenchida);
-  const motivosCab = hydrated && temSeqAtiva ? motivosCabecalho(state) : [];
-  const motivosInvalidos = [
-    ...motivosCab.map((m) => `Cabeçalho: ${m}`),
-    ...(cnsProfInvalido ? ["Profissional: CNS inválido (dígito verificador não confere)."] : []),
-    ...Object.entries(errosSeq).flatMap(([si, motivos]) => motivos.map((m) => `Sequência ${Number(si) + 1}: ${m}`)),
-  ];
-  const temCamposInvalidos = motivosInvalidos.length > 0;
-  const user = useAuthUser(); // pessoa logada (Responsável), p/ a confirmação eletrônica
+  const user = useAuthUser();
   const sheetRef = useRef<HTMLDivElement>(null);
-  // Impressão a partir de "Minhas fichas" (?print=1): carrega, renderiza e gera o PDF
-  // sozinho. autoPrintRef marca o modo; prontoImprimir dispara após a ficha carregar.
   const autoPrintRef = useRef(false);
-  // Modo captura (?capture=1): usado dentro de um iframe pela página /imprimir. Em vez de
-  // baixar o PDF, rasteriza a folha e devolve a imagem via postMessage — impressão em lote.
   const capturaRef = useRef(false);
   const [prontoImprimir, setProntoImprimir] = useState(false);
-  // Último CNS já resolvido p/ nome/CBO — evita reconsultar a cada render e não repete o
-  // que o onPick do autocomplete já fez.
-  const cnsResolvidoRef = useRef("");
-  // Guarda o CNES que gerou o Nome do Estabelecimento auto-preenchido. Serve p/ a
-  // validação cruzada CNES <-> Nome: se o CNES mudar, o nome auto vira inconsistente.
-  const estabAutoCnesRef = useRef("");
-  // Registro das caixinhas por id, p/ auto-avanço contínuo entre campos vizinhos
-  // (DDD -> telefone; dia -> mês -> ano das datas). regBox expõe; focusBox pula.
+  // Registro das caixinhas por id, p/ auto-avanço contínuo entre campos vizinhos.
   const boxRefs = useRef<Record<string, HTMLInputElement[]>>({});
   const regBox = (key: string) => (els: HTMLInputElement[]) => { boxRefs.current[key] = els; };
   const focusBox = (key: string) => boxRefs.current[key]?.[0]?.focus();
-  // Junta os inputs de vários grupos (ex.: dia+mês+ano) p/ a lixeira do campo composto.
   const inputsOf = (...keys: string[]) => keys.flatMap((k) => boxRefs.current[k] ?? []);
-  // Borda direita (%) do último grupo — onde a lixeira do campo composto é ancorada.
   const endOf = (arr: { left: number; width: number }[]) => arr[arr.length - 1].left + arr[arr.length - 1].width;
-  const competencia = () => state.profAno.join("") + state.profMes.join("");
 
+  // Montagem: captura (?capture=1), impressão (?print=1), ficha (?ficha=id) ou localStorage.
   useEffect(() => {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const fichaParam = params?.get("ficha") ?? null;
     autoPrintRef.current = params?.get("print") === "1";
     capturaRef.current = params?.get("capture") === "1";
     if (fichaParam && capturaRef.current) {
-      // Dentro do iframe de /imprimir: carrega só p/ rasterizar (sem mexer no localStorage).
       carregarParaCaptura(fichaParam);
     } else if (fichaParam) {
-      // Aberta a partir de "Minhas fichas" (?ficha=<id>) — carrega direto do Supabase.
-      carregarFichaSalva(fichaParam);
+      engCarregarFichaSalva(fichaParam).then((ok) => { if (ok && autoPrintRef.current) setProntoImprimir(true); });
     } else {
       setState(loadState());
       try {
@@ -160,91 +110,21 @@ function BpaI() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resolve a organização (prefeitura) a partir do CNES — escopo da busca/cadastro de
-  // pacientes. Só quando o CNES está completo (7 dígitos).
-  const cnesStr = state.cnes.join("");
-  useEffect(() => {
-    if (!/^\d{7}$/.test(cnesStr)) { setOrgId(null); return; }
-    let cancel = false;
-    orgDoCnes(cnesStr).then((o) => { if (!cancel) setOrgId(o); });
-    return () => { cancel = true; };
-  }, [cnesStr]);
+  // Abrir ficha salva (Minhas fichas) — sem auto-print.
+  const carregarFichaSalva = (id: string, titulo?: string) => { void engCarregarFichaSalva(id, titulo); };
+  // Nome sugerido ao salvar (depende do modo "Salvar como" da UI).
+  const nomeSugerido = () => nomeSugeridoEng(salvarComoNovo);
 
-  // Nome sugerido ao salvar (padrão): "CNES · Nome prof (1º+último) · MM/AAAA · folha N".
-  // Se a ficha já foi salva antes, sugere o título atual (para não trocar sem querer).
-  const nomeSugerido = (): string => {
-    if (salvarComoNovo && fichaTituloRef.current) return `${fichaTituloRef.current} (cópia)`;
-    if (fichaTituloRef.current) return fichaTituloRef.current;
-    return montarTituloFicha({
-      cnes: state.cnes.join(""),
-      profNome: state.profNome,
-      profCns: state.profCns.join(""),
-      competencia: competencia(),
-      folha: state.profFolha.join(""),
-    }) || "Ficha BPA-I";
-  };
-
-  // Mantém os refs e o localStorage sincronizados (sobrevive a reload da página).
-  const persistFicha = (id: string, titulo: string) => {
-    fichaIdRef.current = id;
-    fichaTituloRef.current = titulo;
-    setFichaTitulo(titulo);
-    try {
-      localStorage.setItem(FICHA_ID_KEY, id);
-      localStorage.setItem(FICHA_TITULO_KEY, titulo);
-    } catch { /* noop */ }
-  };
-  const limparFichaPersistida = () => {
-    fichaIdRef.current = null;
-    fichaTituloRef.current = null;
-    setFichaTitulo(null);
-    try {
-      localStorage.removeItem(FICHA_ID_KEY);
-      localStorage.removeItem(FICHA_TITULO_KEY);
-    } catch { /* noop */ }
-  };
-
-  // Crivo de duplicidade: procura uma ficha 100% idêntica já salva (mesma chave e conteúdo).
-  // `idAtual` é excluído da busca (não é duplicata de si mesma). Vazio quando a ficha nem
-  // tem produção preenchida (nada a crivar).
-  const checarDuplicidade = async (idAtual: string | null): Promise<FichaDuplicada | null> => {
-    const assinatura = assinaturaBpaI(state.profCbo, state.seqs);
-    if (!assinatura) return null;
-    return acharDuplicataBpaI(state.cnes.join(""), state.profCns.join(""), competencia(), assinatura, idAtual);
-  };
-
-  // Grava efetivamente na nuvem (cria/atualiza). Não faz o crivo — quem chama já cuidou.
+  // ---- Save (orquestração de diálogo; chama as primitivas do engine) ----
   const gravarNaNuvem = async (titulo: string) => {
-    const comp = competencia();
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
-    // Rede de segurança (idempotente): garante que toda seq com identidade tenha pacienteId.
-    // Só linka/cria; nunca sobrescreve cadastro. O carimbo do id é persistido no jsonb.
-    let estadoSalvar = state;
-    if (orgId) {
-      const seqsReconc = await reconciliarPacientesDasSeqs(state.seqs, orgId);
-      if (seqsReconc !== state.seqs) {
-        estadoSalvar = { ...state, seqs: seqsReconc };
-        setState(estadoSalvar);
-      }
-    }
-    const id = await salvarFicha(idAlvo, titulo, comp, estadoSalvar, {
-      tipo: "BPA-I",
-      cnes: estadoSalvar.cnes.join(""),
-      profissionalCns: estadoSalvar.profCns.join(""),
-      profissionalNome: estadoSalvar.profNome,
-    });
-    if (!id) {
-      toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
-      return;
-    }
+    const id = await reconciliarESalvar(titulo, idAlvo);
+    if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
     const atualizou = Boolean(idAlvo);
-    persistFicha(id, titulo);
     setSalvarOpen(false);
     setSalvarComoNovo(false);
     toast.success(atualizou ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
-
-  // Salva (cria ou atualiza) com o nome do diálogo, passando antes pelo crivo de duplicidade.
   const salvarNaNuvem = async (titulo: string) => {
     const dup = await checarDuplicidade(salvarComoNovo ? null : fichaIdRef.current);
     if (dup) {
@@ -254,201 +134,59 @@ function BpaI() {
     }
     await gravarNaNuvem(titulo);
   };
-
-  // Gravação direta na ficha já existente (botão "Salvar" quando já tem id/título).
   const gravarNaFichaAtual = async () => {
     setSalvandoDireto(true);
-    const comp = competencia();
-    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current!, comp, state, {
-      tipo: "BPA-I",
-      cnes: state.cnes.join(""),
-      profissionalCns: state.profCns.join(""),
-      profissionalNome: state.profNome,
-    });
+    const id = await reconciliarESalvar(fichaTituloRef.current!, fichaIdRef.current);
     setSalvandoDireto(false);
-    if (!id) {
-      toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
-      return;
-    }
-    persistFicha(id, fichaTituloRef.current!);
+    if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
     toast.success("Alterações salvas na nuvem.");
   };
-
-  // Clique direto no botão "Salvar": se a ficha já existe, grava sem pedir nome de
-  // novo. Se ainda não foi salva, abre o diálogo (primeira vez precisa de nome).
   const salvarClique = async () => {
-    if (congelada) {
-      toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar.");
-      return;
-    }
-    if (temCamposInvalidos) {
-      toast.error("Corrija os campos em vermelho antes de salvar a ficha.");
-      return;
-    }
-    if (!fichaIdRef.current || !fichaTituloRef.current) {
-      setSalvarComoNovo(false);
-      setSalvarOpen(true);
-      return;
-    }
+    if (congelada) { toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar."); return; }
+    if (temCamposInvalidos) { toast.error("Corrija os campos em vermelho antes de salvar a ficha."); return; }
+    if (!fichaIdRef.current || !fichaTituloRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
     const dup = await checarDuplicidade(fichaIdRef.current);
-    if (dup) {
-      setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaFichaAtual(); } });
-      return;
-    }
+    if (dup) { setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaFichaAtual(); } }); return; }
     await gravarNaFichaAtual();
   };
-
-  // "Salvar como…": sempre abre o diálogo pedindo um nome novo p/ criar uma cópia.
   const salvarComoClique = () => {
-    if (temCamposInvalidos) {
-      toast.error("Corrija os campos em vermelho antes de salvar a ficha.");
-      return;
-    }
+    if (temCamposInvalidos) { toast.error("Corrija os campos em vermelho antes de salvar a ficha."); return; }
     setSalvarComoNovo(true);
     setSalvarOpen(true);
     setSalvarMenuOpen(false);
   };
 
-  // Carrega uma ficha salva; começa uma nova (limpa e desvincula da ficha atual).
-  const carregarFichaSalva = async (id: string, titulo?: string) => {
-    const ficha = await carregarFicha(id);
-    if (!ficha) return;
-    const merged = { ...initialState(), ...(ficha.dados as Partial<State>) };
-    merged.seqs = normalizarSeqs3(merged.seqs);
-    setState(merged);
-    persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-I");
-    refreshStatus(id);
-    // LGPD: abrir uma ficha BPA-I expõe PII do paciente — registra o acesso.
-    registrarLeituraFicha(id);
-    // Aberta só p/ imprimir (?print=1): dispara o PDF depois que a folha renderizar.
-    if (autoPrintRef.current) setProntoImprimir(true);
-  };
-  // Carrega uma ficha só p/ CAPTURA (iframe de /imprimir): popula o estado e dispara a
-  // rasterização, SEM persistir no localStorage (não sequestra a ficha aberta no editor).
+  // ---- Captura (iframe de /imprimir): só lê + rasteriza, sem persistir ----
   const carregarParaCaptura = async (id: string) => {
     const ficha = await carregarFicha(id);
     if (!ficha) { avisarCapturaFalhou(id, "ficha não encontrada"); return; }
     const merged = { ...initialState(), ...(ficha.dados as Partial<State>) };
     merged.seqs = normalizarSeqs3(merged.seqs);
-    fichaIdRef.current = id; // só p/ o log LGPD abaixo
+    fichaIdRef.current = id;
     setState(merged);
     setProntoImprimir(true);
   };
-  // Envia à página /imprimir (pai) o resultado da captura desta folha.
   const avisarCapturaFalhou = (id: string, erro: string) => {
     try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: id, erro }, window.location.origin); } catch { /* noop */ }
   };
   const capturarEEnviar = async () => {
     if (!sheetRef.current) return avisarCapturaFalhou(fichaIdRef.current ?? "", "sem folha");
-    setPrinting(true); // form-sheet--print: zera bordas/validação, folha limpa como no PDF
+    setPrinting(true);
     await new Promise((r) => setTimeout(r, 80));
     try {
       await document.fonts?.ready;
-      // Rasteriza TODAS as folhas (.form-sheet) — hoje o BPA-I tem 1, mas se um formulário
-      // tiver 2 páginas, as duas vão juntas na impressão.
       const folhas = Array.from(document.querySelectorAll<HTMLElement>(".form-sheet"));
       const alvos = folhas.length ? folhas : [sheetRef.current];
       const imgs: string[] = [];
       for (const el of alvos) imgs.push(await rasterizarFolhaJpeg(el));
-      // LGPD: imprimir é o dado do paciente saindo — registra no mesmo log (motivo='impressao').
       if (fichaIdRef.current) registrarLeituraFicha(fichaIdRef.current, "impressao");
       try { window.parent?.postMessage({ tipo: "bpa-captura", ficha: fichaIdRef.current, imgs }, window.location.origin); } catch { /* noop */ }
     } catch (err) {
       avisarCapturaFalhou(fichaIdRef.current ?? "", err instanceof Error ? err.message : "falha ao rasterizar");
     } finally { setPrinting(false); }
   };
-  const novaFicha = () => {
-    folhaAutoChaveRef.current = ""; // renumera a folha do zero na próxima chave
-    setState(initialState());
-    limparFichaPersistida();
-    setFicStatus(null);
-  };
-  // Retificação: cria uma nova versão (produção corrente) e abre-a p/ edição.
-  const retificar = async () => {
-    if (!fichaIdRef.current) return;
-    setRetificando(true);
-    try {
-      const nova = await retificarFicha(fichaIdRef.current);
-      toast.success("Retificação criada. Abrindo a nova versão para edição.");
-      window.location.href = `/bpa-i-v3?ficha=${nova}`;
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao retificar.");
-    } finally { setRetificando(false); }
-  };
-  useEffect(() => {
-    if (!hydrated) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* noop */ }
-    setPdfPendente(true); // mudou algo -> PDF desta versão ainda não foi gerado
-  }, [state, hydrated]);
 
-  // Validação cruzada CNES -> Nome do Estabelecimento (mantém os dois sincronizados):
-  //  - Se o CNES mudou e o nome atual havia sido auto-preenchido por OUTRO CNES, o nome
-  //    ficou inconsistente -> limpa na hora (silenciosamente).
-  //  - Com 7 dígitos, busca na tabela: achou -> preenche (e registra o CNES-fonte);
-  //    não achou -> deixa em branco. Nome digitado à mão (sem CNES-fonte) nunca é mexido aqui.
-  const cnesEstab = state.cnes.join("");
-  useEffect(() => {
-    if (!hydrated) return;
-    if (estabAutoCnesRef.current && estabAutoCnesRef.current !== cnesEstab) {
-      estabAutoCnesRef.current = "";
-      setState((p) => ({ ...p, nomeEstab: "" }));
-    }
-    if (cnesEstab.length !== 7) return;
-    let cancelled = false;
-    buscarEstabelecimento(cnesEstab).then((nome) => {
-      if (cancelled || !nome) return;
-      estabAutoCnesRef.current = cnesEstab;
-      setState((p) => ({ ...p, nomeEstab: nome }));
-    });
-    // Popula (uma vez) o cache de profissionais deste estabelecimento p/ o autocomplete.
-    sincronizarProfissionais(cnesEstab);
-    return () => { cancelled = true; };
-  }, [cnesEstab, hydrated]);
-
-  // Sentido CNS -> nome: quando o CNS do profissional fica completo (15 díg. válidos) e ainda
-  // não foi resolvido para este CNES, busca o nome no cache (e, se preciso, no DATASUS) e
-  // preenche — SEM sobrescrever nome digitado à mão. Também traz o CBO do vínculo (mesmo
-  // comportamento do onPick do autocomplete, que resolve o sentido nome -> CNS).
-  useEffect(() => {
-    if (!hydrated) return;
-    const cns = state.profCns.join("");
-    if (cns.length !== 15 || cnsInvalido(cns) || cnesEstab.length !== 7) return;
-    const chave = `${cnesEstab}:${cns}`;
-    if (cnsResolvidoRef.current === chave) return;
-    cnsResolvidoRef.current = chave;
-    buscarNomePorCns(cnesEstab, cns).then((nome) => {
-      if (nome) setState((p) => (p.profNome.trim() ? p : { ...p, profNome: nome }));
-    });
-    buscarCbosVinculo(cns, cnesEstab).then((cbos) => {
-      if (cbos.length === 1) setState((p) => (p.profCbo.some(Boolean) ? p : { ...p, profCbo: cells(cbos[0].codigo, 6) }));
-      else if (cbos.length > 1) setCboOpcoes(cbos);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.profCns, cnesEstab, hydrated]);
-
-  // Folha automática (organizacional; NÃO vai para o .txt — a folha do BPA Magnético é
-  // derivada no fechamento). Fichas NOVAS (ainda sem id) recebem a próxima folha da sequência
-  // do profissional naquela competência (reinicia por competência). Ao trocar de profissional/
-  // competência, renumera. Fichas salvas/importadas (fichaIdRef preenchido) mantêm a folha.
-  const folhaAutoChaveRef = useRef("");
-  useEffect(() => {
-    if (!hydrated || fichaIdRef.current) return;
-    const cnes = state.cnes.join("");
-    const profCns = state.profCns.join("");
-    const comp = competencia();
-    if (!/^\d{7}$/.test(cnes) || !/^\d{15}$/.test(profCns) || cnsInvalido(profCns) || !/^\d{6}$/.test(comp)) return;
-    const chave = `${cnes}:${profCns}:${comp}`;
-    if (folhaAutoChaveRef.current === chave) return;
-    folhaAutoChaveRef.current = chave;
-    proximaFolhaBpaI(cnes, profCns, comp).then((n) => {
-      if (folhaAutoChaveRef.current !== chave) return; // trocou de chave enquanto buscava
-      setState((p) => ({ ...p, profFolha: rjust(String(n).split(""), 3) }));
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.cnes, state.profCns, state.profMes, state.profAno, hydrated]);
-
-  // Fonte cursiva (Caveat) para a "assinatura" eletrônica do Responsável — injetada
-  // uma vez (mantém isolado no v2, sem mexer no HTML global).
+  // Fonte cursiva (Caveat) da "assinatura" do Responsável — injetada uma vez.
   useEffect(() => {
     if (document.getElementById("bpa-v2-fonte-assinatura")) return;
     const link = document.createElement("link");
@@ -458,102 +196,10 @@ function BpaI() {
     document.head.appendChild(link);
   }, []);
 
-  const set = <K extends keyof State>(k: K, v: State[K]) => setState((p) => ({ ...p, [k]: v }));
-  const updateSeq = <K extends keyof SeqData>(i: number, field: K, value: SeqData[K]) => {
-    setState((p) => {
-      const seqs = [...p.seqs];
-      // Editar a data de atendimento invalida uma confirmação de "aviso >120 dias"
-      // anterior (a pessoa precisa reconfirmar se a data mudou).
-      const desconfirmar = field === "dataAtend" && (value as string[]).join("") !== seqs[i].dataAtend.join("")
-        ? { dataAtendConfirmada: false } : {};
-      seqs[i] = { ...seqs[i], [field]: value, ...desconfirmar };
-      return { ...p, seqs };
-    });
-  };
-
-  // Copia a IDENTIFICAÇÃO DO PACIENTE da sequência anterior (mesmo paciente, vários
-  // procedimentos). NÃO copia os campos do procedimento/atendimento (dataAtend, idade,
-  // codProc, qtde, cnpj, servico, classProc, cid, carater, autorizacao).
-  const repetirPaciente = (i: number) => {
-    if (i <= 0) return;
-    setState((p) => {
-      const seqs = [...p.seqs];
-      const prev = seqs[i - 1];
-      const copia: Partial<SeqData> = {};
-      for (const k of CAMPOS_PACIENTE) {
-        const v = prev[k];
-        (copia as Record<string, unknown>)[k] = Array.isArray(v) ? [...v] : v;
-      }
-      seqs[i] = { ...seqs[i], ...copia };
-      return { ...p, seqs };
-    });
-  };
-  // A seq. anterior tem identificação de paciente para copiar?
-  const prevTemPaciente = (i: number) => {
-    if (i <= 0) return false;
-    const prev = state.seqs[i - 1];
-    return prev.cnsPac.some(Boolean) || prev.nomePac.trim() !== "" || Boolean(prev.cpfPac?.some(Boolean));
-  };
-
-  // ---- Trilho de pacientes (cadastro central) ----
-  // Vincula um paciente do cadastro à seq: autofill da identidade (fica read-only na folha)
-  // + carimba pacienteId.
-  const vincularPaciente = (i: number, p: Paciente) => {
-    setState((prev) => {
-      const seqs = [...prev.seqs];
-      seqs[i] = { ...seqs[i], ...pacienteParaIdentidade(p) };
-      return { ...prev, seqs };
-    });
-  };
-  // Remove o paciente da seq: limpa SÓ o vínculo + a identidade desta seq (nunca toca no
-  // cadastro). Mantém os campos de procedimento/atendimento.
-  const desvincularPaciente = (i: number) => {
-    setState((prev) => {
-      const seqs = [...prev.seqs];
-      const vazio = emptySeq() as unknown as Record<string, unknown>;
-      const limpa: Partial<SeqData> = {};
-      for (const k of CAMPOS_PACIENTE) (limpa as Record<string, unknown>)[k] = vazio[k];
-      seqs[i] = { ...seqs[i], ...limpa, pacienteId: undefined };
-      return { ...prev, seqs };
-    });
-  };
-  // Re-hidrata a identidade inline de TODAS as seqs desta folha que referenciam o paciente
-  // editado (as congeladas nem chegam aqui — a folha aberta é rascunho). Reflete a edição.
-  const reidratarPaciente = (p: Paciente) => {
-    setState((prev) => {
-      const ident = pacienteParaIdentidade(p);
-      const seqs = prev.seqs.map((s) => (s.pacienteId === p.id ? { ...s, ...ident } : s));
-      return { ...prev, seqs };
-    });
-  };
-  // "Utilizar o mesmo procedimento da última vez": preenche procedimento/serviço/classif./
-  // CID/caráter; deixa QUANTIDADE e DATA em branco (nunca faturar sem toque humano).
-  const usarUltimoProc = (i: number, f: UltimoProcedimento) => {
-    setState((prev) => {
-      const seqs = [...prev.seqs];
-      seqs[i] = {
-        ...seqs[i],
-        codProc: cells(f.procedimento || "", 10),
-        servico: cells(f.servico || "", 3),
-        classProc: cells(f.classificacao || "", 3),
-        cid: cells((f.cid || "").toUpperCase(), 4),
-        carater: cells(f.carater || "", 2),
-        qtde: Array(3).fill(""),
-        dataAtend: Array(8).fill(""),
-        dataAtendConfirmada: false,
-      };
-      return { ...prev, seqs };
-    });
-  };
-  const profCnsDig = state.profCns.join("").replace(/\D/g, "");
-  const profCboDig = state.profCbo.join("").replace(/\D/g, "");
-
-  const clearSeqs = () => {
-    setManterProf(true);
-    setZerarSeqsOpen(true);
-  };
+  // ---- Zerar / desfazer (só UI) ----
+  const clearSeqs = () => { setManterProf(true); setZerarSeqsOpen(true); };
   const confirmarZerarSeqs = () => {
-    setSnapshot(state); // guarda p/ desfazer
+    setSnapshot(state);
     setState((p) => ({
       ...p,
       seqs: [emptySeq(), emptySeq(), emptySeq()],
@@ -564,13 +210,11 @@ function BpaI() {
   };
   const clearAll = () => setZerarTudoOpen(true);
   const confirmarZerarTudo = () => {
-    setSnapshot(state); // guarda p/ desfazer
+    setSnapshot(state);
     setState(initialState());
     setCboOpcoes([]);
     setZerarTudoOpen(false);
   };
-
-  // Desfazer: restaura o cabeçalho (estabelecimento + profissional) ou tudo.
   const restaurarProfissional = () => {
     if (!snapshot) return;
     setState((p) => ({
@@ -587,20 +231,16 @@ function BpaI() {
     setUndoOpen(false);
   };
 
+  // ---- PDF oficial (rasteriza a folha do V3) ----
   const exportPdf = async () => {
-    if (temCamposInvalidos) {
-      toast.error("Corrija os campos em vermelho antes de gerar o PDF.");
-      return;
-    }
+    if (temCamposInvalidos) { toast.error("Corrija os campos em vermelho antes de gerar o PDF."); return; }
     if (!sheetRef.current) return;
     setPrinting(true);
     await new Promise((r) => setTimeout(r, 80));
     try {
-      await document.fonts?.ready; // garante a fonte cursiva carregada antes da captura
+      await document.fonts?.ready;
       await exportSheetPdf(sheetRef.current, "BPA-I.pdf");
       setPdfPendente(false); // PDF gerado p/ o estado atual
-      // LGPD: gerar o PDF é o dado do paciente saindo pro papel — registra a impressão
-      // no MESMO log da leitura (motivo='impressao'). Só faz sentido p/ ficha já salva.
       if (fichaIdRef.current) registrarLeituraFicha(fichaIdRef.current, "impressao");
       await registrarExportacao();
     } catch (err) {
@@ -609,8 +249,7 @@ function BpaI() {
     } finally { setPrinting(false); }
   };
 
-  // Auto-impressão (?print=1): quando a ficha terminou de carregar, espera a folha pintar
-  // e a fonte carregar, e gera o PDF. O exportPdf já registra motivo='impressao' no log F4.
+  // Auto-impressão / captura: dispara após a folha carregar.
   useEffect(() => {
     if (!prontoImprimir) return;
     setProntoImprimir(false);
@@ -621,44 +260,6 @@ function BpaI() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prontoImprimir]);
-
-  // Ao exportar, registra no histórico o CBO do profissional e os procedimentos
-  // preenchidos em cada sequência (alimenta o autocomplete). Só registra o código do
-  // procedimento se ele existir de verdade no SIGTAP — evita que um código digitado
-  // errado vire sugestão de autocomplete pra outras pessoas.
-  const registrarUsoDaFicha = () => {
-    const cbo = state.profCbo.join("");
-    if (cbo.length === L.PROF_CBO_BOXES.length) registrarUso("cbo", cbo);
-    for (const sq of state.seqs) {
-      const proc = sq.codProc.join("");
-      if (proc.length !== L.REL.codProc.length) continue;
-      buscarProcedimentoSigtap(proc).then((p) => { if (p) registrarUso("procedimento", proc); });
-    }
-  };
-
-  const garantirFichaExportada = async () => {
-    const titulo = fichaTituloRef.current ?? nomeSugerido();
-    const id = await salvarFicha(fichaIdRef.current, titulo, competencia(), state, {
-      tipo: "BPA-I",
-      cnes: state.cnes.join(""),
-      profissionalCns: state.profCns.join(""),
-      profissionalNome: state.profNome,
-    });
-    if (id) persistFicha(id, titulo);
-    return id;
-  };
-
-  // Salva a ficha na nuvem (a produção da dashboard é derivada das fichas salvas) e
-  // alimenta o histórico de autocomplete. O .txt não sai mais daqui — só no Fechamento.
-  const registrarExportacao = async () => {
-    registrarUsoDaFicha();
-    // Gerar PDF de um formulário EM BRANCO (nenhuma sequência preenchida e ficha ainda não
-    // salva) não deve tentar persistir na nuvem — nem avisar. Só salva quando há conteúdo
-    // real, ou quando a ficha já existe (aí atualiza).
-    if (!temSeqAtiva && !fichaIdRef.current) return;
-    const fichaId = await garantirFichaExportada();
-    if (!fichaId) toast.warning("PDF gerado, mas não consegui salvar a ficha na nuvem.");
-  };
 
   // Tem conteúdo preenchido que valha avisar antes de zerar?
   const temConteudo =
@@ -686,7 +287,6 @@ function BpaI() {
       </>
     );
   };
-
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
       <ConfirmModal
