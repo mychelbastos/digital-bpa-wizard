@@ -46,7 +46,7 @@ export type PacienteInput = Partial<Omit<Paciente, "id" | "organizacao_id">> & {
 // destes, exige-se CNS OU CPF. `pacienteFaltando` devolve as chaves ausentes (vazio = ok).
 export const CAMPOS_OBRIGATORIOS_PACIENTE: (keyof Paciente)[] = [
   "nome", "sexo", "nascimento", "nacionalidade", "raca_cor",
-  "cep", "municipio_ibge", "logradouro", "numero", "bairro", "uf", "telefone",
+  "cep", "municipio_ibge", "logradouro", "numero", "bairro", "uf",
 ];
 
 export function pacienteFaltando(p: Partial<Paciente>): string[] {

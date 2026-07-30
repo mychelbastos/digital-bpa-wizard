@@ -225,7 +225,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
       nome, cns: digitos(cns) || null, cpf: digitos(cpf) || null, sexo: sexo || null,
       nascimento: nascimento || null, nacionalidade, raca_cor: racaCor || null,
       cep: digitos(cep) || null, municipio_ibge: digitos(municipioIbge) || null,
-      logradouro: logradouro || null, numero: digitos(numero) || null, bairro: bairro || null,
+      logradouro: logradouro || null, numero: numero.trim() || null, bairro: bairro || null,
       uf: uf || null, telefone: digitos(telefone) || null,
     };
     // Crivo: CNS/CPF informado tem de estar completo e passar no dígito verificador.
@@ -345,8 +345,8 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} data-nocaps />
         </div>
         <div className="sm:col-span-2">
-          <div className={label}>Telefone (DDD + número) *</div>
-          <input value={telefone} onChange={(e) => setTelefone(digitos(e.target.value).slice(0, 11))} className={campo + errCls("telefone")} />
+          <div className={label}>Telefone (DDD + número)</div>
+          <input value={telefone} onChange={(e) => setTelefone(digitos(e.target.value).slice(0, 11))} className={campo} />
         </div>
         <div>
           <div className={label}>CEP *</div>
@@ -364,8 +364,8 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
           <input value={logradouro} onChange={(e) => setLogradouro(e.target.value)} className={campo + errCls("logradouro")} />
         </div>
         <div>
-          <div className={label}>Número *</div>
-          <input value={numero} onChange={(e) => setNumero(digitos(e.target.value).slice(0, 6))} className={campo + errCls("numero")} />
+          <div className={label}>Número * <span className="font-normal normal-case text-muted-foreground">(SN se sem número)</span></div>
+          <input value={numero} onChange={(e) => setNumero(e.target.value.toUpperCase().slice(0, 10))} className={campo + errCls("numero")} />
         </div>
         <div>
           <div className={label}>Complemento</div>
