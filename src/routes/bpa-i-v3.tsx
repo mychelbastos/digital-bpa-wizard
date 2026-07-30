@@ -23,16 +23,17 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
-import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { CboField } from "@/components/bpa-i-v3/CboField";
 import { registrarUso } from "@/lib/bpa-i-v2/historico";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
-import { ancorarCharsDireita } from "@/lib/digitos-direita";
 import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
 import { orgDoCnes } from "@/lib/tfd/tfd";
 import { reconciliarPacientesDasSeqs, pacienteParaIdentidade, type UltimoProcedimento } from "@/lib/bpa-i-v3/paciente-seq";
+import {
+  STORAGE_KEY, CAMPOS_PACIENTE, initialState, rjust, normalizarSeqs3, loadState, cells, type State,
+} from "@/lib/bpa-i-v3/engine";
 import { PacienteSeqCard } from "@/components/bpa-i-v3/PacienteSeqCard";
 import type { Paciente } from "@/lib/pacientes";
 
@@ -45,108 +46,6 @@ export const Route = createFileRoute("/bpa-i-v3")({
   }),
   component: BpaI,
 });
-
-const STORAGE_KEY = "bpa-i-v3-state-v1";
-
-// Campos de IDENTIFICAÇÃO DO PACIENTE (não os do procedimento/atendimento) — usados pelo
-// botão "repetir paciente" da sequência seguinte, quando o mesmo paciente tem mais de um
-// procedimento na folha.
-const CAMPOS_PACIENTE: (keyof SeqData)[] = [
-  "cnsPac", "nomePac", "sexo", "dataNasc", "nacionalidade", "racaCor", "etnia",
-  "cep", "ibge", "codLog", "endereco", "numero", "complemento", "bairro",
-  "ddd", "telefone", "email", "cpfPac", "situacaoRua",
-];
-
-interface State {
-  nomeEstab: string;
-  cnes: string[];
-  profCns: string[];
-  profNome: string;
-  profCbo: string[];
-  profMes: string[];
-  profAno: string[];
-  profEquipe: string;
-  profFolha: string[];
-  seqs: SeqData[];
-  respConfirmacao: Confirmacao | null;
-  respData: string[];
-  gestCarimbo: string;
-  gestRubrica: string;
-  gestData: string[];
-}
-
-// Mês/Ano da competência atual (preenchidos por padrão; o usuário pode alterar).
-const competenciaAtual = () => {
-  const agora = new Date();
-  return {
-    mes: String(agora.getMonth() + 1).padStart(2, "0").split(""),
-    ano: String(agora.getFullYear()).padStart(4, "0").split(""),
-  };
-};
-
-// Data de hoje como 8 dígitos [D,D,M,M,A,A,A,A] — pré-preenche o campo Data do rodapé.
-const hojeDigits = (): string[] => {
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const aaaa = String(d.getFullYear()).padStart(4, "0");
-  return `${dd}${mm}${aaaa}`.split("");
-};
-
-const initialState = (): State => ({
-  nomeEstab: "",
-  cnes: Array(7).fill(""),
-  profCns: Array(15).fill(""),
-  profNome: "",
-  profCbo: Array(6).fill(""),
-  profMes: competenciaAtual().mes,
-  profAno: competenciaAtual().ano,
-  profEquipe: "",
-  profFolha: Array(3).fill(""),
-  seqs: [emptySeq(), emptySeq(), emptySeq()],
-  respConfirmacao: null,
-  respData: hojeDigits(),
-  gestCarimbo: "",
-  gestRubrica: "",
-  gestData: hojeDigits(),
-});
-
-// Ajusta um vetor de dígitos para exatamente n posições, justificado à direita
-// (mantém os dígitos preenchidos, alinhados à direita; descarta excedente à esquerda).
-function rjust(arr: string[] | undefined, n: number): string[] {
-  const digs = (arr ?? []).filter(Boolean).slice(-n);
-  return [...Array(Math.max(0, n - digs.length)).fill(""), ...digs];
-}
-
-// Migração: campo Número (endereço) — 4 caixinhas alfanuméricas ("SN" de "sem número"),
-// ancoradas à DIREITA (estilo calculadora). Aceita array antigo (à esquerda ou com
-// espaços de importação) ou texto livre; remove espaços e mantém os últimos 4 caracteres.
-function migrarNumero(v: unknown): string[] {
-  const raw = Array.isArray(v) ? (v as string[]).join("") : String(v ?? "");
-  return ancorarCharsDireita(raw.replace(/\s/g, ""), 4);
-}
-
-// Garante 3 sequências (o formulário renderiza 3 fixas) e blinda campos ausentes. Fichas
-// importadas ou geradas (TFD) podem ter < 3 seqs — sem isto o render acessaria state.seqs[si]
-// indefinido e a página quebraria. Também aplica a migração de Quantidade (6->3 díg.).
-function normalizarSeqs3(seqs: SeqData[] | undefined): SeqData[] {
-  const base = seqs ?? [];
-  const arr = base.length >= 3 ? base : [...base, ...Array.from({ length: 3 - base.length }, emptySeq)];
-  return arr.map((s) => ({ ...emptySeq(), ...s, qtde: rjust((s?.qtde ?? []), 3), numero: migrarNumero(s?.numero ?? []) }));
-}
-
-function loadState(): State {
-  if (typeof window === "undefined") return initialState();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return initialState();
-    const merged = { ...initialState(), ...(JSON.parse(raw) as Partial<State>) };
-    merged.seqs = normalizarSeqs3(merged.seqs);
-    return merged;
-  } catch {
-    return initialState();
-  }
-}
 
 function BpaI() {
   const [state, setState] = useState<State>(initialState);
@@ -223,7 +122,6 @@ function BpaI() {
   // Último CNS já resolvido p/ nome/CBO — evita reconsultar a cada render e não repete o
   // que o onPick do autocomplete já fez.
   const cnsResolvidoRef = useRef("");
-  const cells = (s: string, n: number) => Array.from({ length: n }, (_, i) => s[i] ?? "");
   // Guarda o CNES que gerou o Nome do Estabelecimento auto-preenchido. Serve p/ a
   // validação cruzada CNES <-> Nome: se o CNES mudar, o nome auto vira inconsistente.
   const estabAutoCnesRef = useRef("");
