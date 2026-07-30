@@ -30,7 +30,7 @@ import { sincronizarConfigDaOrg, configCompleta } from "@/lib/bpa-i-v2/config";
 import { validarCns, cnsCompleto } from "@/lib/bpa-i-v2/validacao";
 
 export const Route = createFileRoute("/perfil")({
-  head: () => ({ meta: [{ title: "Meu perfil — BPA Digital" }] }),
+  head: () => ({ meta: [{ title: "Meu perfil — SPA Digital" }] }),
   component: Perfil,
 });
 

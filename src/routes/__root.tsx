@@ -88,10 +88,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Digital BPA" },
+      { title: "SPA Digital" },
       { name: "description", content: "Sistema de digitação e gestão de boletins de produção ambulatorial (BPA-I e BPA-C) para o SUS." },
-      { name: "author", content: "Digital BPA" },
-      { property: "og:title", content: "Digital BPA" },
+      { name: "author", content: "SPA Digital" },
+      { property: "og:title", content: "SPA Digital" },
       { property: "og:description", content: "Sistema de digitação e gestão de boletins de produção ambulatorial (BPA-I e BPA-C) para o SUS." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -148,7 +148,8 @@ function RootComponent() {
       <AuthGate>
         <div className="flex min-h-screen">
           <AppSidebar />
-          <div className="min-w-0 flex-1">
+          {/* pt-[52px] no mobile abre espaço para a barra superior fixa (some no desktop). */}
+          <div className="min-w-0 flex-1 pt-[52px] md:pt-0">
             <Outlet />
           </div>
         </div>

@@ -25,7 +25,7 @@ import {
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/relatorios")({
-  head: () => ({ meta: [{ title: "Relatórios — BPA Digital" }] }),
+  head: () => ({ meta: [{ title: "Relatórios — SPA Digital" }] }),
   component: RelatoriosPage,
 });
 

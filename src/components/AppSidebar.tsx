@@ -50,8 +50,8 @@ function NavConteudo({ onNavegar }: { onNavegar?: () => void }) {
   return (
     <>
       <div className="flex items-center gap-2.5 px-2 pb-6 pt-1">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold text-white" style={{ background: BG_LOGO }}>BP</span>
-        <span className="text-[15px] font-bold tracking-tight text-white">Digital BPA</span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold text-white" style={{ background: BG_LOGO }}>SP</span>
+        <span className="text-[15px] font-bold tracking-tight text-white">SPA Digital</span>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto">
@@ -120,12 +120,12 @@ export function AppSidebar() {
         <NavConteudo />
       </aside>
 
-      {/* Mobile: botão hambúrguer flutuante */}
-      <button type="button" onClick={() => setMobileOpen(true)}
-        className="fixed left-3 top-3 z-40 flex size-10 items-center justify-center rounded-xl text-white shadow-lg md:hidden"
-        style={{ background: BG_SIDEBAR }} aria-label="Abrir menu">
-        <Menu className="size-5" />
-      </button>
+      {/* Mobile: barra superior fixa (o conteúdo das páginas ganha pt-[52px] no layout). */}
+      <div className="fixed inset-x-0 top-0 z-40 flex h-[52px] items-center gap-3 px-4 text-white shadow-md md:hidden" style={{ background: BG_SIDEBAR }}>
+        <button type="button" onClick={() => setMobileOpen(true)} aria-label="Abrir menu" className="-ml-1 p-1"><Menu className="size-6" /></button>
+        <span className="flex size-7 items-center justify-center rounded-lg text-[11px] font-bold" style={{ background: BG_LOGO }}>SP</span>
+        <span className="text-[15px] font-bold">SPA Digital</span>
+      </div>
 
       {/* Mobile: drawer */}
       {mobileOpen && (

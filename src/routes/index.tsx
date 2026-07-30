@@ -21,7 +21,7 @@ const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? n
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Dashboard BPA Digital" },
+      { title: "Dashboard SPA Digital" },
       { name: "description", content: "Dashboard de produção BPA-C e BPA-I com filtros por unidade, profissional, procedimento e competência." },
     ],
   }),
@@ -222,11 +222,11 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-muted/40">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
+      <header className="sticky top-[52px] z-30 border-b border-border bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">SIA / SUS</p>
-            <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard BPA Digital</h1>
+            <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard SPA Digital</h1>
           </div>
           <button onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_-8px_oklch(0.6_0.18_260/0.55)] transition-opacity hover:opacity-90 disabled:opacity-60"
             style={{ background: "linear-gradient(135deg, oklch(0.62 0.17 250), oklch(0.55 0.19 278))" }}>
@@ -699,7 +699,7 @@ function imprimirProducaoProfissional(d: {
 <body>
   <header>
     <div>
-      <div class="tit">Relatório de produção · BPA Digital</div>
+      <div class="tit">Relatório de produção · SPA Digital</div>
       <h1>${esc(d.nome)}</h1>
       <div class="meta">
         <span>Competência: <b>${esc(d.competenciaLabel)}</b></span>
@@ -722,7 +722,7 @@ function imprimirProducaoProfissional(d: {
   ${bloco("Unidades", d.unidades, false)}
   ${bloco("Caráter de atendimento", d.carateres, true)}
   ${bloco("CID mais frequentes", d.cids, false)}
-  <footer>Gerado pelo BPA Digital em ${new Date().toLocaleString("pt-BR")}.</footer>
+  <footer>Gerado pelo SPA Digital em ${new Date().toLocaleString("pt-BR")}.</footer>
 </body></html>`;
 
   const win = window.open("", "_blank");

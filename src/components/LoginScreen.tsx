@@ -53,7 +53,7 @@ export function LoginScreen() {
 
   const formFields = {
     header: "Acesso restrito",
-    subHeader: "Entre para acessar os formulários BPA",
+    subHeader: "Entre para acessar o Sistema de Produção Ambulatorial",
     fields: [
       {
         label: "E-mail",
