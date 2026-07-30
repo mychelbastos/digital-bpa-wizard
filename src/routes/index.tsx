@@ -228,7 +228,8 @@ function Home() {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">SIA / SUS</p>
             <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard BPA Digital</h1>
           </div>
-          <button onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60">
+          <button onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_-8px_oklch(0.6_0.18_260/0.55)] transition-opacity hover:opacity-90 disabled:opacity-60"
+            style={{ background: "linear-gradient(135deg, oklch(0.62 0.17 250), oklch(0.55 0.19 278))" }}>
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Atualizar
           </button>
         </div>
@@ -431,37 +432,36 @@ function ResumoFpoTotal({ resumo, competencia, onVerDetalhes }: {
   const over = pct > 1;
   const pctTxt = pct > 0 && pct < 0.1 ? (pct * 100).toFixed(1).replace(".", ",") : (pct * 100).toFixed(0);
   return (
-    <section className="mb-5 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3 sm:px-5">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <span className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary"><TrendingUp className="size-3.5" /></span>
-          FPO × Produção · {mesLabel(competencia)}
+    <section className="relative mb-5 overflow-hidden rounded-[20px] px-5 py-6 text-white shadow-[0_16px_36px_-16px_oklch(0.3_0.1_260/0.55)] sm:px-7"
+      style={{ background: "linear-gradient(120deg, oklch(0.28 0.06 258), oklch(0.36 0.10 268), oklch(0.44 0.13 240))" }}>
+      <div className="pointer-events-none absolute -right-10 -top-16 size-56 rounded-full" style={{ background: "radial-gradient(circle, oklch(0.85 0.1 235 / 0.25), transparent 70%)" }} />
+      <div className="relative mb-5 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold opacity-90">
+          <TrendingUp className="size-4" /> FPO × Produção · {mesLabel(competencia)}
         </h2>
-        <button onClick={onVerDetalhes} className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10">
+        <button onClick={onVerDetalhes} className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold opacity-90 transition-opacity hover:opacity-100">
           Ver detalhes <ChevronDown className="size-3.5" />
         </button>
       </div>
-      <div className="px-4 py-4 sm:px-5">
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Produzido</p>
-            <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground sm:text-2xl">{brlFmt(tot.prodRS)}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Orçado (teto)</p>
-            <p className="mt-0.5 text-xl font-bold tabular-nums text-muted-foreground sm:text-2xl">{brlFmt(tot.tetoRS)}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Saldo</p>
-            <p className={`mt-0.5 text-xl font-bold tabular-nums sm:text-2xl ${saldoRS < 0 ? "text-rose-600" : "text-emerald-600"}`}>{brlFmt(saldoRS)}</p>
-          </div>
+      <div className="relative mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-white/60">Produzido</p>
+          <p className="mt-0.5 text-2xl font-bold tabular-nums sm:text-[26px]">{brlFmt(tot.prodRS)}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-            <div className={`h-full rounded-full transition-[width] ${over ? "bg-gradient-to-r from-rose-400 to-rose-600" : "bg-gradient-to-r from-emerald-400 to-emerald-600"}`} style={{ width: `${Math.min(100, Math.max(2, pct * 100))}%` }} />
-          </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${over ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{pctTxt}% do teto</span>
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-white/60">Orçado (teto)</p>
+          <p className="mt-0.5 text-2xl font-bold tabular-nums text-white/80 sm:text-[26px]">{brlFmt(tot.tetoRS)}</p>
         </div>
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-white/60">Saldo</p>
+          <p className={`mt-0.5 text-2xl font-bold tabular-nums sm:text-[26px] ${saldoRS < 0 ? "text-rose-300" : "text-emerald-300"}`}>{brlFmt(saldoRS)}</p>
+        </div>
+      </div>
+      <div className="relative flex items-center gap-3">
+        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/15">
+          <div className={`h-full rounded-full transition-[width] ${over ? "bg-gradient-to-r from-rose-300 to-rose-500" : "bg-gradient-to-r from-emerald-300 to-emerald-400"}`} style={{ width: `${Math.min(100, Math.max(2, pct * 100))}%` }} />
+        </div>
+        <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold tabular-nums text-white">{pctTxt}% do teto</span>
       </div>
     </section>
   );
