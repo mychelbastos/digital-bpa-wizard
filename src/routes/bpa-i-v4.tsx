@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Copy, Trash2, FileText, Save, Loader2, UserRound, AlertTriangle, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useBpaIEngine, cells, loadState, type State } from "@/lib/bpa-i-v3/engine";
+import { buscarEstabelecimentosPorNome } from "@/lib/bpa-i-v2/estabelecimentos";
+import { buscarProfissionais, buscarCbosVinculo, type ProfissionalCache } from "@/lib/bpa-i-v2/profissionais";
+import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { PacienteSeqCard } from "@/components/bpa-i-v3/PacienteSeqCard";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
@@ -61,8 +64,28 @@ function BpaIV4() {
     adicionarSeq, duplicarUltimaSeq, removerSeq,
     reconciliarESalvar, checarDuplicidade, novaFicha,
     storageKey, fichaIdKey, fichaTituloKey,
+    setCboOpcoes, estabAutoCnesRef, cnsResolvidoRef,
   } = eng;
-  void cboOpcoes; void checarDuplicidade;
+  void checarDuplicidade;
+  const cnesEstab = dig(state.cnes);
+
+  // onPick do estabelecimento (nome → CNES): mesma lógica do V3.
+  const escolherEstab = (e: { cnes: string; nome: string }) => {
+    estabAutoCnesRef.current = e.cnes;
+    set("nomeEstab", e.nome);
+    set("cnes", cells(e.cnes, 7));
+  };
+  // onPick do profissional (nome → CNS + CBO do vínculo): mesma lógica do V3.
+  const escolherProf = (p: { cns: string; nome: string }) => {
+    cnsResolvidoRef.current = `${cnesEstab}:${p.cns}`;
+    set("profNome", p.nome);
+    set("profCns", cells(p.cns, 15));
+    setCboOpcoes([]);
+    buscarCbosVinculo(p.cns, cnesEstab).then((cbos) => {
+      if (cbos.length === 1) set("profCbo", cells(cbos[0].codigo, 6));
+      else if (cbos.length > 1) setCboOpcoes(cbos);
+    });
+  };
 
   const [salvando, setSalvando] = useState(false);
   const [visualizando, setVisualizando] = useState(false);
@@ -144,18 +167,28 @@ function BpaIV4() {
               <input inputMode="numeric" value={dig(state.cnes)} onChange={(e) => set("cnes", cells(e.target.value.replace(/\D/g, ""), 7))}
                 className={inputMono} maxLength={7} placeholder="0000000" />
             </Campo>
-            <Campo label="Nome do estabelecimento" hint="preenche pelo CNES">
-              <input value={state.nomeEstab} onChange={(e) => set("nomeEstab", e.target.value.toUpperCase())} className={input} />
+            <Campo label="Nome do estabelecimento" hint="digite p/ buscar, ou preenche pelo CNES">
+              <CardAutocomplete value={state.nomeEstab} onChange={(v) => set("nomeEstab", v.toUpperCase())}
+                busca={async (t) => (await buscarEstabelecimentosPorNome(t)).map((e) => ({ code: e.cnes, label: e.nome, sub: `CNES ${e.cnes}` }))}
+                onPick={(it) => escolherEstab({ cnes: it.code, nome: it.label })} />
             </Campo>
             <Campo label="CNS do profissional">
               <input inputMode="numeric" value={dig(state.profCns)} onChange={(e) => set("profCns", cells(e.target.value.replace(/\D/g, ""), 15))}
                 className={inputMono} maxLength={15} placeholder="000000000000000" />
             </Campo>
-            <Campo label="Nome do profissional" hint="preenche pelo CNS">
-              <input value={state.profNome} onChange={(e) => set("profNome", e.target.value.toUpperCase())} className={input} />
+            <Campo label="Nome do profissional" hint={cnesEstab.length === 7 ? "digite p/ buscar, ou preenche pelo CNS" : "preencha o CNES primeiro"}>
+              <CardAutocomplete value={state.profNome} onChange={(v) => set("profNome", v.toUpperCase())} disabled={cnesEstab.length !== 7}
+                busca={async (t) => (await buscarProfissionais(cnesEstab, t)).map((p) => ({ code: p.cns, label: p.nome, sub: `CNS ${p.cns}` }))}
+                onPick={(it) => escolherProf({ cns: it.code, nome: it.label })} />
             </Campo>
             <Campo label="CBO">
               <input inputMode="numeric" value={dig(state.profCbo)} onChange={(e) => set("profCbo", cells(e.target.value.replace(/\D/g, ""), 6))} className={inputMono} maxLength={6} />
+              {cboOpcoes.length > 1 && (
+                <select value={dig(state.profCbo)} onChange={(e) => set("profCbo", cells(e.target.value, 6))} className={`${input} mt-1`}>
+                  <option value="">Escolha o CBO do vínculo…</option>
+                  {cboOpcoes.map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo}{c.descricao ? ` — ${c.descricao}` : ""}</option>)}
+                </select>
+              )}
             </Campo>
             <div className="grid grid-cols-3 gap-2">
               <Campo label="Mês"><input inputMode="numeric" value={dig(state.profMes)} onChange={(e) => set("profMes", cells(e.target.value.replace(/\D/g, ""), 2))} className={inputMono} maxLength={2} /></Campo>
@@ -240,6 +273,7 @@ function SeqCardV4(props: {
   }, [JSON.stringify(s), exig.exigeServico, exig.exigeCid, val.motivos.join("|")]);
   useEffect(() => { props.onValidacao(motivos); /* eslint-disable-next-line */ }, [motivos.join("|")]);
 
+  const [procBusca, setProcBusca] = useState(""); // busca de procedimento por nome
   // Nome do serviço/classe e CID (informativo).
   const [nomeSC, setNomeSC] = useState<string | null>(null);
   useEffect(() => {
@@ -283,6 +317,9 @@ function SeqCardV4(props: {
         <div className="grid grid-cols-1 gap-3 rounded-xl bg-slate-50/70 p-3 sm:grid-cols-2">
           <Campo label="Procedimento (SIGTAP)" hint={val.proc?.nome ?? (val.procNaoEncontrado ? "não encontrado" : undefined)} erro={val.procNaoEncontrado}>
             <input inputMode="numeric" value={dig(s.codProc)} onChange={(e) => u("codProc", cells(e.target.value.replace(/\D/g, ""), 10))} className={inputMono} maxLength={10} placeholder="0000000000" />
+            <CardAutocomplete value={procBusca} onChange={setProcBusca} minChars={3}
+              busca={async (t) => (await buscarProcedimentosPorNome(t)).map((pp) => ({ code: pp.codigo, label: pp.nome, sub: pp.codigo }))}
+              onPick={(it) => { u("codProc", cells(it.code, 10)); setProcBusca(""); }} />
           </Campo>
           <div className="grid grid-cols-2 gap-2">
             <Campo label="Data atend." erro={val.idadeInvalida}><input type="date" value={dataAtendISO} onChange={(e) => setDataAtend(e.target.value)} className={input} /></Campo>
@@ -316,6 +353,44 @@ function SeqCardV4(props: {
 
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20";
 const inputMono = input + " font-mono tracking-wide";
+
+interface ItemAC { code: string; label: string; sub?: string }
+// Autocomplete de card (reusa as MESMAS buscas do V3: estabelecimento/profissional por nome).
+function CardAutocomplete(props: {
+  value: string; onChange: (v: string) => void; disabled?: boolean; minChars?: number;
+  busca: (termo: string) => Promise<ItemAC[]>;
+  onPick: (it: ItemAC) => void;
+}) {
+  const [sug, setSug] = useState<ItemAC[]>([]);
+  const [open, setOpen] = useState(false);
+  const min = props.minChars ?? 2;
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onInput = (v: string) => {
+    props.onChange(v);
+    if (timer.current) clearTimeout(timer.current);
+    if (props.disabled || v.trim().length < min) { setSug([]); setOpen(false); return; }
+    timer.current = setTimeout(async () => { const r = await props.busca(v.trim()); setSug(r); setOpen(r.length > 0); }, 220);
+  };
+  return (
+    <div className="relative">
+      <input value={props.value} disabled={props.disabled} onChange={(e) => onInput(e.target.value)}
+        onFocus={() => { if (sug.length) setOpen(true); }} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className={input + (props.disabled ? " bg-slate-50 text-slate-400" : "")} />
+      {open && sug.length > 0 && (
+        <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+          {sug.map((it) => (
+            <button key={it.code} type="button" onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { props.onPick(it); setOpen(false); setSug([]); }}
+              className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-slate-50">
+              <span className="text-sm font-medium text-slate-800">{it.label}</span>
+              {it.sub && <span className="font-mono text-[11px] text-slate-400">{it.sub}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Campo({ label, hint, erro, children }: { label: string; hint?: string; erro?: boolean; children: React.ReactNode }) {
   return (
