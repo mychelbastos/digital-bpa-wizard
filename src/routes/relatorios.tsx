@@ -11,10 +11,10 @@ import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { carregarLogoOrg } from "@/lib/org-logo";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
-import { CNES_TFD, carregarRelatorioTfd, type TfdStatus } from "@/lib/tfd/tfd";
+import { CNES_TFD, carregarRelatorioTfd, type TfdStatus, type TfdRelatorioRow } from "@/lib/tfd/tfd";
 import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
 import { gerarRelatorioFpo, gerarRelatorioFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
-import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
+import { construirPdfTfd, construirPdfTfdPorUnidade } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
 import {
   montarRelatorioTfd, csvTabela, AGRUPAMENTOS, STATUS_ROTULO, compLabelTfd, brlTfd, type AgrupamentoRel,
@@ -412,23 +412,27 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
   const [compAte, setCompAte] = useState(competenciaAtual());
   const [status, setStatus] = useState<"" | TfdStatus>("");
   const [agrup, setAgrup] = useState<AgrupamentoRel>("detalhado");
-  const [rows, setRows] = useState<Awaited<ReturnType<typeof carregarRelatorioTfd>>>([]);
+  const [formato, setFormato] = useState<"porUnidade" | "consolidado">("porUnidade");
+  const [porUnidade, setPorUnidade] = useState<{ cnes: string; nome: string; rows: TfdRelatorioRow[] }[]>([]);
   const [carregando, setCarregando] = useState(false);
   const unidadesKey = unidades.map((u) => u.cnes).join(",");
 
   useEffect(() => {
-    if (!cnes) { setRows([]); return; }
+    if (!cnes) { setPorUnidade([]); return; }
     let cancel = false;
     setCarregando(true);
-    const alvos = cnes === "todas" ? unidadesKey.split(",").filter(Boolean) : [cnes];
-    Promise.all(alvos.map((c) => carregarRelatorioTfd(c, compDe, compAte)))
-      .then((res) => { if (!cancel) { setRows(res.flat()); setCarregando(false); } });
+    const alvos = cnes === "todas" ? unidades : unidades.filter((u) => u.cnes === cnes);
+    Promise.all(alvos.map((u) => carregarRelatorioTfd(u.cnes, compDe, compAte)))
+      .then((res) => { if (!cancel) { setPorUnidade(alvos.map((u, i) => ({ cnes: u.cnes, nome: u.nome, rows: res[i] }))); setCarregando(false); } });
     return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cnes, compDe, compAte, unidadesKey]);
 
+  const rows = useMemo(() => porUnidade.flatMap((u) => u.rows), [porUnidade]);
   const montado = useMemo(() => montarRelatorioTfd(rows, status, agrup), [rows, status, agrup]);
   const nomeUnidade = cnes === "todas" ? `Todas as unidades (${unidades.length})` : (unidades.find((u) => u.cnes === cnes)?.nome ?? cnes);
   const periodo = compDe === compAte ? compLabelTfd(compDe) : `${compLabelTfd(compDe)} a ${compLabelTfd(compAte)}`;
+  const agrupPorSecao = cnes === "todas" && formato === "porUnidade";
 
   const baixarCsvTfd = () => {
     if (montado.dados.length === 0) return;
@@ -437,6 +441,20 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
   };
   const baixarPdfTfd = () => {
     if (montado.dados.length === 0) return;
+    if (agrupPorSecao) {
+      const secoes = porUnidade
+        .map((u) => ({ u, m: montarRelatorioTfd(u.rows, status, agrup) }))
+        .filter((x) => x.m.dados.length > 0);
+      const pdf = construirPdfTfdPorUnidade({
+        logo, periodo, status: status ? STATUS_ROTULO[status] : "Todos",
+        agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
+        unidades: secoes.map(({ u, m }) => ({ nome: u.nome, cnes: u.cnes, colunas: m.colunas, dados: m.dados, totalTfd: m.totalTfd, totalViagens: m.totalViagens, totalRS: brlTfd(m.totalRS) })),
+        totalGeralTfd: montado.totalTfd, totalGeralViagens: montado.totalViagens, totalGeralRS: brlTfd(montado.totalRS),
+        resumoPorUnidade: secoes.map(({ u, m }) => [u.nome, u.cnes, String(m.totalTfd), String(m.totalViagens), brlTfd(m.totalRS)]),
+      });
+      pdf.save(`tfd_todas_por-unidade_${compDe}-${compAte}.pdf`);
+      toast.success("PDF gerado."); return;
+    }
     const pdf = construirPdfTfd({
       logo, nomeUnidade, periodo, status: status ? STATUS_ROTULO[status] : "Todos",
       agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
@@ -474,6 +492,14 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
             {AGRUPAMENTOS.map((a) => <option key={a.valor} value={a.valor}>{a.rotulo}</option>)}
           </select>
         </label>
+        {cnes === "todas" && (
+          <label className="block sm:col-span-2"><span className={lblCls2}>Formato (todas as unidades)</span>
+            <select value={formato} onChange={(e) => setFormato(e.target.value as typeof formato)} className={selCls2}>
+              <option value="porUnidade">Agrupado por unidade (seção por unidade + resumo geral no fim)</option>
+              <option value="consolidado">Consolidado (tudo junto)</option>
+            </select>
+          </label>
+        )}
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">{carregando ? "Carregando…" : `${montado.totalTfd} TFD · ${montado.totalViagens} viagens · ${brlTfd(montado.totalRS)}`}</span>
