@@ -1103,6 +1103,8 @@ function BpaI() {
               onValidacaoChange={onValidacaoChangeSeq}
               onRepetirPaciente={prevTemPaciente(si) ? () => repetirPaciente(si) : undefined}
               identidadeTravada={Boolean(state.seqs[si].pacienteId)}
+              orgId={orgId}
+              onVincularPaciente={(p) => vincularPaciente(si, p)}
             />
           ))}
 

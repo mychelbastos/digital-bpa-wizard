@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { ClipboardCopy } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ClipboardCopy, Search, X } from "lucide-react";
+import { buscarPacientes, registrarLeituraPaciente, type Paciente } from "@/lib/pacientes";
 import { DigitBoxes, TextField } from "@/components/DigitBoxes";
 import { ComboField } from "@/components/bpa-i-v2/ComboField";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
@@ -50,6 +51,10 @@ interface Props {
   // IDENTIFICAÇÃO ficam somente-leitura (edição só pelo "EDITAR PACIENTE" no trilho). Os
   // campos de PROCEDIMENTO/atendimento seguem editáveis.
   identidadeTravada?: boolean;
+  // Busca inline direto na folha: ao digitar CPF/CNS ou o Nome, sugere pacientes do cadastro
+  // (escopo da org). Escolher um vincula (autofill + trava a identidade).
+  orgId?: string | null;
+  onVincularPaciente?: (p: Paciente) => void;
 }
 
 // v3: identificação do paciente aceita CPF (11 díg.) OU CNS (15 díg.) no mesmo campo.
@@ -61,8 +66,34 @@ const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês da competência
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
 // (não dá pra chamar hooks dentro do .map() do componente pai).
-export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente, identidadeTravada = false }: Props) {
+export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente, identidadeTravada = false, orgId, onVincularPaciente }: Props) {
   const R = L.REL;
+
+  // ---- Busca inline de paciente (na própria folha: campo CPF/CNS ou Nome) ----
+  // Termo: prioriza CPF/CNS (numérico) e cai para o Nome. 3+ chars. Some quando a seq está
+  // vinculada (identidade travada) ou sem org. Dispensável (X) — não reabre no mesmo termo.
+  const cnsDigitos = s.cnsPac.join("").replace(/\D/g, "");
+  const termoBusca = cnsDigitos.length >= 3 ? cnsDigitos : (s.nomePac.trim().length >= 3 ? s.nomePac.trim() : "");
+  const [sugestoesPac, setSugestoesPac] = useState<Paciente[]>([]);
+  const dispensadoRef = useRef("");
+  const podeBuscar = Boolean(orgId && onVincularPaciente) && !identidadeTravada;
+  useEffect(() => {
+    if (!podeBuscar || !termoBusca || dispensadoRef.current === termoBusca) { setSugestoesPac([]); return; }
+    let cancel = false;
+    const t = setTimeout(async () => {
+      const res = await buscarPacientes(orgId as string, termoBusca, false);
+      if (!cancel) setSugestoesPac(res);
+    }, 300);
+    return () => { cancel = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termoBusca, podeBuscar]);
+  const escolherPaciente = (p: Paciente) => {
+    registrarLeituraPaciente(p.id);
+    setSugestoesPac([]);
+    dispensadoRef.current = "";
+    onVincularPaciente?.(p);
+  };
+  const fmtDoc = (p: Paciente) => (p.cns ? `CNS ${p.cns}` : p.cpf ? `CPF ${p.cpf}` : "sem documento");
   // Identificação do paciente ainda vazia? (mostra o botão "repetir paciente" só aí, p/
   // não poluir; some assim que começa a digitar/copiar).
   const pacienteVazio = !s.cnsPac.some(Boolean) && !s.nomePac.trim() && !(s.cpfPac?.some(Boolean));
@@ -225,6 +256,34 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       )}
       <TextField id={`s${si}-nome`} top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
         value={s.nomePac} onChange={(v) => u("nomePac", v)} uppercase readOnly={identidadeTravada} />
+      {/* Sugestões da busca inline de paciente (some no PDF). Ancorado logo abaixo da linha
+          CPF/CNS + Nome; escolher vincula (autofill + trava a identidade). */}
+      {sugestoesPac.length > 0 && (
+        <div
+          data-html2canvas-ignore="true"
+          className="absolute z-[75] max-h-44 overflow-auto rounded-md border border-border bg-popover text-left shadow-lg"
+          style={{
+            top: `${seqTop + R.cnsPac + L.DIGIT_H + 0.3}%`,
+            left: `${R.cnsPacBoxes[0].left}%`,
+            width: `${R.nomePac.left + R.nomePac.width - R.cnsPacBoxes[0].left}%`,
+          }}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="inline-flex items-center gap-1"><Search style={{ width: 11, height: 11 }} /> Pacientes encontrados</span>
+            <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { dispensadoRef.current = termoBusca; setSugestoesPac([]); }}
+              className="inline-flex items-center gap-0.5 rounded px-1 text-muted-foreground hover:text-foreground"><X style={{ width: 11, height: 11 }} /> dispensar</button>
+          </div>
+          {sugestoesPac.map((p) => (
+            <button key={p.id} type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()}
+              onClick={() => escolherPaciente(p)}
+              className="flex w-full flex-col items-start px-2 py-1.5 text-left hover:bg-muted">
+              <span className="text-[12px] font-medium text-foreground">{p.nome}</span>
+              <span className="text-[10px] text-muted-foreground">{fmtDoc(p)}{p.nascimento ? ` · ${p.nascimento.split("-").reverse().join("/")}` : ""}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Row 2: Sexo / Data Nasc / Nacion / RaçaCor / Etnia / CEP / IBGE */}
       <TextField top={seqTop + R.row2} left={R.sexoM.left} width={R.sexoM.width} height={L.DIGIT_H} align="center"
