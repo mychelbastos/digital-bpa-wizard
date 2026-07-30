@@ -307,7 +307,7 @@ function SeqCardV4(props: {
       {/* Paciente (reusa o cartão do trilho: busca/cadastro, vincular, editar, trocar/remover) */}
       <div className="mb-3">
         <PacienteSeqCard
-          si={si} seq={s} orgId={props.orgId} profCnsDig={props.profCnsDig} profCboDig={props.profCboDig} travado={props.travado}
+          si={si} seq={s} orgId={props.orgId} profCnsDig={props.profCnsDig} profCboDig={props.profCboDig} travado={props.travado} semCabecalho
           onVincular={props.onVincular} onDesvincular={props.onDesvincular} onReidratar={props.onReidratar} onUsarUltimoProc={props.onUsarUltimoProc}
         />
       </div>

@@ -46,6 +46,7 @@ export function PacienteSeqCard(props: {
   profCnsDig: string;
   profCboDig: string;
   travado?: boolean; // ficha congelada — sem ações
+  semCabecalho?: boolean; // esconde o "Sequência N" (quando embutido em outro cartão, ex.: V4)
   onVincular: (p: Paciente) => void;
   onDesvincular: () => void;
   onReidratar: (p: Paciente) => void;
@@ -73,10 +74,12 @@ export function PacienteSeqCard(props: {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <UserRound className="size-3.5" /> Sequência {si + 1}
-      </div>
+    <div className={props.semCabecalho ? "" : "rounded-xl border border-border bg-card p-3 shadow-sm"}>
+      {!props.semCabecalho && (
+        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <UserRound className="size-3.5" /> Sequência {si + 1}
+        </div>
+      )}
 
       {vinculado ? (
         <div className="space-y-2">
