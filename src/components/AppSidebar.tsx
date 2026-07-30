@@ -1,19 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  Home,
-  FileText,
-  FolderOpen,
-  CalendarCheck,
-  FileSpreadsheet,
-  Database,
-  UserCog,
-  LogOut,
-  ChevronDown,
-  Files,
-  ShieldCheck,
-  Ambulance,
-  FileBarChart,
+  Home, FileText, FolderOpen, CalendarCheck, FileSpreadsheet, Database, UserCog, LogOut,
+  ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X,
 } from "lucide-react";
 import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { souAdmin } from "@/lib/permissoes";
@@ -27,15 +16,18 @@ const formularios = [
   { to: "/apac", label: "APAC" },
 ] as const;
 
-// Iniciais do nome (até 2 letras) para o avatar quando não há foto.
 const iniciais = (s: string) =>
   s.trim().split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
 
-const linkCls = (active: boolean) =>
-  `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${active ? "bg-primary/10 font-medium text-primary" : "text-foreground hover:bg-muted"}`;
+// Gradientes da nova identidade (azul-petróleo → índigo).
+const BG_SIDEBAR = "linear-gradient(195deg, oklch(0.24 0.05 256), oklch(0.165 0.045 260))";
+const BG_ATIVO = "linear-gradient(135deg, oklch(0.6 0.18 262), oklch(0.53 0.19 278))";
+const BG_LOGO = "linear-gradient(135deg, oklch(0.72 0.16 235), oklch(0.6 0.19 282))";
 
-// Menu lateral do app (só no desktop; no mobile as páginas mantêm o "← Início").
-export function AppSidebar() {
+const linkBase = "flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13.5px] font-medium transition-colors";
+
+// Conteúdo da navegação (reusado no desktop e no drawer mobile).
+function NavConteudo({ onNavegar }: { onNavegar?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useAuthUser();
   const [formOpen, setFormOpen] = useState(true);
@@ -46,101 +38,105 @@ export function AppSidebar() {
   useEffect(() => {
     let vivo = true;
     souAdmin().then((ok) => vivo && setPodeAdmin(ok));
-    // Aba TFD só p/ quem tem vínculo em algum CNES habilitado para o TFD.
-    carregarVinculosUsuario().then((vincs) => {
-      if (vivo) setPodeTfd(vincs.some((v) => CNES_TFD.includes(v.cnes)));
-    });
-    return () => {
-      vivo = false;
-    };
+    carregarVinculosUsuario().then((vincs) => { if (vivo) setPodeTfd(vincs.some((v) => CNES_TFD.includes(v.cnes))); });
+    return () => { vivo = false; };
   }, []);
 
+  const item = (active: boolean) =>
+    `${linkBase} ${active ? "font-semibold text-white shadow-[0_8px_18px_-10px_oklch(0.5_0.18_262/0.8)]" : "text-slate-300/90 hover:bg-white/5 hover:text-white"}`;
+  const styleAtivo = (active: boolean) => (active ? { background: BG_ATIVO } : undefined);
+  const tituloSecao = "px-3 pb-2.5 pt-1 text-[10.5px] font-bold uppercase tracking-[0.08em] text-slate-400/70";
+
   return (
-    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-background md:flex">
-      <div className="px-4 py-4 text-sm font-bold tracking-tight text-foreground">Digital BPA</div>
-      <nav className="flex-1 space-y-1 px-2">
-        <Link to="/" className={linkCls(pathname === "/")}>
+    <>
+      <div className="flex items-center gap-2.5 px-2 pb-6 pt-1">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold text-white" style={{ background: BG_LOGO }}>BP</span>
+        <span className="text-[15px] font-bold tracking-tight text-white">Digital BPA</span>
+      </div>
+
+      <nav className="flex-1 space-y-0.5 overflow-y-auto">
+        <Link to="/" onClick={onNavegar} className={item(pathname === "/")} style={styleAtivo(pathname === "/")}>
           <Home className="size-4 shrink-0" /> Início
         </Link>
 
-        {/* Formulários (submenu) */}
-        <button
-          type="button"
-          onClick={() => setFormOpen((o) => !o)}
-          className={`${linkCls(formActive && !formOpen)} w-full justify-between`}
-        >
-          <span className="flex items-center gap-2">
-            <Files className="size-4 shrink-0" /> Formulários
-          </span>
-          <ChevronDown
-            className={`size-4 shrink-0 transition-transform ${formOpen ? "" : "-rotate-90"}`}
-          />
-        </button>
-        {formOpen && (
-          <div className="ml-3 space-y-1 border-l border-border pl-2">
-            {formularios.map((f) => (
-              <Link key={f.to} to={f.to} className={linkCls(pathname.startsWith(f.to))}>
-                <FileText className="size-4 shrink-0" /> {f.label}
-              </Link>
-            ))}
-          </div>
-        )}
+        <div className="pt-3">
+          <button type="button" onClick={() => setFormOpen((o) => !o)} className={`${item(formActive && !formOpen)} w-full justify-between`} style={styleAtivo(formActive && !formOpen)}>
+            <span className="flex items-center gap-2.5"><Files className="size-4 shrink-0" /> Formulários</span>
+            <ChevronDown className={`size-4 shrink-0 transition-transform ${formOpen ? "" : "-rotate-90"}`} />
+          </button>
+          {formOpen && (
+            <div className="mt-0.5 space-y-0.5">
+              {formularios.map((f) => (
+                <Link key={f.to} to={f.to} onClick={onNavegar} className={`${item(pathname.startsWith(f.to))} pl-8`} style={styleAtivo(pathname.startsWith(f.to))}>
+                  <FileText className="size-4 shrink-0" /> {f.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
 
-        <Link to="/minhas-fichas" className={linkCls(pathname.startsWith("/minhas-fichas"))}>
-          <FolderOpen className="size-4 shrink-0" /> Minhas fichas
-        </Link>
-        <Link to="/fechamento" className={linkCls(pathname.startsWith("/fechamento"))}>
-          <CalendarCheck className="size-4 shrink-0" /> Fechamento do mês
-        </Link>
-        <Link to="/fpo" search={{}} className={linkCls(pathname.startsWith("/fpo"))}>
-          <FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)
-        </Link>
-        <Link to="/relatorios" className={linkCls(pathname.startsWith("/relatorios"))}>
-          <FileBarChart className="size-4 shrink-0" /> Relatórios
-        </Link>
-        {podeTfd && (
-          <Link to="/tfd" search={{}} className={linkCls(pathname.startsWith("/tfd"))}>
-            <Ambulance className="size-4 shrink-0" /> TFD
-          </Link>
-        )}
-        <Link to="/importar" className={linkCls(pathname.startsWith("/importar"))}>
-          <Database className="size-4 shrink-0" /> Importar produção
-        </Link>
-        {podeAdmin && (
-          <Link to="/admin" className={linkCls(pathname.startsWith("/admin"))}>
-            <ShieldCheck className="size-4 shrink-0" /> Administração
-          </Link>
-        )}
+        <div className="mt-3 space-y-0.5 border-t border-white/10 pt-3">
+          <Link to="/minhas-fichas" onClick={onNavegar} className={item(pathname.startsWith("/minhas-fichas"))} style={styleAtivo(pathname.startsWith("/minhas-fichas"))}><FolderOpen className="size-4 shrink-0" /> Minhas fichas</Link>
+          <Link to="/fechamento" onClick={onNavegar} className={item(pathname.startsWith("/fechamento"))} style={styleAtivo(pathname.startsWith("/fechamento"))}><CalendarCheck className="size-4 shrink-0" /> Fechamento do mês</Link>
+          <Link to="/fpo" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/fpo"))} style={styleAtivo(pathname.startsWith("/fpo"))}><FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)</Link>
+          <Link to="/relatorios" onClick={onNavegar} className={item(pathname.startsWith("/relatorios"))} style={styleAtivo(pathname.startsWith("/relatorios"))}><FileBarChart className="size-4 shrink-0" /> Relatórios</Link>
+          {podeTfd && <Link to="/tfd" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/tfd"))} style={styleAtivo(pathname.startsWith("/tfd"))}><Ambulance className="size-4 shrink-0" /> TFD</Link>}
+          <Link to="/importar" onClick={onNavegar} className={item(pathname.startsWith("/importar"))} style={styleAtivo(pathname.startsWith("/importar"))}><Database className="size-4 shrink-0" /> Importar produção</Link>
+          {podeAdmin && <Link to="/admin" onClick={onNavegar} className={item(pathname.startsWith("/admin"))} style={styleAtivo(pathname.startsWith("/admin"))}><ShieldCheck className="size-4 shrink-0" /> Administração</Link>}
+        </div>
+        <div className={tituloSecao + " sr-only"}>fim</div>
       </nav>
 
-      {/* Identidade + Perfil + Sair, agrupados no rodapé. */}
-      <div className="border-t border-border p-2">
-        <div className="mb-1 flex items-center gap-2 px-2 py-2">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+      <div className="mt-3 border-t border-white/10 pt-3">
+        <div className="mb-1 flex items-center gap-2.5 px-2 py-1.5">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: BG_LOGO }}>
             {iniciais(user?.nome || user?.email || "")}
           </span>
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-foreground" title={user?.nome || user?.email || ""}>
-              {user?.nome || user?.email || "—"}
-            </div>
-            {user?.cns ? (
-              <div className="truncate text-[11px] text-muted-foreground">CNS {user.cns}</div>
-            ) : user?.email ? (
-              <div className="truncate text-[11px] text-muted-foreground">{user.email}</div>
-            ) : null}
+            <div className="truncate text-[12.5px] font-semibold text-white" title={user?.nome || user?.email || ""}>{user?.nome || user?.email || "—"}</div>
+            {user?.cns ? <div className="truncate font-mono text-[10.5px] text-slate-400">CNS {user.cns}</div>
+              : user?.email ? <div className="truncate text-[10.5px] text-slate-400">{user.email}</div> : null}
           </div>
         </div>
-        <Link to="/perfil" className={linkCls(pathname.startsWith("/perfil"))}>
-          <UserCog className="size-4 shrink-0" /> Perfil
-        </Link>
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
-        >
+        <Link to="/perfil" onClick={onNavegar} className={item(pathname.startsWith("/perfil"))} style={styleAtivo(pathname.startsWith("/perfil"))}><UserCog className="size-4 shrink-0" /> Perfil</Link>
+        <button type="button" onClick={() => signOut()} className="mt-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13.5px] font-medium text-rose-300/90 transition-colors hover:bg-rose-500/10 hover:text-rose-200">
           <LogOut className="size-4" /> Sair
         </button>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export function AppSidebar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Fecha o drawer ao trocar de rota (segurança extra além do onNavegar).
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  return (
+    <>
+      {/* Desktop */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col px-4 py-5 md:flex" style={{ background: BG_SIDEBAR }}>
+        <NavConteudo />
+      </aside>
+
+      {/* Mobile: botão hambúrguer flutuante */}
+      <button type="button" onClick={() => setMobileOpen(true)}
+        className="fixed left-3 top-3 z-40 flex size-10 items-center justify-center rounded-xl text-white shadow-lg md:hidden"
+        style={{ background: BG_SIDEBAR }} aria-label="Abrir menu">
+        <Menu className="size-5" />
+      </button>
+
+      {/* Mobile: drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[82%] flex-col px-4 py-5 shadow-2xl" style={{ background: BG_SIDEBAR }}>
+            <button type="button" onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 text-slate-300 hover:text-white" aria-label="Fechar menu"><X className="size-5" /></button>
+            <NavConteudo onNavegar={() => setMobileOpen(false)} />
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

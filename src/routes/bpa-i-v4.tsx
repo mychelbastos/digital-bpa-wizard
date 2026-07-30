@@ -46,7 +46,7 @@ function GateV4() {
 }
 
 // Paleta da proposta: fundo branco-quente, azul-petróleo de saúde, mono nos códigos.
-const TEAL = "#0f6e6e";
+const TEAL = "oklch(0.56 0.17 258)";
 const dig = (a: string[] | undefined) => (a ?? []).join("");
 
 function BpaIV4() {
@@ -132,15 +132,15 @@ function BpaIV4() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fbf7f0] pb-28 text-slate-800">
+    <div className="min-h-screen bg-background pb-28 text-slate-800">
       {/* Top bar */}
-      <div className="sticky top-0 z-30 border-b border-teal-900/10 bg-[#fbf7f0]/90 backdrop-blur">
+      <div className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <Link to="/" className="text-slate-500 hover:text-slate-800"><ArrowLeft className="size-5" /></Link>
             <div>
               <div className="flex items-center gap-2 text-sm font-bold" style={{ color: TEAL }}>
-                BPA-I <span className="rounded-full bg-teal-600/10 px-2 py-0.5 text-[10px] font-semibold text-teal-700">nova experiência</span>
+                BPA-I <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">nova experiência</span>
               </div>
               <div className="text-[11px] text-slate-500">{fichaTitulo ?? "Rascunho"} · mesmo motor e mesmo arquivo do sistema atual</div>
             </div>
@@ -160,8 +160,8 @@ function BpaIV4() {
         ) : null}
 
         {/* ===== Cabeçalho da folha ===== */}
-        <section className="mb-5 rounded-2xl border border-teal-900/10 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-teal-700">Estabelecimento e profissional</h2>
+        <section className="mb-5 rounded-2xl border border-border bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-primary">Estabelecimento e profissional</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo label="CNES">
               <input inputMode="numeric" value={dig(state.cnes)} onChange={(e) => set("cnes", cells(e.target.value.replace(/\D/g, ""), 7))}
@@ -200,7 +200,7 @@ function BpaIV4() {
 
         {/* ===== Sequências ===== */}
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-teal-700">Sequências ({state.seqs.length})</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-primary">Sequências ({state.seqs.length})</h2>
           <div className="flex gap-2">
             <button onClick={duplicarUltimaSeq} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"><Copy className="size-3.5" /> Duplicar última</button>
             <button onClick={adicionarSeq} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white hover:opacity-90" style={{ background: TEAL }}><Plus className="size-3.5" /> Nova sequência</button>
@@ -224,7 +224,7 @@ function BpaIV4() {
       </div>
 
       {/* ===== Barra fixa: soma + pendências + ações ===== */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-teal-900/10 bg-white/95 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3 px-4 py-3">
           <div className="text-sm">
             <span className="font-semibold text-slate-800">{totalQtd}</span> <span className="text-slate-500">procedimento(s) em</span> <span className="font-semibold text-slate-800">{nSeqsAtivas}</span> <span className="text-slate-500">sequência(s)</span>
@@ -298,9 +298,9 @@ function SeqCardV4(props: {
 
   const erro = ativa && motivos.length > 0;
   return (
-    <section className={`rounded-2xl border bg-white p-4 shadow-sm ${erro ? "border-amber-400" : "border-teal-900/10"}`}>
+    <section className={`rounded-2xl border bg-white p-4 shadow-sm ${erro ? "border-amber-400" : "border-border"}`}>
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-teal-700"><UserRound className="size-3.5" /> Sequência {si + 1}</div>
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary"><UserRound className="size-3.5" /> Sequência {si + 1}</div>
         {props.onRemover && <button onClick={props.onRemover} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-rose-600 hover:bg-rose-50"><Trash2 className="size-3.5" /> Remover sequência</button>}
       </div>
 
@@ -351,7 +351,7 @@ function SeqCardV4(props: {
   );
 }
 
-const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20";
+const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 const inputMono = input + " font-mono tracking-wide";
 
 interface ItemAC { code: string; label: string; sub?: string }
