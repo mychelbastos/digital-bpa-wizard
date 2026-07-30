@@ -7,6 +7,7 @@ export type TipoBpa = "BPA-C" | "BPA-I";
 // `competencia` é a de ATENDIMENTO da linha; a produção agrupa por `mes_producao`.
 export interface ProducaoBpaRow {
   id: string;
+  ficha_id: string;
   tipo: TipoBpa;
   competencia: string;
   mes_producao: string | null;
@@ -32,7 +33,7 @@ export interface VinculoResumo {
 }
 
 const COLS =
-  "id,tipo,competencia,mes_producao,cnes,estabelecimento_nome,profissional_cns,profissional_nome,cbo,procedimento,quantidade,servico,classificacao,cid,carater,idade";
+  "id,ficha_id,tipo,competencia,mes_producao,cnes,estabelecimento_nome,profissional_cns,profissional_nome,cbo,procedimento,quantidade,servico,classificacao,cid,carater,idade";
 
 // Produção de um MÊS DE PRODUÇÃO, já no escopo do usuário (RLS). Sem mês, vazio.
 // Pagina para pegar TODAS as linhas: a produção de um mês passa fácil de 1.000 linhas
