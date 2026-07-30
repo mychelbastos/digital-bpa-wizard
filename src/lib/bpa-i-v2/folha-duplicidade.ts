@@ -23,7 +23,7 @@ export async function proximaFolhaBpaI(cnes: string, profCns: string, competenci
   if (!supabase || !/^\d{7}$/.test(cnes) || !/^\d{15}$/.test(profCns) || !/^\d{6}$/.test(competencia)) return 1;
   try {
     const { data, error } = await supabase.from("fichas")
-      .select("f:dados->profFolha")
+      .select("f:dados->profFolha").is("excluida_em", null)
       .eq("tipo", "BPA-I").eq("cnes", cnes).eq("competencia", competencia).eq("profissional_cns", profCns);
     if (error || !data) return 1;
     return data.reduce((m, r) => Math.max(m, folhaNum((r as { f: unknown }).f)), 0) + 1;
@@ -39,7 +39,7 @@ export async function proximaFolhaBpaC(cnes: string, competencia: string, profNo
     // Lê os DOIS campos de folha: `folha` (fichas digitadas guardam o State.folha) e
     // `folhaBase` (fichas importadas). Antes lia só `folhaBase` -> digitadas sempre davam 1.
     let req = supabase.from("fichas")
-      .select("fa:dados->folha, fb:dados->folhaBase")
+      .select("fa:dados->folha, fb:dados->folhaBase").is("excluida_em", null)
       .eq("tipo", "BPA-C").eq("cnes", cnes).eq("competencia", competencia);
     const nome = (profNome ?? "").trim();
     if (nome) req = req.eq("dados->>profNome", nome);
@@ -107,7 +107,7 @@ export async function acharDuplicataBpaI(
   if (!supabase || !assinatura || !/^\d{7}$/.test(cnes) || !/^\d{15}$/.test(profCns) || !/^\d{6}$/.test(competencia)) return null;
   try {
     const { data, error } = await supabase.from("fichas")
-      .select("id, titulo, cbo:dados->profCbo, seqs:dados->seqs")
+      .select("id, titulo, cbo:dados->profCbo, seqs:dados->seqs").is("excluida_em", null)
       .eq("tipo", "BPA-I").eq("cnes", cnes).eq("competencia", competencia).eq("profissional_cns", profCns);
     if (error || !data) return null;
     for (const r of data as { id: string; titulo: string; cbo: unknown; seqs: unknown }[]) {
@@ -127,7 +127,7 @@ export async function acharDuplicataBpaC(
   if (!supabase || !assinatura || !/^\d{7}$/.test(cnes) || !/^\d{6}$/.test(competencia)) return null;
   try {
     let req = supabase.from("fichas")
-      .select("id, titulo, rows:dados->rows")
+      .select("id, titulo, rows:dados->rows").is("excluida_em", null)
       .eq("tipo", "BPA-C").eq("cnes", cnes).eq("competencia", competencia);
     const nome = (profNome ?? "").trim();
     if (nome) req = req.eq("dados->>profNome", nome);

@@ -78,7 +78,7 @@ export function LoginScreen() {
       {/* Lado esquerdo: ripple + ícones orbitando */}
       <span className="relative flex w-1/2 flex-col justify-center overflow-hidden max-lg:hidden">
         <Ripple mainCircleSize={100} />
-        <TechOrbitDisplay iconsArray={iconsArray} text="BPA Digital" />
+        <TechOrbitDisplay iconsArray={iconsArray} text="SPA Digital" subtitle="(Sistema de Produção Ambulatorial)" />
       </span>
 
       {/* Lado direito: formulário */}

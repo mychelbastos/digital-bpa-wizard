@@ -116,6 +116,7 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
         // Subcampos do jsonb `dados` (CNES/nome/CNS) alimentam o rótulo padronizado da lista.
         // São leves (não trazem o `dados` inteiro nem PII de paciente).
         .select("id, titulo, competencia, mes_producao, updated_at, tipo, origem, substituida_por, cnesArr:dados->cnes, profNomeV:dados->profNome, profCnsArr:dados->profCns, producoes(status)")
+        .is("excluida_em", null)
         .order("updated_at", { ascending: false })
         .order("id", { ascending: true })
         .range(de, ate);
@@ -163,6 +164,7 @@ export async function fichasDoMes(mesProducao: string, cnes?: string): Promise<F
         .from("fichas")
         .select("id, tipo, mes_producao, dados")
         .eq("mes_producao", mesProducao)
+        .is("excluida_em", null)
         .order("id", { ascending: true })
         .range(de, ate);
       if (cnes) req = req.eq("cnes", cnes);
@@ -185,5 +187,16 @@ export async function carregarFicha(id: string): Promise<{ dados: unknown; titul
   }
 }
 
-// Exclusão de ficha foi removida de propósito: produção nunca é apagada (doc de
-// arquitetura, seção 8). Correção pós-export = reabrir produção ou nova versão.
+// Exclui (soft-delete) uma ficha DIGITADA que ainda NÃO foi exportada — via RPC
+// `excluir_ficha` (security definer: valida dono + não-congelada, e grava log de auditoria).
+// Produção exportada nunca é apagada (usa reabrir/retificar). Retorna { ok } ou { ok:false, erro }.
+export async function excluirFicha(id: string, motivo?: string): Promise<{ ok: boolean; erro?: string }> {
+  if (!supabase) return { ok: false, erro: "Sistema indisponível." };
+  try {
+    const { data, error } = await supabase.rpc("excluir_ficha", { _id: id, _motivo: motivo ?? null });
+    if (error) return { ok: false, erro: error.message };
+    return data === true ? { ok: true } : { ok: false, erro: "Ficha não encontrada." };
+  } catch {
+    return { ok: false, erro: "Falha ao excluir." };
+  }
+}

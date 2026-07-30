@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X } from "lucide-react";
-import { listarFichas, renomearFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X, Trash2 } from "lucide-react";
+import { listarFichas, renomearFicha, excluirFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
+import { toast } from "sonner";
 import { buscarNomesPorCns } from "@/lib/bpa-i-v2/profissionais";
 import { rotuloExibicao } from "@/lib/bpa-i-v2/titulo-ficha";
 
@@ -40,6 +42,9 @@ function MinhasFichasPage() {
   const [selMode, setSelMode] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const stripRef = useRef<HTMLDivElement | null>(null);
+  // Exclusão (soft-delete) de ficha não exportada — com confirmação.
+  const [excluirAlvo, setExcluirAlvo] = useState<FichaResumo | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   useEffect(() => {
     listarFichas().then(async (f) => {
@@ -67,6 +72,18 @@ function MinhasFichasPage() {
       setFichas((prev) => prev.map((f) => (f.id === id ? { ...f, titulo } : f)));
     }
     setEditandoId(null);
+  };
+
+  const confirmarExclusao = async () => {
+    if (!excluirAlvo) return;
+    setExcluindo(true);
+    const res = await excluirFicha(excluirAlvo.id);
+    setExcluindo(false);
+    if (!res.ok) { toast.error(res.erro || "Não foi possível excluir a ficha."); return; }
+    setFichas((prev) => prev.filter((f) => f.id !== excluirAlvo.id));
+    setSel((prev) => { const n = new Set(prev); n.delete(excluirAlvo.id); return n; });
+    setExcluirAlvo(null);
+    toast.success("Ficha excluída.");
   };
 
   // Agrupa pelo MÊS DE PRODUÇÃO (mês de apresentação = mes_producao), não pela competência
@@ -333,6 +350,9 @@ function MinhasFichasPage() {
                                 className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
                               ><Printer className="mr-1 inline size-3.5" />Imprimir</a>
                               <button aria-label="Renomear" onClick={() => { setEditandoId(f.id); setNovoNome(f.titulo || ""); }} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-4" /></button>
+                              {!f.congelada && (
+                                <button aria-label="Excluir ficha" title="Excluir ficha (não exportada)" onClick={() => setExcluirAlvo(f)} className="shrink-0 rounded-md p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="size-4" /></button>
+                              )}
                             </>
                           )}
                         </div>
@@ -348,6 +368,18 @@ function MinhasFichasPage() {
           </>
         )}
       </main>
+
+      <ConfirmModal
+        open={Boolean(excluirAlvo)}
+        title="Excluir ficha?"
+        danger
+        confirmLabel={excluindo ? "Excluindo…" : "Excluir"}
+        onConfirm={confirmarExclusao}
+        onCancel={() => setExcluirAlvo(null)}
+      >
+        <p>Excluir <strong>{excluirAlvo ? rotuloExibicao(excluirAlvo) : ""}</strong>?</p>
+        <p className="mt-1 text-xs text-muted-foreground">A ficha sai da produção e do fechamento. Fica registrado quem excluiu e quando. Só é possível porque ela ainda não foi exportada.</p>
+      </ConfirmModal>
     </div>
   );
 }

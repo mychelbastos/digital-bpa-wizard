@@ -176,7 +176,7 @@ const Ripple = memo(function Ripple({
 }: RippleProps) {
   return (
     <section
-      className={`max-w-[50%] absolute inset-0 flex items-center justify-center
+      className={`absolute inset-0 flex items-center justify-center
         dark:bg-white/5 bg-neutral-50
         [mask-image:linear-gradient(to_bottom,black,transparent)]
         dark:[mask-image:linear-gradient(to_bottom,white,transparent)] ${className}`}
@@ -284,17 +284,24 @@ type IconConfig = {
 type TechnologyOrbitDisplayProps = {
   iconsArray: IconConfig[];
   text?: string;
+  subtitle?: string;
 };
 
 const TechOrbitDisplay = memo(function TechOrbitDisplay({
   iconsArray,
   text = 'Animated Login',
+  subtitle,
 }: TechnologyOrbitDisplayProps) {
   return (
     <section className='relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-lg'>
       <span className='pointer-events-none whitespace-pre-wrap bg-gradient-to-b from-black to-gray-300/80 bg-clip-text text-center text-7xl font-semibold leading-none text-transparent dark:from-white dark:to-slate-900/10'>
         {text}
       </span>
+      {subtitle && (
+        <span className='pointer-events-none mt-3 text-center text-sm font-medium text-neutral-500 dark:text-neutral-400'>
+          {subtitle}
+        </span>
+      )}
 
       {iconsArray.map((icon, index) => (
         <OrbitingCircles
