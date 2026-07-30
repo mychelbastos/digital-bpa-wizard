@@ -161,7 +161,13 @@ function Home() {
 
   const unidades = useMemo(() => agrupar(rows, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)), [rows]);
   const profissionais = useMemo(() => agrupar(rows, (r) => chaveProfissional(r), rotuloProfissional), [rows, nomesCbo]);
-  const procedimentos = useMemo(() => agrupar(rows, (r) => r.procedimento, (r) => r.procedimento), [rows]);
+  // Opções do filtro de Procedimento: NOME (código), em ordem CRESCENTE de código.
+  const procedimentos = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) if (r.procedimento && !map.has(r.procedimento)) map.set(r.procedimento, nomeProc(r.procedimento) || r.procedimento);
+    return [...map.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.code.localeCompare(b.code));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, nomesProc]);
 
   const filtradas = useMemo(() => rows.filter((r) =>
     (cnes === "todos" || (r.cnes || "sem-cnes") === cnes) &&
@@ -253,7 +259,7 @@ function Home() {
             Procedimento
             <select value={procedimento} onChange={(e) => setProcedimento(e.target.value)} className={selectCls}>
               <option value="todos">Todos</option>
-              {procedimentos.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+              {procedimentos.map((p) => <option key={p.code} value={p.code}>{p.name !== p.code ? `${p.name} (${p.code})` : p.code}</option>)}
             </select>
           </label>
         </section>
