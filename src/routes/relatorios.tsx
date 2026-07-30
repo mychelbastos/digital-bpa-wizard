@@ -1,8 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance,
-  CalendarCheck, FolderOpen, Home, ArrowRight,
+  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2,
 } from "lucide-react";
 import {
   carregarProducaoDashboard, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo,
@@ -11,8 +10,15 @@ import {
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { carregarLogoOrg } from "@/lib/org-logo";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
-import { CNES_TFD } from "@/lib/tfd/tfd";
+import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
+import { CNES_TFD, carregarRelatorioTfd, type TfdStatus } from "@/lib/tfd/tfd";
+import { carregarComparacaoFpo } from "@/lib/fpo/fpo";
+import { gerarRelatorioFpo } from "@/lib/fpo/relatorio-fpo";
+import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
+import {
+  montarRelatorioTfd, csvTabela, AGRUPAMENTOS, STATUS_ROTULO, compLabelTfd, brlTfd, type AgrupamentoRel,
+} from "@/lib/relatorios/tfd-rel";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/relatorios")({
@@ -46,6 +52,9 @@ function RelatoriosPage() {
   const [nomesCbo, setNomesCbo] = useState<Record<string, string>>({});
   const [logo, setLogo] = useState<string | null>(null);
   const [podeTfd, setPodeTfd] = useState(false);
+  const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
+  const [fpoOpen, setFpoOpen] = useState(false);
+  const [tfdOpen, setTfdOpen] = useState(false);
 
   // Filtros
   const [cnes, setCnes] = useState("todos");
@@ -66,7 +75,15 @@ function RelatoriosPage() {
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [competencia]);
   useEffect(() => { setCnes("todos"); setProf("todos"); setProc("todos"); setTipo("todos"); setCid("todos"); setCarater("todos"); }, [competencia]);
-  useEffect(() => { carregarLogoOrg().then(setLogo); carregarVinculosUsuario().then((v) => setPodeTfd(v.some((x) => CNES_TFD.includes(x.cnes)))); }, []);
+  useEffect(() => {
+    carregarLogoOrg().then(setLogo);
+    carregarVinculosUsuario().then(async (v) => {
+      const unicos = [...new Set(v.map((x) => x.cnes).filter(Boolean))];
+      setPodeTfd(unicos.some((c) => CNES_TFD.includes(c)));
+      const nomes = await Promise.all(unicos.map(async (c) => ({ cnes: c, nome: (await buscarEstabelecimento(c)) || c })));
+      setCnesOpcoes(nomes);
+    });
+  }, []);
 
   const nomeProc = (c: string) => nomesProc[c] || null;
   const nomeCbo = (c: string | null) => (c ? (nomesCbo[c] ? nomesCbo[c].toUpperCase() : null) : null);
@@ -239,23 +256,22 @@ function RelatoriosPage() {
           </div>
         </section>
 
-        {/* ============ Atalhos p/ os demais relatórios (não movidos: também acessíveis aqui) ============ */}
+        {/* ============ Outros relatórios — gerados AQUI (validam filtros e baixam) ============ */}
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Outros relatórios</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <AtalhoCard to="/fpo" icon={<FileSpreadsheet className="size-5" />} titulo="FPO × Produção"
-            desc="Relatório PDF (timbre) do orçamento vs. produção por unidade e competência." />
+          <RelatorioCard icon={<FileSpreadsheet className="size-5" />} titulo="FPO × Produção"
+            desc="Orçamento vs. produção por unidade e competência. Gera PDF (timbre)."
+            onClick={() => setFpoOpen(true)} />
           {podeTfd && (
-            <AtalhoCard to="/tfd" icon={<Ambulance className="size-5" />} titulo="TFD"
-              desc="Relatório de TFD em CSV e PDF (timbre), por unidade e faixa de competência." />
+            <RelatorioCard icon={<Ambulance className="size-5" />} titulo="TFD"
+              desc="Por unidade e faixa de competência, com agrupamentos. Gera CSV e PDF (timbre)."
+              onClick={() => setTfdOpen(true)} />
           )}
-          <AtalhoCard to="/fechamento" icon={<CalendarCheck className="size-5" />} titulo="Fechamento do mês (.txt)"
-            desc="Gera e baixa o arquivo do BPA Magnético (.txt) para o SIA/SUS." />
-          <AtalhoCard to="/minhas-fichas" icon={<FolderOpen className="size-5" />} titulo="Fichas (impressão)"
-            desc="Imprima fichas BPA-I/BPA-C individualmente ou em lote." />
-          <AtalhoCard to="/" icon={<Home className="size-5" />} titulo="Dashboard / Ranking"
-            desc="Resumo e ranking por profissional, com impressão de resumo e fichas." />
         </div>
       </div>
+
+      {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
+      {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} onClose={() => setTfdOpen(false)} />}
     </div>
   );
 }
@@ -269,12 +285,161 @@ function MiniStat({ label, value, destaque = false }: { label: string; value: nu
   );
 }
 
-function AtalhoCard({ to, icon, titulo, desc }: { to: string; icon: React.ReactNode; titulo: string; desc: string }) {
+function RelatorioCard({ icon, titulo, desc, onClick }: { icon: React.ReactNode; titulo: string; desc: string; onClick: () => void }) {
   return (
-    <Link to={to} search={{}} className="group flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5">
+    <button type="button" onClick={onClick} className="group flex flex-col rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5">
       <span className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">{icon}</span>
-      <span className="flex items-center gap-1 text-sm font-bold text-foreground">{titulo} <ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></span>
+      <span className="text-sm font-bold text-foreground">{titulo}</span>
       <span className="mt-1 text-xs text-muted-foreground">{desc}</span>
-    </Link>
+      <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">Gerar relatório →</span>
+    </button>
+  );
+}
+
+function ModalRel({ titulo, onClose, children }: { titulo: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-foreground/40 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+      <div className="my-8 w-full max-w-2xl rounded-2xl border border-border bg-card shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+        <header className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-foreground"><FileBarChart className="size-4 text-primary" /> {titulo}</h2>
+          <button onClick={onClose} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
+        </header>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const selCls2 = "w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm";
+const lblCls2 = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+const ultimosMesesMod = (n: number): string[] => {
+  const d = new Date();
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) { out.push(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`); d.setMonth(d.getMonth() - 1); }
+  return out;
+};
+
+// ---- FPO: unidade + competência → PDF (timbre) gerado aqui ----
+function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; responsavel: string | null; onClose: () => void }) {
+  const [cnes, setCnes] = useState(unidades[0]?.cnes ?? "");
+  const [competencia, setCompetencia] = useState(competenciaAtual());
+  const [gerando, setGerando] = useState(false);
+  const gerar = async () => {
+    if (!cnes) { toast.error("Selecione uma unidade."); return; }
+    setGerando(true);
+    try {
+      const rows = await carregarComparacaoFpo(cnes, competencia);
+      if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta unidade/competência."); return; }
+      const nomeUnidade = unidades.find((u) => u.cnes === cnes)?.nome ?? cnes;
+      gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel, logo });
+      toast.success("PDF do FPO gerado.");
+      onClose();
+    } finally { setGerando(false); }
+  };
+  return (
+    <ModalRel titulo="Relatório FPO × Produção" onClose={onClose}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block sm:col-span-2">
+          <span className={lblCls2}>Unidade</span>
+          <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}>
+            {unidades.length === 0 && <option value="">Sem unidade vinculada</option>}
+            {unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome} ({u.cnes})</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className={lblCls2}>Competência</span>
+          <select value={competencia} onChange={(e) => setCompetencia(e.target.value)} className={selCls2}>
+            {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button onClick={gerar} disabled={gerando || !cnes} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          {gerando ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Gerar PDF (timbre)
+        </button>
+      </div>
+    </ModalRel>
+  );
+}
+
+// ---- TFD: unidade + faixa de competência + status + agrupamento → CSV/PDF aqui ----
+function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; onClose: () => void }) {
+  const [cnes, setCnes] = useState(unidades[0]?.cnes ?? "");
+  const [compDe, setCompDe] = useState(competenciaAtual());
+  const [compAte, setCompAte] = useState(competenciaAtual());
+  const [status, setStatus] = useState<"" | TfdStatus>("");
+  const [agrup, setAgrup] = useState<AgrupamentoRel>("detalhado");
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof carregarRelatorioTfd>>>([]);
+  const [carregando, setCarregando] = useState(false);
+
+  useEffect(() => {
+    if (!cnes) { setRows([]); return; }
+    let cancel = false;
+    setCarregando(true);
+    carregarRelatorioTfd(cnes, compDe, compAte).then((r) => { if (!cancel) { setRows(r); setCarregando(false); } });
+    return () => { cancel = true; };
+  }, [cnes, compDe, compAte]);
+
+  const montado = useMemo(() => montarRelatorioTfd(rows, status, agrup), [rows, status, agrup]);
+  const nomeUnidade = unidades.find((u) => u.cnes === cnes)?.nome ?? cnes;
+  const periodo = compDe === compAte ? compLabelTfd(compDe) : `${compLabelTfd(compDe)} a ${compLabelTfd(compAte)}`;
+
+  const baixarCsvTfd = () => {
+    if (montado.dados.length === 0) return;
+    baixarCsv(`tfd_${agrup}_${compDe}-${compAte}.csv`, csvTabela(montado.colunas, montado.dados));
+    toast.success("CSV gerado.");
+  };
+  const baixarPdfTfd = () => {
+    if (montado.dados.length === 0) return;
+    const pdf = construirPdfTfd({
+      logo, nomeUnidade, periodo, status: status ? STATUS_ROTULO[status] : "Todos",
+      agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
+      colunas: montado.colunas, dados: montado.dados, totalTfd: montado.totalTfd,
+      totalViagens: montado.totalViagens, totalRS: brlTfd(montado.totalRS),
+    });
+    pdf.save(`tfd_${agrup}_${compDe}-${compAte}.pdf`);
+    toast.success("PDF gerado.");
+  };
+
+  return (
+    <ModalRel titulo="Relatório de TFD" onClose={onClose}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block sm:col-span-2">
+          <span className={lblCls2}>Unidade</span>
+          <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}>
+            {unidades.length === 0 && <option value="">Sem unidade de TFD</option>}
+            {unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome} ({u.cnes})</option>)}
+          </select>
+        </label>
+        <label className="block"><span className={lblCls2}>Competência de</span>
+          <select value={compDe} onChange={(e) => setCompDe(e.target.value)} className={selCls2}>{ultimosMesesMod(18).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}</select>
+        </label>
+        <label className="block"><span className={lblCls2}>até</span>
+          <select value={compAte} onChange={(e) => setCompAte(e.target.value)} className={selCls2}>{ultimosMesesMod(18).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}</select>
+        </label>
+        <label className="block"><span className={lblCls2}>Status</span>
+          <select value={status} onChange={(e) => setStatus(e.target.value as "" | TfdStatus)} className={selCls2}>
+            <option value="">Todos</option><option value="agendada">Agendada</option><option value="realizada">Realizada</option><option value="faturada">Faturada</option><option value="cancelada">Cancelada</option>
+          </select>
+        </label>
+        <label className="block"><span className={lblCls2}>Agrupar</span>
+          <select value={agrup} onChange={(e) => setAgrup(e.target.value as AgrupamentoRel)} className={selCls2}>
+            {AGRUPAMENTOS.map((a) => <option key={a.valor} value={a.valor}>{a.rotulo}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">{carregando ? "Carregando…" : `${montado.totalTfd} TFD · ${montado.totalViagens} viagens · ${brlTfd(montado.totalRS)}`}</span>
+        <div className="flex gap-2">
+          <button onClick={baixarPdfTfd} disabled={montado.dados.length === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><FileText className="size-4" /> PDF (timbre)</button>
+          <button onClick={baixarCsvTfd} disabled={montado.dados.length === 0} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"><Download className="size-4" /> CSV</button>
+        </div>
+      </div>
+    </ModalRel>
   );
 }
