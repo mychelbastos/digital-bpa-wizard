@@ -294,13 +294,17 @@ interface TextProps {
   uppercase?: boolean;
   // id no <input> (p/ focar programaticamente, ex.: pular do CPF direto p/ o nome).
   id?: string;
+  // Somente-leitura (ex.: identidade travada quando a seq está vinculada a um paciente).
+  readOnly?: boolean;
 }
 
-export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false, title, uppercase = false, id }: TextProps) {
+export function TextField({ top, left, width, height, value, onChange, align = "left", invalid = false, title, uppercase = false, id, readOnly = false }: TextProps) {
   return (
     <input
       id={id}
       value={value}
+      readOnly={readOnly}
+      tabIndex={readOnly ? -1 : undefined}
       onChange={(e) => onChange(uppercase ? e.target.value.toUpperCase() : e.target.value)}
       onKeyDown={(e) => {
         // Enter pula para o próximo campo (mesma regra dos DigitBoxes/ComboField).
@@ -310,7 +314,7 @@ export function TextField({ top, left, width, height, value, onChange, align = "
         }
       }}
       title={invalid ? title : undefined}
-      className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}`}
+      className={`form-text${invalid ? " ring-2 ring-rose-400/80" : ""}${readOnly ? " bg-muted/40" : ""}`}
       style={{
         position: "absolute",
         top: `${top}%`,

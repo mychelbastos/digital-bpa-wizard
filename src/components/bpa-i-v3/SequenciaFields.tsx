@@ -46,6 +46,10 @@ interface Props {
   // copiar a IDENTIFICAÇÃO DO PACIENTE da sequência de cima (mesmo paciente, vários
   // procedimentos). Não copia dados do procedimento/atendimento.
   onRepetirPaciente?: () => void;
+  // Identidade vinculada a um paciente do cadastro (pacienteId setado) → campos de
+  // IDENTIFICAÇÃO ficam somente-leitura (edição só pelo "EDITAR PACIENTE" no trilho). Os
+  // campos de PROCEDIMENTO/atendimento seguem editáveis.
+  identidadeTravada?: boolean;
 }
 
 // v3: identificação do paciente aceita CPF (11 díg.) OU CNS (15 díg.) no mesmo campo.
@@ -57,7 +61,7 @@ const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês da competência
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
 // (não dá pra chamar hooks dentro do .map() do componente pai).
-export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente }: Props) {
+export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente, identidadeTravada = false }: Props) {
   const R = L.REL;
   // Identificação do paciente ainda vazia? (mostra o botão "repetir paciente" só aí, p/
   // não poluir; some assim que começa a digitar/copiar).
@@ -184,7 +188,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     <div>
       {/* Paciente row 1: CPF/CNS (inteligente) + Nome */}
       <DigitBoxes id={`s${si}-cns`} top={seqTop + R.cnsPac} height={L.DIGIT_H} boxes={R.cnsPacBoxes}
-        values={s.cnsPac} onChange={onChangeIdent} onComplete={focarNome} invalid={identInvalida || identBloqueio || identParcial} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} dimEmpty={ident.tipo === "CPF" && ident.valido} clearable compact />
+        values={s.cnsPac} onChange={onChangeIdent} onComplete={focarNome} invalid={identInvalida || identBloqueio || identParcial} title={identInvalida ? IDENT_MOTIVO : "Identificação do paciente é obrigatória e completa (CPF 11 ou CNS 15 dígitos)."} dimEmpty={ident.tipo === "CPF" && ident.valido} clearable={!identidadeTravada} readOnly={identidadeTravada} compact />
       {/* Botão "repetir paciente" (só na tela; ignorado no PDF): copia a identificação do
           paciente da sequência de cima. Aparece na SEQ 2/3 enquanto a identificação está
           vazia; some ao começar a preencher (dá lugar ao selo CPF/CNS). */}
@@ -220,70 +224,74 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         </div>
       )}
       <TextField id={`s${si}-nome`} top={seqTop + R.cnsPac} left={R.nomePac.left} width={R.nomePac.width} height={L.DIGIT_H}
-        value={s.nomePac} onChange={(v) => u("nomePac", v)} uppercase />
+        value={s.nomePac} onChange={(v) => u("nomePac", v)} uppercase readOnly={identidadeTravada} />
 
       {/* Row 2: Sexo / Data Nasc / Nacion / RaçaCor / Etnia / CEP / IBGE */}
       <TextField top={seqTop + R.row2} left={R.sexoM.left} width={R.sexoM.width} height={L.DIGIT_H} align="center"
-        value={s.sexo === "M" ? "X" : ""} onChange={(v) => u("sexo", v ? "M" : "")} invalid={hydrated && s.sexo === "M" && val.sexoInvalido} title={val.sexoMotivo} />
+        value={s.sexo === "M" ? "X" : ""} onChange={(v) => u("sexo", v ? "M" : "")} invalid={hydrated && s.sexo === "M" && val.sexoInvalido} title={val.sexoMotivo} readOnly={identidadeTravada} />
       <TextField top={seqTop + R.row2} left={R.sexoF.left} width={R.sexoF.width} height={L.DIGIT_H} align="center"
-        value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} invalid={hydrated && s.sexo === "F" && val.sexoInvalido} title={val.sexoMotivo} />
+        value={s.sexo === "F" ? "X" : ""} onChange={(v) => u("sexo", v ? "F" : "")} invalid={hydrated && s.sexo === "F" && val.sexoInvalido} title={val.sexoMotivo} readOnly={identidadeTravada} />
       <DigitBoxes id={`s${si}-dnd`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascDia}
-        values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} invalid={dnInvalida} title={dnTitle} compact />
+        values={s.dataNasc.slice(0, 2)} onChange={(v) => u("dataNasc", [...v, ...s.dataNasc.slice(2)])} registerRefs={regBox(`s${si}-dnd`)} onComplete={() => focusBox(`s${si}-dnm`)} invalid={dnInvalida} title={dnTitle} readOnly={identidadeTravada} compact />
       <DigitBoxes id={`s${si}-dnm`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascMes}
-        values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} invalid={dnInvalida} title={dnTitle} compact />
+        values={s.dataNasc.slice(2, 4)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 2), ...v, ...s.dataNasc.slice(4)])} registerRefs={regBox(`s${si}-dnm`)} onComplete={() => focusBox(`s${si}-dna`)} invalid={dnInvalida} title={dnTitle} readOnly={identidadeTravada} compact />
       <DigitBoxes id={`s${si}-dna`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.dataNascAno}
-        values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} invalid={dnInvalida} title={dnTitle} compact />
-      <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
-        getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
-        onClear={() => u("dataNasc", Array(8).fill(""))} />
+        values={s.dataNasc.slice(4, 8)} onChange={(v) => u("dataNasc", [...s.dataNasc.slice(0, 4), ...v])} registerRefs={regBox(`s${si}-dna`)} invalid={dnInvalida} title={dnTitle} readOnly={identidadeTravada} compact />
+      {!identidadeTravada && (
+        <FieldClear top={seqTop + R.row2} left={endOf(R.dataNascAno) + 0.5} height={L.DIGIT_H}
+          getInputs={() => inputsOf(`s${si}-dnd`, `s${si}-dnm`, `s${si}-dna`)}
+          onClear={() => u("dataNasc", Array(8).fill(""))} />
+      )}
       {/* Idade NÃO tem campo no papel do BPA-I nem input na tela: é derivada na geração
           (anos completos na data de atendimento). SeqData.idade existe só como override
           opcional do modelo (usado pelo harness de regressão), nunca capturado aqui. */}
       <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
-        options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} uppercase center />
+        options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} disabled={identidadeTravada} uppercase center />
       <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
         options={RACAS} value={s.racaCor}
         onChange={(v) => {
           u("racaCor", v);
           // Etnia só vale para Indígena; em qualquer mudança de Raça/Cor, limpa.
           u("etnia", "");
-        }} uppercase center />
+        }} disabled={identidadeTravada} uppercase center />
       <ComboField top={seqTop + R.row2} left={R.etnia.left} width={R.etnia.width} height={L.DIGIT_H}
         options={ETNIAS} value={s.etnia} onChange={(v) => u("etnia", v)}
-        disabled={s.racaCor !== RACA_INDIGENA} uppercase />
+        disabled={identidadeTravada || s.racaCor !== RACA_INDIGENA} uppercase />
       <DigitBoxes id={`s${si}-cep`} top={seqTop + R.row2} height={L.DIGIT_H} boxes={R.cep}
-        values={s.cep} onChange={(v) => u("cep", v)} registerRefs={regBox(`s${si}-cep`)} invalid={cepIbgeDivergente || cepIncompleto} title={cepIncompleto ? "CEP incompleto (8 dígitos)." : cepMotivo} clearable compact />
+        values={s.cep} onChange={(v) => u("cep", v)} registerRefs={regBox(`s${si}-cep`)} invalid={cepIbgeDivergente || cepIncompleto} title={cepIncompleto ? "CEP incompleto (8 dígitos)." : cepMotivo} clearable={!identidadeTravada} readOnly={identidadeTravada} compact />
       <NomeAoFocarPopover top={seqTop + R.row2} left={R.cep[0].left} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-cep`)} texto={cepMotivo ?? cepCidadeUf} />
       <ComboField top={seqTop + R.row2} left={R.ibge[0].left}
         width={R.ibge[R.ibge.length - 1].left + R.ibge[R.ibge.length - 1].width - R.ibge[0].left}
         height={L.DIGIT_H} options={MUNICIPIOS_IBGE} display="code" mostrarTodosAoFocar={false}
-        value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} invalid={cepIbgeDivergente || ibgeIncompleto} title={ibgeIncompleto ? "Cód. IBGE incompleto (7 dígitos)." : cepMotivo} />
+        value={s.ibge.join("")} onChange={(v) => u("ibge", v.split(""))} disabled={identidadeTravada} invalid={cepIbgeDivergente || ibgeIncompleto} title={ibgeIncompleto ? "Cód. IBGE incompleto (7 dígitos)." : cepMotivo} />
 
       {/* Row 3: Cod Logradouro / Endereço / Número / Complemento */}
       <ComboField top={seqTop + R.row3} left={R.codLog[0].left}
         width={R.codLog[R.codLog.length - 1].left + R.codLog[R.codLog.length - 1].width - R.codLog[0].left}
         height={L.DIGIT_H} options={TIPOS_LOGRADOURO}
-        value={s.codLog.join("")} onChange={(v) => u("codLog", v.split(""))} uppercase />
+        value={s.codLog.join("")} onChange={(v) => u("codLog", v.split(""))} disabled={identidadeTravada} uppercase />
       <TextField top={seqTop + R.row3} left={R.endereco.left} width={R.endereco.width} height={L.DIGIT_H}
-        value={s.endereco} onChange={(v) => u("endereco", v)} uppercase />
+        value={s.endereco} onChange={(v) => u("endereco", v)} uppercase readOnly={identidadeTravada} />
       <DigitBoxes id={`s${si}-num`} top={seqTop + R.row3} height={L.DIGIT_H} boxes={R.numero}
-        values={s.numero} onChange={(v) => u("numero", v)} numeric={false} rightAlign clearable compact />
+        values={s.numero} onChange={(v) => u("numero", v)} numeric={false} rightAlign clearable={!identidadeTravada} readOnly={identidadeTravada} compact />
       <TextField top={seqTop + R.row3} left={R.complemento.left} width={R.complemento.width} height={L.DIGIT_H}
-        value={s.complemento} onChange={(v) => u("complemento", v)} uppercase />
+        value={s.complemento} onChange={(v) => u("complemento", v)} uppercase readOnly={identidadeTravada} />
 
       {/* Row 4: Bairro / DDD / Telefone / Email */}
       <TextField top={seqTop + R.row4} left={R.bairro.left} width={R.bairro.width} height={L.DIGIT_H}
-        value={s.bairro} onChange={(v) => u("bairro", v)} uppercase />
+        value={s.bairro} onChange={(v) => u("bairro", v)} uppercase readOnly={identidadeTravada} />
       <DigitBoxes id={`s${si}-ddd`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.ddd}
-        values={s.ddd} onChange={(v) => u("ddd", v)} registerRefs={regBox(`s${si}-ddd`)} onComplete={() => focusBox(`s${si}-tel`)} compact />
+        values={s.ddd} onChange={(v) => u("ddd", v)} registerRefs={regBox(`s${si}-ddd`)} onComplete={() => focusBox(`s${si}-tel`)} readOnly={identidadeTravada} compact />
       <DigitBoxes id={`s${si}-tel`} top={seqTop + R.row4} height={L.DIGIT_H} boxes={R.telefone}
-        values={s.telefone} onChange={(v) => u("telefone", v)} registerRefs={regBox(`s${si}-tel`)} compact />
-      <FieldClear top={seqTop + R.row4} left={endOf(R.telefone) + 0.5} height={L.DIGIT_H}
-        getInputs={() => inputsOf(`s${si}-ddd`, `s${si}-tel`)}
-        onClear={() => { u("ddd", Array(2).fill("")); u("telefone", Array(8).fill("")); }} />
+        values={s.telefone} onChange={(v) => u("telefone", v)} registerRefs={regBox(`s${si}-tel`)} readOnly={identidadeTravada} compact />
+      {!identidadeTravada && (
+        <FieldClear top={seqTop + R.row4} left={endOf(R.telefone) + 0.5} height={L.DIGIT_H}
+          getInputs={() => inputsOf(`s${si}-ddd`, `s${si}-tel`)}
+          onClear={() => { u("ddd", Array(2).fill("")); u("telefone", Array(8).fill("")); }} />
+      )}
       <TextField top={seqTop + R.row4} left={R.email.left} width={R.email.width} height={L.DIGIT_H}
-        value={s.email} onChange={(v) => u("email", v)} />
+        value={s.email} onChange={(v) => u("email", v)} readOnly={identidadeTravada} />
 
       {/* Procedimento row 1: Data atend / Cód proc / Qtde / CNPJ */}
       <DigitBoxes id={`s${si}-dad`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.dataAtendDia}

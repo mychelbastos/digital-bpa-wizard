@@ -2,6 +2,7 @@
 // do BPA-I (SeqData). A identidade continua morando no jsonb da ficha (é o snapshot que o
 // gerador do .MAR lê e que congela na exportação); estes helpers só copiam de/para o
 // cadastro vivo para autofill, "mesmo procedimento", criação-na-hora e re-hidratação.
+import { supabase } from "@/lib/supabase";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 import { acharPacientePorDocumento, salvarPaciente, type Paciente, type PacienteInput } from "@/lib/pacientes";
 import { ancorarCharsDireita } from "@/lib/digitos-direita";
@@ -103,6 +104,30 @@ export function identidadeParaPacienteInput(s: SeqData, organizacaoId: string): 
     telefone: telDig || null,
     email: s.email || null,
   };
+}
+
+// Campos de PROCEDIMENTO do último atendimento (devolvidos pela RPC ultimo_atendimento_bpai).
+export interface UltimoProcedimento {
+  procedimento: string; servico: string; classificacao: string; cid: string; carater: string;
+}
+
+// Último atendimento BPA-I do paciente pelo MESMO profissional (CNS+CBO). null se não houver
+// (ou sem config). A RPC impõe o escopo de organização por dentro e loga a leitura (LGPD).
+export async function ultimoAtendimentoBpai(
+  pacienteId: string, profCns: string, profCbo: string,
+): Promise<UltimoProcedimento | null> {
+  if (!supabase || !pacienteId) return null;
+  try {
+    const { data, error } = await supabase.rpc("ultimo_atendimento_bpai", {
+      _paciente_id: pacienteId,
+      _prof_cns: profCns.replace(/\D/g, ""),
+      _prof_cbo: profCbo.replace(/\D/g, ""),
+    });
+    if (error || !Array.isArray(data) || data.length === 0) return null;
+    return data[0] as UltimoProcedimento;
+  } catch {
+    return null;
+  }
 }
 
 // Uma seq tem identidade preenchida o bastante para virar cadastro? (nome + documento válido

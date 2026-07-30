@@ -32,7 +32,9 @@ import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
 import { ancorarCharsDireita } from "@/lib/digitos-direita";
 import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
 import { orgDoCnes } from "@/lib/tfd/tfd";
-import { reconciliarPacientesDasSeqs } from "@/lib/bpa-i-v3/paciente-seq";
+import { reconciliarPacientesDasSeqs, pacienteParaIdentidade, type UltimoProcedimento } from "@/lib/bpa-i-v3/paciente-seq";
+import { PacienteSeqCard } from "@/components/bpa-i-v3/PacienteSeqCard";
+import type { Paciente } from "@/lib/pacientes";
 
 export const Route = createFileRoute("/bpa-i-v3")({
   head: () => ({
@@ -595,6 +597,59 @@ function BpaI() {
     return prev.cnsPac.some(Boolean) || prev.nomePac.trim() !== "" || Boolean(prev.cpfPac?.some(Boolean));
   };
 
+  // ---- Trilho de pacientes (cadastro central) ----
+  // Vincula um paciente do cadastro à seq: autofill da identidade (fica read-only na folha)
+  // + carimba pacienteId.
+  const vincularPaciente = (i: number, p: Paciente) => {
+    setState((prev) => {
+      const seqs = [...prev.seqs];
+      seqs[i] = { ...seqs[i], ...pacienteParaIdentidade(p) };
+      return { ...prev, seqs };
+    });
+  };
+  // Remove o paciente da seq: limpa SÓ o vínculo + a identidade desta seq (nunca toca no
+  // cadastro). Mantém os campos de procedimento/atendimento.
+  const desvincularPaciente = (i: number) => {
+    setState((prev) => {
+      const seqs = [...prev.seqs];
+      const vazio = emptySeq() as unknown as Record<string, unknown>;
+      const limpa: Partial<SeqData> = {};
+      for (const k of CAMPOS_PACIENTE) (limpa as Record<string, unknown>)[k] = vazio[k];
+      seqs[i] = { ...seqs[i], ...limpa, pacienteId: undefined };
+      return { ...prev, seqs };
+    });
+  };
+  // Re-hidrata a identidade inline de TODAS as seqs desta folha que referenciam o paciente
+  // editado (as congeladas nem chegam aqui — a folha aberta é rascunho). Reflete a edição.
+  const reidratarPaciente = (p: Paciente) => {
+    setState((prev) => {
+      const ident = pacienteParaIdentidade(p);
+      const seqs = prev.seqs.map((s) => (s.pacienteId === p.id ? { ...s, ...ident } : s));
+      return { ...prev, seqs };
+    });
+  };
+  // "Utilizar o mesmo procedimento da última vez": preenche procedimento/serviço/classif./
+  // CID/caráter; deixa QUANTIDADE e DATA em branco (nunca faturar sem toque humano).
+  const usarUltimoProc = (i: number, f: UltimoProcedimento) => {
+    setState((prev) => {
+      const seqs = [...prev.seqs];
+      seqs[i] = {
+        ...seqs[i],
+        codProc: cells(f.procedimento || "", 10),
+        servico: cells(f.servico || "", 3),
+        classProc: cells(f.classificacao || "", 3),
+        cid: cells((f.cid || "").toUpperCase(), 4),
+        carater: cells(f.carater || "", 2),
+        qtde: Array(3).fill(""),
+        dataAtend: Array(8).fill(""),
+        dataAtendConfirmada: false,
+      };
+      return { ...prev, seqs };
+    });
+  };
+  const profCnsDig = state.profCns.join("").replace(/\D/g, "");
+  const profCboDig = state.profCbo.join("").replace(/\D/g, "");
+
   const clearSeqs = () => {
     setManterProf(true);
     setZerarSeqsOpen(true);
@@ -929,7 +984,7 @@ function BpaI() {
         onRenomeada={persistFicha}
       />
 
-      <main className="mx-auto mt-4 max-w-[1100px] px-4">
+      <main className="mx-auto mt-4 max-w-[1400px] px-4">
         {substituidaPor ? (
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
             <GitBranch className="size-4 shrink-0" />
@@ -945,6 +1000,8 @@ function BpaI() {
             </button>
           </div>
         ) : null}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="lg:min-w-0 lg:flex-1">
         <div ref={sheetRef} className={`form-sheet ${printing ? "form-sheet--print" : ""}`} style={{ aspectRatio: "1653 / 2339" }}>
           <img src={bpaiBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
 
@@ -1045,6 +1102,7 @@ function BpaI() {
               endOf={endOf}
               onValidacaoChange={onValidacaoChangeSeq}
               onRepetirPaciente={prevTemPaciente(si) ? () => repetirPaciente(si) : undefined}
+              identidadeTravada={Boolean(state.seqs[si].pacienteId)}
             />
           ))}
 
@@ -1061,6 +1119,21 @@ function BpaI() {
           <TextField {...L.GEST_CARIMBO} value={state.gestCarimbo} onChange={(v) => set("gestCarimbo", v)} uppercase />
           <TextField {...L.GEST_RUBRICA} value={state.gestRubrica} onChange={(v) => set("gestRubrica", v)} uppercase />
           {renderData("gestData", L.GEST_DATA_DIA, L.GEST_DATA_MES, L.GEST_DATA_ANO)}
+        </div>
+        </div>
+        {!capturaRef.current && (
+          <aside className="lg:w-72 lg:shrink-0">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pacientes por sequência</div>
+            <div className="space-y-3">
+              {L.SEQ_TOPS.map((_, si) => (
+                <PacienteSeqCard key={si} si={si} seq={state.seqs[si]} orgId={orgId}
+                  profCnsDig={profCnsDig} profCboDig={profCboDig} travado={congelada}
+                  onVincular={(p) => vincularPaciente(si, p)} onDesvincular={() => desvincularPaciente(si)}
+                  onReidratar={reidratarPaciente} onUsarUltimoProc={(f) => usarUltimoProc(si, f)} />
+              ))}
+            </div>
+          </aside>
+        )}
         </div>
       </main>
     </div>
