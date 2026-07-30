@@ -231,3 +231,188 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
 
   return pdf;
 }
+
+// ---------------------------------------------------------------------------
+// Relatório FPO AGRUPADO POR UNIDADE: uma seção por unidade (tabela + subtotal) e, no fim,
+// um RESUMO GERAL (consolidado + valores por unidade). Para o "Todas as unidades".
+// ---------------------------------------------------------------------------
+export interface UnidadeFpo { nome: string; cnes: string; rows: FpoComparacaoRow[] }
+
+interface TotaisFpo { teto: number; prod: number; saldo: number; tetoRS: number; prodRS: number; saldoRS: number }
+const somaFpo = (rows: FpoComparacaoRow[]): TotaisFpo => rows.reduce((a, r) => ({
+  teto: a.teto + r.qtdOrcada, prod: a.prod + r.produzido, saldo: a.saldo + r.saldo,
+  tetoRS: a.tetoRS + r.tetoRS, prodRS: a.prodRS + r.produzidoRS, saldoRS: a.saldoRS + r.saldoRS,
+}), { teto: 0, prod: 0, saldo: 0, tetoRS: 0, prodRS: 0, saldoRS: 0 });
+
+export function gerarRelatorioFpoPorUnidade(d: { unidades: UnidadeFpo[]; competencia: string; logo?: string | null; responsavel?: string | null }) {
+  const pdf = construirPdfFpoPorUnidade(d);
+  pdf.save(`relatorio-fpo-todas-${d.competencia}.pdf`);
+}
+
+export function construirPdfFpoPorUnidade({ unidades, competencia, logo, responsavel, geradoEm = new Date() }: {
+  unidades: UnidadeFpo[]; competencia: string; logo?: string | null; responsavel?: string | null; geradoEm?: Date;
+}): jsPDF {
+  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const W = pdf.internal.pageSize.getWidth();
+  const H = pdf.internal.pageSize.getHeight();
+  const M = 30;
+  const x0 = M;
+  const totalW = COLS.reduce((a, c) => a + c.w, 0);
+  const rodapeLimite = H - 40;
+
+  const fit = (txt: string, maxW: number, size: number) => {
+    pdf.setFontSize(size);
+    if (pdf.getTextWidth(txt) <= maxW) return txt;
+    let s = txt;
+    while (s.length > 1 && pdf.getTextWidth(s + "…") > maxW) s = s.slice(0, -1);
+    return s + "…";
+  };
+  const cell = (txt: string, x: number, y: number, col: Col, size: number) => {
+    const t = fit(txt, col.w - 8, size);
+    if (col.align === "right") pdf.text(t, x + col.w - 4, y, { align: "right" });
+    else pdf.text(t, x + 4, y);
+  };
+
+  let pagina = 0;
+  const faixaTopo = () => {
+    if (pagina > 0) pdf.addPage();
+    pagina++;
+    pdf.setFillColor(...VERDE);
+    pdf.rect(0, 0, W, 54, "F");
+    let reservaDir = 0;
+    if (logo) {
+      try {
+        const lh = 34, lw = lh * 3.21;
+        pdf.setFillColor(255, 255, 255);
+        pdf.roundedRect(W - M - lw - 6, 10, lw + 12, lh + 6, 3, 3, "F");
+        pdf.addImage(logo, "PNG", W - M - lw, 13, lw, lh);
+        reservaDir = lw + 20;
+      } catch { /* logo inválida */ }
+    }
+    const xDir = W - M - reservaDir;
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont("helvetica", "bold"); pdf.setFontSize(15);
+    pdf.text("Relatório FPO × Produção", M, 26);
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
+    pdf.text(`Ficha de Programação Orçamentária · Competência ${compLabel(competencia)}`, M, 42);
+    pdf.setFontSize(8);
+    pdf.text(`Gerado em ${geradoEm.toLocaleDateString("pt-BR")} ${geradoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`, xDir, 26, { align: "right" });
+    pdf.text(`Página ${pagina}`, xDir, 42, { align: "right" });
+  };
+
+  const cabecalhoTabela = (y: number) => {
+    pdf.setFillColor(...ESCURO);
+    pdf.rect(x0, y, totalW, 20, "F");
+    pdf.setTextColor(255, 255, 255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8);
+    let x = x0;
+    for (const col of COLS) { cell(col.titulo, x, y + 13, col, 8); x += col.w; }
+    return y + 20;
+  };
+
+  const linhaTotais = (y: number, rotulo: string, t: TotaisFpo) => {
+    pdf.setFillColor(...VERDE_CLARO); pdf.rect(x0, y, totalW, 18, "F");
+    pdf.setFont("helvetica", "bold"); pdf.setTextColor(...ESCURO);
+    const vals = [rotulo, "", int(t.teto), int(t.prod), int(t.saldo), "", brl(t.tetoRS), brl(t.prodRS), brl(t.saldoRS)];
+    let xt = x0; COLS.forEach((col, ci) => { cell(vals[ci], xt, y + 12, col, 8); xt += col.w; });
+    return y + 18;
+  };
+
+  // Uma seção por unidade.
+  unidades.forEach((u) => {
+    faixaTopo();
+    // Identificação da unidade
+    pdf.setTextColor(...ESCURO); pdf.setFont("helvetica", "bold"); pdf.setFontSize(12);
+    pdf.text(fit(u.nome, W - 2 * M, 12), M, 78);
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(9); pdf.setTextColor(...CINZA);
+    pdf.text(`CNES ${u.cnes}`, M, 92);
+    let y = cabecalhoTabela(108);
+    pdf.setFont("helvetica", "normal");
+    u.rows.forEach((r, i) => {
+      if (y + 16 > rodapeLimite) { faixaTopo(); y = cabecalhoTabela(24); }
+      if (i % 2 === 1) { pdf.setFillColor(247, 248, 250); pdf.rect(x0, y, totalW, 16, "F"); }
+      const valores = [r.descricao, r.codigoFpo ?? r.procedimento, int(r.qtdOrcada), int(r.produzido), int(r.saldo), brl(r.valorUnitario), brl(r.tetoRS), brl(r.produzidoRS), brl(r.saldoRS)];
+      let x = x0;
+      COLS.forEach((col, ci) => {
+        if ((ci === 4 && r.saldo < 0) || (ci === 8 && r.saldoRS < 0)) pdf.setTextColor(...ROSA);
+        else pdf.setTextColor(...ESCURO);
+        pdf.setFontSize(8); cell(valores[ci], x, y + 11, col, 8); x += col.w;
+      });
+      pdf.setDrawColor(230, 232, 236); pdf.line(x0, y + 16, x0 + totalW, y + 16);
+      y += 16;
+    });
+    if (y + 18 > rodapeLimite) { faixaTopo(); y = cabecalhoTabela(24); }
+    linhaTotais(y, "SUBTOTAL " + u.nome.toUpperCase(), somaFpo(u.rows));
+  });
+
+  // Resumo geral.
+  faixaTopo();
+  pdf.setTextColor(...ESCURO); pdf.setFont("helvetica", "bold"); pdf.setFontSize(13);
+  pdf.text("Resumo geral — Todas as unidades", M, 80);
+  const geral = somaFpo(unidades.flatMap((u) => u.rows));
+  const pct = geral.tetoRS > 0 ? (geral.prodRS / geral.tetoRS) * 100 : 0;
+  // Chips consolidados
+  const chips = [
+    { label: "Teto orçado", valor: brl(geral.tetoRS), cor: ESCURO },
+    { label: "Produzido", valor: brl(geral.prodRS), cor: VERDE },
+    { label: "Saldo", valor: brl(geral.saldoRS), cor: geral.saldoRS < 0 ? ROSA : ESCURO },
+    { label: "% do teto", valor: `${pct.toFixed(0)}%`, cor: pct > 100 ? ROSA : VERDE },
+  ];
+  const gap = 10; const cw = (totalW - gap * (chips.length - 1)) / chips.length;
+  let yr = 96;
+  chips.forEach((ch, i) => {
+    const cx = x0 + i * (cw + gap);
+    pdf.setFillColor(...VERDE_CLARO); pdf.roundedRect(cx, yr, cw, 40, 4, 4, "F");
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(...CINZA);
+    pdf.text(ch.label.toUpperCase(), cx + 8, yr + 15);
+    pdf.setFont("helvetica", "bold"); pdf.setFontSize(13); pdf.setTextColor(...ch.cor);
+    pdf.text(ch.valor, cx + 8, yr + 32);
+  });
+  yr += 40 + 18;
+
+  // Tabela por unidade (valores).
+  const RCOLS: Col[] = [
+    { titulo: "Unidade", w: 300, align: "left" },
+    { titulo: "CNES", w: 70, align: "left" },
+    { titulo: "Teto R$", w: 110, align: "right" },
+    { titulo: "Produzido R$", w: 120, align: "right" },
+    { titulo: "Saldo R$", w: 110, align: "right" },
+    { titulo: "% teto", w: 62, align: "right" },
+  ];
+  const rTotalW = RCOLS.reduce((a, c) => a + c.w, 0);
+  pdf.setFillColor(...ESCURO); pdf.rect(x0, yr, rTotalW, 20, "F");
+  pdf.setTextColor(255, 255, 255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8);
+  let xh = x0; for (const col of RCOLS) { cell(col.titulo, xh, yr + 13, col, 8); xh += col.w; }
+  yr += 20;
+  pdf.setFont("helvetica", "normal");
+  unidades.forEach((u, i) => {
+    if (yr + 16 > rodapeLimite) { faixaTopo(); yr = 40; }
+    const t = somaFpo(u.rows);
+    const p = t.tetoRS > 0 ? (t.prodRS / t.tetoRS) * 100 : 0;
+    if (i % 2 === 1) { pdf.setFillColor(247, 248, 250); pdf.rect(x0, yr, rTotalW, 16, "F"); }
+    const vals = [u.nome, u.cnes, brl(t.tetoRS), brl(t.prodRS), brl(t.saldoRS), `${p.toFixed(0)}%`];
+    let x = x0;
+    RCOLS.forEach((col, ci) => {
+      if (ci === 4 && t.saldoRS < 0) pdf.setTextColor(...ROSA); else pdf.setTextColor(...ESCURO);
+      pdf.setFontSize(8); cell(vals[ci], x, yr + 11, col, 8); x += col.w;
+    });
+    pdf.setDrawColor(230, 232, 236); pdf.line(x0, yr + 16, x0 + rTotalW, yr + 16);
+    yr += 16;
+  });
+  // Total geral na tabela por unidade
+  pdf.setFillColor(...VERDE_CLARO); pdf.rect(x0, yr, rTotalW, 18, "F");
+  pdf.setFont("helvetica", "bold"); pdf.setTextColor(...ESCURO);
+  const tvals = ["TOTAL GERAL", "", brl(geral.tetoRS), brl(geral.prodRS), brl(geral.saldoRS), `${pct.toFixed(0)}%`];
+  let xt = x0; RCOLS.forEach((col, ci) => { cell(tvals[ci], xt, yr + 12, col, 8); xt += col.w; });
+  yr += 28;
+
+  // Assinatura
+  if (yr + 78 > H - 20) { faixaTopo(); yr = 60; }
+  const sy = yr + 40; const cx2 = W / 2; const lw2 = 300;
+  pdf.setDrawColor(...ESCURO); pdf.setLineWidth(0.7);
+  pdf.line(cx2 - lw2 / 2, sy, cx2 + lw2 / 2, sy);
+  if (responsavel) { pdf.setFont("helvetica", "bold"); pdf.setFontSize(10); pdf.setTextColor(...ESCURO); pdf.text(fit(responsavel, lw2, 10), cx2, sy + 14, { align: "center" }); }
+  pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(...CINZA);
+  pdf.text("Assinatura do responsável", cx2, sy + (responsavel ? 26 : 14), { align: "center" });
+
+  return pdf;
+}

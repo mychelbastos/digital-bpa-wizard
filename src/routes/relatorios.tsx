@@ -13,7 +13,7 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { CNES_TFD, carregarRelatorioTfd, type TfdStatus } from "@/lib/tfd/tfd";
 import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
-import { gerarRelatorioFpo } from "@/lib/fpo/relatorio-fpo";
+import { gerarRelatorioFpo, gerarRelatorioFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
 import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
 import {
@@ -342,6 +342,7 @@ function agregarFpo(rows: FpoComparacaoRow[]): FpoComparacaoRow[] {
 function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; responsavel: string | null; onClose: () => void }) {
   const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
   const [competencia, setCompetencia] = useState(competenciaAtual());
+  const [formato, setFormato] = useState<"porUnidade" | "consolidado">("porUnidade");
   const [gerando, setGerando] = useState(false);
   const gerar = async () => {
     if (!cnes) { toast.error("Selecione uma unidade."); return; }
@@ -349,6 +350,12 @@ function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: 
     try {
       if (cnes === "todas") {
         const todas = await Promise.all(unidades.map((u) => carregarComparacaoFpo(u.cnes, competencia)));
+        if (formato === "porUnidade") {
+          const comRows = unidades.map((u, i) => ({ nome: u.nome, cnes: u.cnes, rows: todas[i] })).filter((x) => x.rows.length > 0);
+          if (comRows.length === 0) { toast.error("Sem dados de FPO/produção nesta competência."); return; }
+          gerarRelatorioFpoPorUnidade({ unidades: comRows, competencia, logo, responsavel });
+          toast.success("PDF do FPO gerado."); onClose(); return;
+        }
         const rows = agregarFpo(todas.flat());
         if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta competência."); return; }
         gerarRelatorioFpo({ nomeUnidade: `Todas as unidades (${unidades.length})`, cnes: "TODAS", competencia, rows, responsavel, logo });
@@ -379,6 +386,15 @@ function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: 
             {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
           </select>
         </label>
+        {cnes === "todas" && (
+          <label className="block sm:col-span-2">
+            <span className={lblCls2}>Formato (todas as unidades)</span>
+            <select value={formato} onChange={(e) => setFormato(e.target.value as typeof formato)} className={selCls2}>
+              <option value="porUnidade">Agrupado por unidade (seção por unidade + resumo geral no fim)</option>
+              <option value="consolidado">Consolidado (tudo junto por procedimento)</option>
+            </select>
+          </label>
+        )}
       </div>
       <div className="mt-4 flex justify-end">
         <button onClick={gerar} disabled={gerando || !cnes} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
