@@ -142,6 +142,9 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    /* Trava definitiva contra scroll horizontal no mobile (o body é o scroller do app;
+       overflow-x:hidden aqui não quebra o position:sticky dos cabeçalhos). */
+    overflow-x: hidden;
   }
 }
 

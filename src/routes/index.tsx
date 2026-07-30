@@ -397,7 +397,8 @@ function Kpi({ icon, label, value, destaque = false }: { icon: React.ReactNode; 
 
 function ChartBox({ title, className = "", children }: { title: string; className?: string; children: React.ReactNode }) {
   return (
-    <div className={`rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 ${className}`}>
+    // min-w-0 + overflow-hidden: no mobile o card pode encolher e o gráfico cabe (não empurra a página).
+    <div className={`min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5 ${className}`}>
       <h2 className="mb-3 text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </div>
