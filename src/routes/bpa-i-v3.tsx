@@ -754,6 +754,10 @@ function BpaI() {
   // alimenta o histórico de autocomplete. O .txt não sai mais daqui — só no Fechamento.
   const registrarExportacao = async () => {
     registrarUsoDaFicha();
+    // Gerar PDF de um formulário EM BRANCO (nenhuma sequência preenchida e ficha ainda não
+    // salva) não deve tentar persistir na nuvem — nem avisar. Só salva quando há conteúdo
+    // real, ou quando a ficha já existe (aí atualiza).
+    if (!temSeqAtiva && !fichaIdRef.current) return;
     const fichaId = await garantirFichaExportada();
     if (!fichaId) toast.warning("PDF gerado, mas não consegui salvar a ficha na nuvem.");
   };
