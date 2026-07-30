@@ -42,6 +42,9 @@ export interface FichaMetadados {
   cnes?: string | null;
   profissionalCns?: string | null;
   profissionalNome?: string | null;
+  // AUDITORIA (adoção): tela que salvou (ex.: 'v4'). NÃO entra no .MAR e nenhuma lógica
+  // ramifica por ela. Só é gravada quando informada (V3 deixa undefined).
+  origemUi?: string | null;
 }
 
 // Cria (id null) ou atualiza uma ficha. Retorna o id (ou null em falha).
@@ -61,6 +64,8 @@ export async function salvarFicha(
     cnes: meta.cnes || null,
     profissional_cns: meta.profissionalCns || null,
     profissional_nome: meta.profissionalNome || null,
+    // Só carimba quando informado (V3 = undefined → coluna não é tocada).
+    ...(meta.origemUi !== undefined ? { origem_ui: meta.origemUi } : {}),
   };
   try {
     if (id) {

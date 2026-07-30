@@ -142,7 +142,9 @@ export function loadState(): State {
 // Fica FORA daqui, na tela: render da folha, modais, modo captura/PDF (dependem do DOM) e
 // as funções que só orquestram diálogos (salvarClique etc., que chamam as primitivas daqui).
 // ---------------------------------------------------------------------------
-export function useBpaIEngine() {
+// `opts.origemUi` (ex.: 'v4') é só auditoria — carimbada no save, nunca ramifica lógica.
+export function useBpaIEngine(opts?: { origemUi?: string }) {
+  const origemUi = opts?.origemUi;
   const [state, setState] = useState<State>(initialState);
   const [hydrated, setHydrated] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -373,6 +375,7 @@ export function useBpaIEngine() {
       cnes: estadoSalvar.cnes.join(""),
       profissionalCns: estadoSalvar.profCns.join(""),
       profissionalNome: estadoSalvar.profNome,
+      origemUi,
     });
     if (id) persistFicha(id, titulo);
     return id;
@@ -385,6 +388,7 @@ export function useBpaIEngine() {
       cnes: state.cnes.join(""),
       profissionalCns: state.profCns.join(""),
       profissionalNome: state.profNome,
+      origemUi,
     });
     if (id) persistFicha(id, titulo);
     return id;
