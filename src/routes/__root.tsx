@@ -148,8 +148,9 @@ function RootComponent() {
       <AuthGate>
         <div className="flex min-h-screen">
           <AppSidebar />
-          {/* pt-[52px] no mobile abre espaço para a barra superior fixa (some no desktop). */}
-          <div className="min-w-0 flex-1 pt-[52px] md:pt-0">
+          {/* pt-[52px] no mobile abre espaço para a barra superior fixa (some no desktop).
+              overflow-x-clip: nenhuma página rola horizontalmente (não quebra o sticky). */}
+          <div className="min-w-0 flex-1 overflow-x-clip pt-[52px] md:pt-0">
             <Outlet />
           </div>
         </div>

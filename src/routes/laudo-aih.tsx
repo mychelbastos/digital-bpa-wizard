@@ -100,7 +100,7 @@ function LaudoAihPage() {
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur">
+      <header className="sticky top-[52px] z-30 border-b bg-background/95 px-4 py-3 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>

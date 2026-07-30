@@ -182,7 +182,7 @@ function Perfil() {
   return (
     <div className="min-h-screen bg-muted/40">
       {/* Topo */}
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
+      <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <Link
             to="/"

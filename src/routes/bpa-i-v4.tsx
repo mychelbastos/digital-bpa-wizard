@@ -134,7 +134,7 @@ function BpaIV4() {
   return (
     <div className="min-h-screen bg-background pb-28 text-slate-800">
       {/* Top bar */}
-      <div className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
+      <div className="sticky top-[52px] z-30 border-b border-border bg-background/90 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <Link to="/" className="text-slate-500 hover:text-slate-800"><ArrowLeft className="size-5" /></Link>

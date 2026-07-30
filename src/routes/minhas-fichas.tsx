@@ -275,7 +275,7 @@ function MinhasFichasPage() {
 
             {/* Barra de seleção (modo imprimir várias). */}
             {selMode && (
-              <div className="sticky top-0 z-10 mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 backdrop-blur">
+              <div className="sticky top-[52px] z-10 mb-4 flex flex-wrap md:top-0 items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 backdrop-blur">
                 <button onClick={toggleTodasPagina} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
                   {todasPaginaSel ? <CheckSquare className="size-3.5 text-primary" /> : <Square className="size-3.5" />}
                   {todasPaginaSel
