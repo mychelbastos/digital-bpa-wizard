@@ -16,6 +16,9 @@ import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
 import { gerarRelatorioFpo, gerarRelatorioFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
 import { construirPdfTfd, construirPdfTfdPorUnidade } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
+import { coletarErros, ROTULO_CATEGORIA, type CategoriaErro, type ErroItem } from "@/lib/relatorios/erros";
+import { csvErros, construirPdfErros } from "@/lib/relatorios/erros-pdf";
+import { AlertTriangle } from "lucide-react";
 import {
   montarRelatorioTfd, csvTabela, AGRUPAMENTOS, STATUS_ROTULO, compLabelTfd, brlTfd, type AgrupamentoRel,
 } from "@/lib/relatorios/tfd-rel";
@@ -55,6 +58,12 @@ function RelatoriosPage() {
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
   const [fpoOpen, setFpoOpen] = useState(false);
   const [tfdOpen, setTfdOpen] = useState(false);
+  // Erros / crivo
+  const TODAS_CATS: CategoriaErro[] = ["producao-sigtap", "ficha-incompleta", "paciente-revisao", "duplicidade"];
+  const [categoriasErro, setCategoriasErro] = useState<Set<CategoriaErro>>(new Set(TODAS_CATS));
+  const [erros, setErros] = useState<ErroItem[] | null>(null);
+  const [verificando, setVerificando] = useState(false);
+  const [filtroGrav, setFiltroGrav] = useState<"todas" | "erro" | "aviso">("todas");
 
   // Filtros
   const [cnes, setCnes] = useState("todos");
@@ -133,6 +142,20 @@ function RelatoriosPage() {
     if (carater !== "todos") p.push(`Caráter: ${carateres.find((x) => x.code === carater)?.label ?? carater}`);
     return p.length ? p.join("  ·  ") : "Sem filtros (toda a produção do mês)";
   };
+
+  // ---- Erros / crivo ----
+  const toggleCat = (c: CategoriaErro) => setCategoriasErro((prev) => { const n = new Set(prev); if (n.has(c)) n.delete(c); else n.add(c); return n; });
+  const verificarErros = async () => {
+    if (categoriasErro.size === 0) { toast.error("Selecione ao menos uma categoria."); return; }
+    setVerificando(true);
+    try { setErros(await coletarErros({ mesProducao: competencia, categorias: categoriasErro })); }
+    finally { setVerificando(false); }
+  };
+  const errosFiltrados = (erros ?? []).filter((e) => filtroGrav === "todas" || e.gravidade === filtroGrav);
+  const nErros = (erros ?? []).filter((e) => e.gravidade === "erro").length;
+  const nAvisos = (erros ?? []).length - nErros;
+  const baixarCsvErros = () => { if (!errosFiltrados.length) return; baixarCsv(`erros-${competencia}.csv`, csvErros(errosFiltrados)); toast.success("CSV gerado."); };
+  const baixarPdfErros = () => { if (!errosFiltrados.length) return; construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo }).save(`erros-${competencia}.pdf`); toast.success("PDF gerado."); };
 
   const nomeArq = () => `producao-${competencia}${cnes !== "todos" ? `-${cnes}` : ""}`;
   const baixarCsvProd = () => {
@@ -254,6 +277,68 @@ function RelatoriosPage() {
             </button>
             <span className="self-center text-xs text-muted-foreground">{loading ? "Carregando…" : `${filtradas.length} linha(s) · ${filtrosLabel()}`}</span>
           </div>
+        </section>
+
+        {/* ============ Relatório de erros / crivo ============ */}
+        <section className={`${cardCls} mb-5`}>
+          <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground"><AlertTriangle className="size-4 text-amber-500" /> Erros / Crivo</h2>
+          <p className="mb-3 text-xs text-muted-foreground">Varre a produção do mês selecionado acima ({mesLabel(competencia)}) e o cadastro, e lista o que precisa de correção antes de transmitir.</p>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {TODAS_CATS.map((c) => {
+              const on = categoriasErro.has(c);
+              return (
+                <button key={c} type="button" onClick={() => toggleCat(c)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                  {on ? "✓ " : ""}{ROTULO_CATEGORIA[c]}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={verificarErros} disabled={verificando || categoriasErro.size === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {verificando ? <Loader2 className="size-4 animate-spin" /> : <AlertTriangle className="size-4" />} Verificar erros
+            </button>
+            {erros && (
+              <>
+                <span className="text-sm"><b className="text-rose-600">{nErros}</b> erro(s) · <b className="text-amber-600">{nAvisos}</b> aviso(s)</span>
+                <select value={filtroGrav} onChange={(e) => setFiltroGrav(e.target.value as typeof filtroGrav)} className={selCls + " ml-auto max-w-[10rem]"}>
+                  <option value="todas">Todos</option><option value="erro">Só erros</option><option value="aviso">Só avisos</option>
+                </select>
+                <button onClick={baixarCsvErros} disabled={errosFiltrados.length === 0} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><Download className="size-4" /> CSV</button>
+                <button onClick={baixarPdfErros} disabled={errosFiltrados.length === 0} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><FileText className="size-4" /> PDF</button>
+              </>
+            )}
+          </div>
+          {erros && (
+            <div className="mt-4 max-h-[420px] overflow-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted/80 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left">Categoria</th>
+                    <th className="px-2 py-1.5 text-left">Grav.</th>
+                    <th className="px-2 py-1.5 text-left">Tipo</th>
+                    <th className="px-2 py-1.5 text-left">CNES</th>
+                    <th className="px-2 py-1.5 text-left">Profissional</th>
+                    <th className="px-2 py-1.5 text-left">Descrição</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {errosFiltrados.length === 0 && <tr><td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">{verificando ? "Verificando…" : "Nenhum erro encontrado 🎉"}</td></tr>}
+                  {errosFiltrados.map((e, i) => (
+                    <tr key={i} className="border-t border-border align-top">
+                      <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{ROTULO_CATEGORIA[e.categoria]}</td>
+                      <td className="px-2 py-1.5"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${e.gravidade === "erro" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{e.gravidade === "erro" ? "ERRO" : "AVISO"}</span></td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{e.tipo}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap font-mono text-[11px]">{e.cnes}</td>
+                      <td className="px-2 py-1.5">{e.profissional}</td>
+                      <td className="px-2 py-1.5 text-foreground">{e.descricao}{e.fichaId ? <a href={`${e.tipo === "BPA-C" ? "/bpa-c-v3" : "/bpa-i-v3"}?ficha=${e.fichaId}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir ficha</a> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         {/* ============ Outros relatórios — gerados AQUI (validam filtros e baixam) ============ */}
