@@ -374,6 +374,7 @@ function RelatoriosPage() {
           <p className="mb-3 text-xs text-muted-foreground">
             Profissionais que atendem pacientes e que <strong>não lançaram produção</strong> em {mesLabel(competencia)} (mês selecionado acima).
             O CBO (ocupação) vem do <strong>vínculo no CNES</strong> — um profissional pode ter mais de um. Porteiro, vigia, cozinheiro, limpeza e demais funções de apoio são <strong>excluídos pelo CBO</strong>.
+            Produção sem CNS (ex.: BPA-C) é <strong>atribuída pelo CBO</strong> quando há um único profissional com aquele CBO na unidade.
           </p>
           <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="block">

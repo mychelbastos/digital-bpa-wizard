@@ -119,32 +119,66 @@ export async function carregarInativos(opts: {
   if (!supabase || cnesList.length === 0 || !/^\d{6}$/.test(competencia)) return vazio;
 
   // Produção do mês de referência + da janela anterior, no escopo das unidades.
-  const meses = [competencia, ...historico];
+  // ===== Crivo por CBO ÚNICO na unidade =====
+  // Quando UM só profissional do vínculo tem aquele CBO na unidade, a produção lançada com esse
+  // CBO mas SEM CNS (típico de BPA-C, que não cita o profissional) é atribuída a ele. Se 2+
+  // profissionais compartilham o CBO, não dá para saber quem é → não atribui. Vale só p/ ESTE relatório.
+  const cboUnicoOwner = new Map<string, string>(); // "cnes|cbo" -> cns único
+  {
+    const { data } = await supabase.from("profissional_vinculos")
+      .select("cnes, cbo_codigo, cns").in("cnes", cnesList).neq("cbo_codigo", CBO_NONE);
+    const porChave = new Map<string, Set<string>>();
+    for (const r of (data ?? []) as { cnes: string; cbo_codigo: string; cns: string }[]) {
+      const k = `${r.cnes}|${r.cbo_codigo}`;
+      const s = porChave.get(k) ?? new Set<string>(); s.add(r.cns); porChave.set(k, s);
+    }
+    for (const [k, s] of porChave) if (s.size === 1) cboUnicoOwner.set(k, [...s][0]);
+  }
+  // Donos de uma linha de produção: o CNS lançado (se válido) + o dono do CBO único (se houver).
+  const donosDaLinha = (cnsLinha: string, cnes: string | null, cbo: string | null): string[] => {
+    const out: string[] = [];
+    if (cnsLinha) out.push(cnsLinha);
+    const dono = cnes && cbo ? cboUnicoOwner.get(`${cnes}|${cbo}`) : undefined;
+    if (dono && !out.includes(dono)) out.push(dono);
+    return out;
+  };
+
+  // Toda a produção das unidades (qualquer mês) — atribuída por CNS e por CBO único.
   const prod = await buscarTodasPaginado<ProdLinha>((de, ate) =>
     supabase!.from("producao_dashboard")
       .select("profissional_cns, profissional_nome, cbo, cnes, mes_producao, quantidade")
-      .in("cnes", cnesList).in("mes_producao", meses)
+      .in("cnes", cnesList)
       .order("id", { ascending: true }).range(de, ate));
 
   const ativosNoMes = new Set<string>();
+  const janelaSet = new Set(historico);
   type H = { nome: string; cbo: string | null; cnes: string; ultimoMes: string; qtd: number };
-  const hist = new Map<string, H>();
+  const hist = new Map<string, H>();                                                             // produção NA JANELA (sumiu + qtd período)
+  const ultimoGlobal = new Map<string, { mes: string; cbo: string | null; cnes: string }>();     // último mês em QUALQUER tempo
   for (const r of prod) {
-    const cns = (r.profissional_cns ?? "").trim();
-    if (!cns) continue;
-    if (r.mes_producao === competencia) { ativosNoMes.add(cns); continue; }
-    const cur = hist.get(cns);
+    const cnsLinha = (r.profissional_cns ?? "").trim();
+    const donos = donosDaLinha(cnsLinha, r.cnes, r.cbo);
     const mes = r.mes_producao ?? "";
-    if (!cur) {
-      hist.set(cns, { nome: r.profissional_nome?.trim() || "", cbo: r.cbo || null, cnes: r.cnes || "", ultimoMes: mes, qtd: r.quantidade || 0 });
-    } else {
-      cur.qtd += r.quantidade || 0;
-      if (mes > cur.ultimoMes) { cur.ultimoMes = mes; if (r.profissional_nome?.trim()) cur.nome = r.profissional_nome.trim(); if (r.cbo) cur.cbo = r.cbo; if (r.cnes) cur.cnes = r.cnes; }
-      else { if (!cur.nome && r.profissional_nome?.trim()) cur.nome = r.profissional_nome.trim(); if (!cur.cbo && r.cbo) cur.cbo = r.cbo; }
+    if (donos.length === 0 || !mes) continue;
+    const nomeLinha = r.profissional_nome?.trim() || "";
+    const cnesLinha = r.cnes || "";
+    for (const cns of donos) {
+      const g = ultimoGlobal.get(cns);
+      if (!g || mes > g.mes) ultimoGlobal.set(cns, { mes, cbo: r.cbo || g?.cbo || null, cnes: cnesLinha || g?.cnes || "" });
+
+      if (mes === competencia) { ativosNoMes.add(cns); continue; }
+      if (!janelaSet.has(mes)) continue; // fora da janela: conta só p/ ultimoGlobal
+      const cur = hist.get(cns);
+      if (!cur) hist.set(cns, { nome: nomeLinha, cbo: r.cbo || null, cnes: cnesLinha, ultimoMes: mes, qtd: r.quantidade || 0 });
+      else {
+        cur.qtd += r.quantidade || 0;
+        if (mes > cur.ultimoMes) { cur.ultimoMes = mes; if (nomeLinha) cur.nome = nomeLinha; if (r.cbo) cur.cbo = r.cbo; if (cnesLinha) cur.cnes = cnesLinha; }
+        else { if (!cur.nome && nomeLinha) cur.nome = nomeLinha; if (!cur.cbo && r.cbo) cur.cbo = r.cbo; }
+      }
     }
   }
 
-  // Monta os candidatos (ainda sem resolver CBO do vínculo).
+  // Monta os candidatos (ainda sem resolver o CBO do vínculo).
   type Cand = ProfInativoRow & { cboProducao: string | null };
   const candidatos: Cand[] = [];
   for (const [cns, h] of hist) {
@@ -161,38 +195,26 @@ export async function carregarInativos(opts: {
       const cns = (r.cns ?? "").trim();
       if (!cns || ativosNoMes.has(cns) || hist.has(cns) || jaListado.has(cns)) continue;
       jaListado.add(cns);
+      // Produziu fora da janela (por CNS ou por CBO único)? → "sumiu" com o último mês real.
+      // Só é "nunca" quem não tem produção em NENHUM mês.
+      const g = ultimoGlobal.get(cns);
       candidatos.push({
         cns, nome: r.nome?.trim() || cns, cnes: r.cnes, nomeUnidade: nomesUnidade[r.cnes] || r.cnes,
-        cbos: [], cboLabel: "", cboProducao: null, ultimoMes: null, qtdPeriodo: 0, situacao: "nunca",
+        cbos: [], cboLabel: "", cboProducao: g?.cbo ?? null,
+        ultimoMes: g?.mes ?? null, qtdPeriodo: 0, situacao: g ? "sumiu" : "nunca",
       });
     }
   }
 
-  // "Nunca" de verdade = sem produção em NENHUM mês (nas unidades consideradas). Quem produziu
-  // FORA da janela vira "sumiu" com o último mês real — assim o rótulo NUNCA não mente para quem
-  // só produziu há mais tempo. (A janela conta só o qtd do período; ultimoMes reflete o real.)
-  const nuncaCns = [...new Set(candidatos.filter((c) => c.situacao === "nunca").map((c) => c.cns))];
-  if (nuncaCns.length) {
-    const antigo = new Map<string, { ultimoMes: string; cbo: string | null }>();
-    for (let i = 0; i < nuncaCns.length; i += 300) {
-      const bloco = nuncaCns.slice(i, i + 300);
-      const linhas = await buscarTodasPaginado<{ profissional_cns: string | null; cbo: string | null; mes_producao: string | null }>((de, ate) =>
-        supabase!.from("producao_dashboard").select("profissional_cns, cbo, mes_producao")
-          .in("cnes", cnesList).in("profissional_cns", bloco)
-          .order("id", { ascending: true }).range(de, ate));
-      for (const r of linhas) {
-        const cns = (r.profissional_cns ?? "").trim();
-        const mes = r.mes_producao ?? "";
-        if (!cns || !mes) continue;
-        const cur = antigo.get(cns);
-        if (!cur || mes > cur.ultimoMes) antigo.set(cns, { ultimoMes: mes, cbo: r.cbo || cur?.cbo || null });
-      }
+  // Nomes que ficaram como o próprio CNS (ex.: produção de BPA-C sem nome) → resolve pelo cadastro.
+  const semNome = [...new Set(candidatos.filter((c) => c.nome === c.cns).map((c) => c.cns))];
+  if (semNome.length) {
+    const nomeDe = new Map<string, string>();
+    for (let i = 0; i < semNome.length; i += 300) {
+      const { data } = await supabase.from("profissionais").select("cns, nome").in("cns", semNome.slice(i, i + 300));
+      for (const r of (data ?? []) as { cns: string; nome: string }[]) if (r.nome && !nomeDe.has(r.cns)) nomeDe.set(r.cns, r.nome.trim());
     }
-    for (const c of candidatos) {
-      if (c.situacao !== "nunca") continue;
-      const a = antigo.get(c.cns);
-      if (a) { c.situacao = "sumiu"; c.ultimoMes = a.ultimoMes; if (!c.cboProducao) c.cboProducao = a.cbo; }
-    }
+    for (const c of candidatos) if (c.nome === c.cns && nomeDe.has(c.cns)) c.nome = nomeDe.get(c.cns)!;
   }
 
   // CBOs do vínculo (por CNS+CNES). Fallback: o CBO carimbado na produção (quem já produziu).
