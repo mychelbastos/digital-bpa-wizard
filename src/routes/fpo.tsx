@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2, Pencil } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2, Pencil, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
+import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { parseFpoHtml, type FpoArquivoParsed } from "@/lib/fpo/parse-fpo";
 import {
   carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, definirTetoVigente, excluirTetoFpo,
@@ -42,6 +43,7 @@ function FpoPage() {
   const [rows, setRows] = useState<FpoComparacaoRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [verNaoOrcaveis, setVerNaoOrcaveis] = useState(false);
   const [limparAlvo, setLimparAlvo] = useState<FpoComparacaoRow | null>(null);
   // Edição por linha: guarda o procedimento em edição e um rascunho local (texto) dos campos.
@@ -147,6 +149,12 @@ function FpoPage() {
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
               <FileDown className="size-4" /> Gerar relatório
             </button>
+            {podeEditar && (
+              <button onClick={() => setAddOpen(true)} disabled={!cnes}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
+                <Plus className="size-4" /> Adicionar procedimento
+              </button>
+            )}
             {podeEditar && (
               <button onClick={() => setImportOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
                 <Upload className="size-4" /> Importar arquivo
@@ -417,6 +425,18 @@ function FpoPage() {
         />
       )}
 
+      {addOpen && (
+        <AdicionarProcedimentoModal
+          cnes={cnes}
+          nomeUnidade={nomeUnidade}
+          competencia={competencia}
+          userId={user?.id ?? null}
+          existentes={rows}
+          onClose={() => setAddOpen(false)}
+          onAdicionado={() => { setAddOpen(false); carregar(); }}
+        />
+      )}
+
       <ConfirmModal
         open={limparAlvo !== null}
         title="Limpar teto"
@@ -483,6 +503,159 @@ function CampoEdit({ value, onChange, onKeyDown, decimal, autoFocus, center }: {
       onKeyDown={onKeyDown}
       className={`rounded border border-primary bg-background px-1 py-0.5 tabular-nums outline-none ring-1 ring-primary/30 ${center ? "w-full text-center" : "w-16 max-w-full text-right"}`}
     />
+  );
+}
+
+// Modal para ADICIONAR um procedimento manualmente à FPO: busca no SIGTAP (nome ou código),
+// define teto (qtd) e valor unitário, e grava a vigência na competência exibida (vale deste
+// mês em diante). Complementa a importação do arquivo — útil p/ incluir um procedimento avulso.
+function AdicionarProcedimentoModal({ cnes, nomeUnidade, competencia, userId, existentes, onClose, onAdicionado }: {
+  cnes: string;
+  nomeUnidade: string;
+  competencia: string;
+  userId: string | null;
+  existentes: FpoComparacaoRow[];
+  onClose: () => void;
+  onAdicionado: () => void;
+}) {
+  const [termo, setTermo] = useState("");
+  const [resultados, setResultados] = useState<{ codigo: string; nome: string }[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [sel, setSel] = useState<{ codigo: string; nome: string } | null>(null);
+  const [qtd, setQtd] = useState("");
+  const [valor, setValor] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Busca com debounce enquanto digita (nome ou código). Só busca com o modal em modo de escolha.
+  useEffect(() => {
+    if (sel) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const q = termo.trim();
+    if (q.length < 3) { setResultados([]); setBuscando(false); return; }
+    setBuscando(true);
+    timerRef.current = setTimeout(async () => {
+      const r = await buscarProcedimentosPorNome(q);
+      setResultados(r);
+      setBuscando(false);
+    }, 300);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [termo, sel]);
+
+  // Se o procedimento escolhido já tem teto nesta unidade/competência, avisa e pré-preenche
+  // (salvar vai substituir o valor vigente deste mês em diante).
+  const jaExiste = sel ? existentes.find((r) => r.procedimento === sel.codigo && r.temTeto) : undefined;
+  const escolher = (p: { codigo: string; nome: string }) => {
+    setSel(p);
+    const ex = existentes.find((r) => r.procedimento === p.codigo && r.temTeto);
+    if (ex) { setQtd(String(ex.qtdOrcada)); setValor(String(ex.valorUnitario)); }
+  };
+
+  const qtdNum = Math.max(0, Math.round(Number(qtd.replace(",", ".")) || 0));
+  const valorNum = Math.max(0, Number(valor.replace(",", ".")) || 0);
+  const podeSalvar = Boolean(sel) && qtdNum > 0 && !salvando;
+
+  const salvar = async () => {
+    if (!sel || !podeSalvar) return;
+    setSalvando(true);
+    const ok = await definirTetoVigente(cnes, sel.codigo, competencia, {
+      qtdOrcada: qtdNum, valorUnitario: valorNum, codigoFpo: sel.codigo, descricaoFpo: sel.nome, resolvido: true,
+    }, userId);
+    setSalvando(false);
+    if (!ok) { toast.error("Não foi possível salvar. Verifique sua permissão de edição nesta unidade."); return; }
+    toast.success(`Procedimento ${jaExiste ? "atualizado" : "adicionado"} a partir de ${compLabel(competencia)}.`);
+    onAdicionado();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-border bg-card shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <header className="sticky top-0 flex items-center justify-between gap-3 border-b border-border bg-card/95 px-5 py-4 backdrop-blur">
+          <h2 className="flex items-center gap-2 text-base font-bold"><Plus className="size-4" /> Adicionar procedimento</h2>
+          <button onClick={onClose} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted"><X className="size-4" /></button>
+        </header>
+
+        <div className="space-y-4 p-5">
+          <p className="text-xs text-muted-foreground">
+            Unidade <strong className="text-foreground">{nomeUnidade}</strong> · competência <strong className="text-foreground">{compLabel(competencia)}</strong>.
+            O teto passa a valer deste mês em diante.
+          </p>
+
+          {!sel ? (
+            <div>
+              <label className="text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Procedimento (nome ou código SIGTAP)</span>
+                <div className="relative mt-1">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    autoFocus value={termo} onChange={(e) => setTermo(e.target.value)}
+                    placeholder="Ex.: consulta médica ou 0301010"
+                    className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                </div>
+              </label>
+              <div className="mt-2 overflow-hidden rounded-lg border border-border">
+                {buscando ? (
+                  <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Buscando…</div>
+                ) : termo.trim().length < 3 ? (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">Digite ao menos 3 caracteres para buscar.</div>
+                ) : resultados.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">Nenhum procedimento encontrado.</div>
+                ) : (
+                  <ul className="max-h-64 divide-y divide-border/60 overflow-y-auto">
+                    {resultados.map((p) => (
+                      <li key={p.codigo}>
+                        <button type="button" onClick={() => escolher(p)}
+                          className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm hover:bg-muted">
+                          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{p.codigo}</span>
+                          <span className="min-w-0 flex-1">{p.nome}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-[11px] text-muted-foreground">{sel.codigo}</p>
+                  <p className="text-sm font-semibold">{sel.nome}</p>
+                </div>
+                <button type="button" onClick={() => { setSel(null); setQtd(""); setValor(""); }}
+                  className="shrink-0 rounded border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted">Trocar</button>
+              </div>
+
+              {jaExiste && (
+                <p className="flex items-start gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Este procedimento já tem teto nesta unidade. Salvar vai <strong>atualizar</strong> o valor a partir de {compLabel(competencia)}.
+                </p>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Teto (quantidade)</span>
+                  <input value={qtd} inputMode="numeric" autoFocus onChange={(e) => setQtd(e.target.value)}
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-2.5 text-sm tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                </label>
+                <label className="text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Valor unitário (R$)</span>
+                  <input value={valor} inputMode="decimal" onChange={(e) => setValor(e.target.value)}
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-2.5 text-sm tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                </label>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Teto total: <strong className="text-foreground">{brl(qtdNum * valorNum)}</strong> ({int(qtdNum)} × {brl(valorNum)}).</p>
+
+              <button onClick={salvar} disabled={!podeSalvar}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                {salvando ? <><Loader2 className="size-4 animate-spin" /> Gravando…</> : <><Save className="size-4" /> {jaExiste ? "Atualizar" : "Adicionar"} procedimento</>}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
