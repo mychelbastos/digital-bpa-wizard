@@ -4,7 +4,7 @@ import type { ProfInativoRow } from "./inativos";
 
 const compLabel = (c: string | null) => (c && /^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : "—");
 const situacaoLabel = (s: ProfInativoRow["situacao"]) => (s === "sumiu" ? "Sem produção no mês" : "Nunca lançou produção");
-const ocupacao = (r: ProfInativoRow) => (r.cbo ? (r.cboDesc ? `${r.cboDesc} (${r.cbo})` : r.cbo) : "Não identificado");
+const ocupacao = (r: ProfInativoRow) => r.cboLabel || "Não identificado";
 
 export function csvInativos(rows: ProfInativoRow[]): string {
   const cols = ["Situação", "Profissional", "CNS", "Unidade", "CNES", "Ocupação (CBO)", "Último mês com produção", "Qtd no período anterior"];
@@ -56,7 +56,7 @@ export function construirPdfInativos(d: { rows: ProfInativoRow[]; subtitulo: str
     pdf.setTextColor(30);
     const cells = [
       "", pdf.splitTextToSize(r.nome, cols[1].w - 4)[0] ?? "", r.cns, "",
-      pdf.splitTextToSize(r.cbo ? (r.cboDesc ? `${r.cboDesc} (${r.cbo})` : r.cbo) : "Não identificado", cols[4].w - 4)[0] ?? "",
+      pdf.splitTextToSize(ocupacao(r), cols[4].w - 4)[0] ?? "",
       compLabel(r.ultimoMes), String(r.qtdPeriodo || 0),
     ];
     cells.forEach((c, i) => { if (i === 0 || i === 3) return; pdf.text(String(c), xDe(i) + 2, y); });

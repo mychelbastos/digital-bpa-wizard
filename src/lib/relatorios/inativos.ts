@@ -3,40 +3,56 @@ import { carregarDescricoesCbo } from "@/lib/dashboard-producao";
 
 // Relatório de PROFISSIONAIS INATIVOS / SEM PRODUÇÃO no mês.
 //
-// Fonte de "quem atende pacientes": o HISTÓRICO DE PRODUÇÃO. Quem já lançou BPA é, por
-// construção, um profissional assistencial — e o CBO (ocupação) vem carimbado em cada linha
-// da produção. Porteiro/vigia/cozinheiro nunca lançam BPA, então não entram nessa base.
-// (O cadastro do CNES em tabela — `profissionais` — só tem nome/CNS, sem CBO; por isso não
-// dá para classificar a ocupação de quem nunca produziu. Esses ficam numa seção à parte,
-// marcados como "CBO não identificado", só quando o usuário pedir.)
+// "Atende pacientes" = CBO assistencial. O CBO de cada profissional vem do VÍNCULO no CNES
+// (tabela `profissional_vinculos`, cache da Edge Function) — um profissional pode ter MAIS
+// DE UM CBO na mesma unidade. Assim conseguimos separar quem é da assistência de quem é
+// apoio (porteiro, vigia, cozinheiro, limpeza), que aparece no cadastro do CNES mas nunca
+// lança produção. Para quem produziu, o CBO da própria produção serve de reforço/fallback.
 //
 // "Inativo/sem produção" = profissional que produziu na JANELA anterior (ex.: últimos 3–12
-// meses) mas está com ZERO produção no mês de referência selecionado.
+// meses) mas está com ZERO produção no mês de referência selecionado; opcionalmente, também
+// os cadastrados no CNES que nunca lançaram nada (já filtrados por CBO assistencial).
 
-// CBOs claramente NÃO assistenciais (não atendem paciente) — defesa extra caso um código
-// desses apareça na produção por lançamento errado. Prefixos da família CBO (2002).
+// Sentinela usada no cache de vínculos para "consultado e sem CBO".
+const CBO_NONE = "__NONE__";
+
+// CBOs NÃO assistenciais (não atendem paciente / não lançam BPA). Prefixos da família CBO
+// (2002), calibrados com a lista real de vínculos das unidades. Bloqueia por grande-grupo os
+// que nunca são assistenciais (1 gestão, 4 administrativo, 6 agro, 7 industrial/motorista,
+// 8 industrial, 9 manutenção) + os específicos de serviços (cozinha, limpeza, lavanderia,
+// vigilância, portaria, balcão) e alguns do grupo 2/3 (TI, administração, segurança do
+// trabalho). NÃO bloqueia: 22xx (médicos, enfermeiros, dentistas, farmacêuticos, fisio,
+// nutri, fono, biomédico), 2515/2516 (psicólogo, assistente social), 322x/324x/325x
+// (técnicos de saúde), 3522 (agente de saúde), 515x (atendente/aux. de enfermagem/laboratório).
 const CBO_NAO_CLINICO: string[] = [
-  "5174", // porteiros, vigias e afins
-  "5173", // vigilantes e guardas de segurança
-  "5132", // cozinheiros
-  "5134", // garçons, copeiros e afins
-  "5143", // trab. de limpeza / auxiliar de serviços gerais / servente
-  "7823", // motoristas de veículos de transporte
-  "9922", // coletores de lixo / serventes
-  "6220", // trabalhadores agrícolas
-  "9101", // trabalhadores de conservação/manutenção de edifícios
-  "7170", // trab. da construção (pedreiro, pintor)
+  "1",    // dirigentes / gestão
+  "4",    // serviços administrativos (aux. escritório, recepção, faturamento, almoxarife, digitador)
+  "6",    // agropecuários
+  "7",    // motoristas, construção, produção industrial
+  "8",    // industrial
+  "9",    // manutenção / reparação / coleta
+  "2124", // tecnologia da informação
+  "252", "253", "254", // administração, contabilidade, jurídico, comunicação
+  "3516", // técnico de segurança do trabalho
+  "3731", // programação / mídia
+  "5132", "5134", "5135", "5136", // cozinha / copa / alimentação
+  "5142", "5143",                 // limpeza / conservação / manutenção predial
+  "5163",                         // lavanderia
+  "5173", "5174",                 // vigilância / portaria
+  "5211", "5212",                 // atendente / balconista comercial
 ];
 export const ehCboClinico = (cbo: string | null | undefined): boolean =>
   !cbo || !CBO_NAO_CLINICO.some((p) => cbo.startsWith(p));
+
+export interface CboItem { codigo: string; descricao: string | null }
 
 export interface ProfInativoRow {
   cns: string;
   nome: string;
   cnes: string;
   nomeUnidade: string;
-  cbo: string | null;
-  cboDesc: string | null;
+  cbos: CboItem[];            // CBOs do vínculo (ou o da produção como fallback); pode ter vários
+  cboLabel: string;           // rótulo pronto ("" quando não identificado)
   ultimoMes: string | null;   // AAAAMM da produção mais recente na janela (null = nunca produziu)
   qtdPeriodo: number;         // total produzido na janela anterior
   situacao: "sumiu" | "nunca";
@@ -44,8 +60,9 @@ export interface ProfInativoRow {
 
 export interface InativosResultado {
   rows: ProfInativoRow[];
-  excluidosNaoClinico: number; // quantos foram tirados por CBO não assistencial
-  janelaMeses: string[];       // meses da janela considerada (rótulo)
+  excluidosNaoClinico: number; // quantos foram tirados por CBO só de apoio
+  semCboCount: number;         // quantos ficaram sem CBO identificado
+  janelaMeses: string[];       // meses da janela considerada
 }
 
 // Meses (AAAAMM) imediatamente ANTES de `comp`, do mais recente para o mais antigo.
@@ -55,6 +72,35 @@ function mesesAntes(comp: string, n: number): string[] {
   const out: string[] = [];
   for (let i = 0; i < n; i++) { d.setMonth(d.getMonth() - 1); out.push(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`); }
   return out;
+}
+
+const chavePar = (cns: string, cnes: string) => `${cns}|${cnes}`;
+const rotuloCbos = (cbos: CboItem[]) =>
+  cbos.map((c) => (c.descricao ? `${c.descricao} (${c.codigo})` : c.codigo)).join(" · ");
+
+// Carrega os CBOs do VÍNCULO (por CNS+CNES) do cache `profissional_vinculos`. Um par pode
+// ter vários CBOs. Ignora a sentinela de "sem CBO". Nunca lança.
+async function carregarVinculosCbo(pares: { cns: string; cnes: string }[]): Promise<Map<string, CboItem[]>> {
+  const map = new Map<string, CboItem[]>();
+  if (!supabase || pares.length === 0) return map;
+  const cnsList = [...new Set(pares.map((p) => p.cns))];
+  const cnesList = [...new Set(pares.map((p) => p.cnes))];
+  try {
+    // Consulta em blocos de CNS (evita URL gigante); filtra o par exato pela chave depois.
+    for (let i = 0; i < cnsList.length; i += 300) {
+      const bloco = cnsList.slice(i, i + 300);
+      const { data } = await supabase.from("profissional_vinculos")
+        .select("cns, cnes, cbo_codigo, cbo_descricao").in("cns", bloco).in("cnes", cnesList);
+      for (const r of (data ?? []) as { cns: string; cnes: string; cbo_codigo: string; cbo_descricao: string | null }[]) {
+        if (!r.cbo_codigo || r.cbo_codigo === CBO_NONE) continue;
+        const k = chavePar(r.cns, r.cnes);
+        const arr = map.get(k) ?? [];
+        if (!arr.some((c) => c.codigo === r.cbo_codigo)) arr.push({ codigo: r.cbo_codigo, descricao: r.cbo_descricao });
+        map.set(k, arr);
+      }
+    }
+  } catch { /* fail-open: sem CBO de vínculo */ }
+  return map;
 }
 
 interface ProdLinha { profissional_cns: string | null; profissional_nome: string | null; cbo: string | null; cnes: string | null; mes_producao: string | null; quantidade: number }
@@ -69,7 +115,7 @@ export async function carregarInativos(opts: {
   const { competencia, janelaMeses, nomesUnidade, incluirRosterSemProducao } = opts;
   const cnesList = [...new Set(opts.cnesList.filter(Boolean))];
   const historico = mesesAntes(competencia, janelaMeses);
-  const vazio: InativosResultado = { rows: [], excluidosNaoClinico: 0, janelaMeses: historico };
+  const vazio: InativosResultado = { rows: [], excluidosNaoClinico: 0, semCboCount: 0, janelaMeses: historico };
   if (!supabase || cnesList.length === 0 || !/^\d{6}$/.test(competencia)) return vazio;
 
   // Produção do mês de referência + da janela anterior, no escopo das unidades.
@@ -80,39 +126,34 @@ export async function carregarInativos(opts: {
       .in("cnes", cnesList).in("mes_producao", meses)
       .order("id", { ascending: true }).range(de, ate));
 
-  // Quem produziu no MÊS DE REFERÊNCIA (qualquer unidade das consideradas) = ativo.
   const ativosNoMes = new Set<string>();
-  // Agregado do HISTÓRICO por profissional (CNS).
   type H = { nome: string; cbo: string | null; cnes: string; ultimoMes: string; qtd: number };
   const hist = new Map<string, H>();
   for (const r of prod) {
     const cns = (r.profissional_cns ?? "").trim();
     if (!cns) continue;
     if (r.mes_producao === competencia) { ativosNoMes.add(cns); continue; }
-    // linha da janela anterior
     const cur = hist.get(cns);
     const mes = r.mes_producao ?? "";
     if (!cur) {
       hist.set(cns, { nome: r.profissional_nome?.trim() || "", cbo: r.cbo || null, cnes: r.cnes || "", ultimoMes: mes, qtd: r.quantidade || 0 });
     } else {
       cur.qtd += r.quantidade || 0;
-      // Mantém o dado mais RECENTE (maior mês) para nome/cbo/unidade.
       if (mes > cur.ultimoMes) { cur.ultimoMes = mes; if (r.profissional_nome?.trim()) cur.nome = r.profissional_nome.trim(); if (r.cbo) cur.cbo = r.cbo; if (r.cnes) cur.cnes = r.cnes; }
       else { if (!cur.nome && r.profissional_nome?.trim()) cur.nome = r.profissional_nome.trim(); if (!cur.cbo && r.cbo) cur.cbo = r.cbo; }
     }
   }
 
-  const candidatos: ProfInativoRow[] = [];
-  // 1) Assistenciais que SUMIRAM: produziram na janela, zero no mês de referência.
+  // Monta os candidatos (ainda sem resolver CBO do vínculo).
+  type Cand = ProfInativoRow & { cboProducao: string | null };
+  const candidatos: Cand[] = [];
   for (const [cns, h] of hist) {
     if (ativosNoMes.has(cns)) continue;
     candidatos.push({
       cns, nome: h.nome || cns, cnes: h.cnes, nomeUnidade: nomesUnidade[h.cnes] || h.cnes,
-      cbo: h.cbo, cboDesc: null, ultimoMes: h.ultimoMes, qtdPeriodo: h.qtd, situacao: "sumiu",
+      cbos: [], cboLabel: "", cboProducao: h.cbo, ultimoMes: h.ultimoMes, qtdPeriodo: h.qtd, situacao: "sumiu",
     });
   }
-
-  // 2) (Opcional) Cadastrados no CNES que NUNCA lançaram produção — CBO desconhecido.
   if (incluirRosterSemProducao) {
     const { data: roster } = await supabase.from("profissionais").select("cns, nome, cnes").in("cnes", cnesList);
     const jaListado = new Set(candidatos.map((c) => c.cns));
@@ -122,24 +163,44 @@ export async function carregarInativos(opts: {
       jaListado.add(cns);
       candidatos.push({
         cns, nome: r.nome?.trim() || cns, cnes: r.cnes, nomeUnidade: nomesUnidade[r.cnes] || r.cnes,
-        cbo: null, cboDesc: null, ultimoMes: null, qtdPeriodo: 0, situacao: "nunca",
+        cbos: [], cboLabel: "", cboProducao: null, ultimoMes: null, qtdPeriodo: 0, situacao: "nunca",
       });
     }
   }
 
-  // Filtra CBOs não assistenciais (só afeta quem tem CBO conhecido).
-  const antes = candidatos.length;
-  const filtrados = candidatos.filter((c) => ehCboClinico(c.cbo));
-  const excluidosNaoClinico = antes - filtrados.length;
+  // CBOs do vínculo (por CNS+CNES). Fallback: o CBO carimbado na produção (quem já produziu).
+  const vinc = await carregarVinculosCbo(candidatos.map((c) => ({ cns: c.cns, cnes: c.cnes })));
+  const faltamDesc: string[] = [];
+  for (const c of candidatos) {
+    let cbos = vinc.get(chavePar(c.cns, c.cnes)) ?? [];
+    if (cbos.length === 0 && c.cboProducao) { cbos = [{ codigo: c.cboProducao, descricao: null }]; faltamDesc.push(c.cboProducao); }
+    c.cbos = cbos;
+  }
+  // Completa descrições que vieram só como código (fallback da produção).
+  if (faltamDesc.length) {
+    const descs = await carregarDescricoesCbo(faltamDesc);
+    for (const c of candidatos) for (const cb of c.cbos) if (!cb.descricao && descs[cb.codigo]) cb.descricao = descs[cb.codigo];
+  }
 
-  // Descrições de CBO.
-  const descs = await carregarDescricoesCbo(filtrados.map((c) => c.cbo).filter((c): c is string => !!c));
-  for (const c of filtrados) c.cboDesc = c.cbo ? (descs[c.cbo] || null) : null;
+  // Classifica: fica quem tem PELO MENOS UM CBO assistencial, ou quem está sem CBO
+  // identificado (para não sumir com quem a base não classificou). Sai quem só tem CBO
+  // de apoio (porteiro, vigia, cozinheiro, limpeza…).
+  let excluidosNaoClinico = 0, semCboCount = 0;
+  const rows: ProfInativoRow[] = [];
+  for (const c of candidatos) {
+    const temCbo = c.cbos.length > 0;
+    const algumClinico = c.cbos.some((cb) => ehCboClinico(cb.codigo));
+    if (temCbo && !algumClinico) { excluidosNaoClinico++; continue; }
+    if (!temCbo) semCboCount++;
+    rows.push({
+      cns: c.cns, nome: c.nome, cnes: c.cnes, nomeUnidade: c.nomeUnidade,
+      cbos: c.cbos, cboLabel: rotuloCbos(c.cbos), ultimoMes: c.ultimoMes, qtdPeriodo: c.qtdPeriodo, situacao: c.situacao,
+    });
+  }
 
-  // Ordena: SUMIU primeiro (mais relevante), depois nome.
-  filtrados.sort((a, b) =>
+  rows.sort((a, b) =>
     (a.situacao === b.situacao ? 0 : a.situacao === "sumiu" ? -1 : 1) ||
     a.nome.localeCompare(b.nome));
 
-  return { rows: filtrados, excluidosNaoClinico, janelaMeses: historico };
+  return { rows, excluidosNaoClinico, semCboCount, janelaMeses: historico };
 }

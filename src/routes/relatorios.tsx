@@ -373,7 +373,7 @@ function RelatoriosPage() {
           <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground"><UserX className="size-4 text-primary" /> Profissionais sem produção</h2>
           <p className="mb-3 text-xs text-muted-foreground">
             Profissionais que atendem pacientes e que <strong>não lançaram produção</strong> em {mesLabel(competencia)} (mês selecionado acima).
-            A base considera quem <strong>já produziu BPA</strong> na janela anterior — porteiro, vigia, cozinheiro e afins não entram (nunca lançam produção).
+            O CBO (ocupação) vem do <strong>vínculo no CNES</strong> — um profissional pode ter mais de um. Porteiro, vigia, cozinheiro, limpeza e demais funções de apoio são <strong>excluídos pelo CBO</strong>.
           </p>
           <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="block">
@@ -434,7 +434,7 @@ function RelatoriosPage() {
                       </td>
                       <td className="px-2 py-1.5">{r.nome}<span className="block font-mono text-[10px] text-muted-foreground">{r.cns}</span></td>
                       <td className="px-2 py-1.5">{r.nomeUnidade}</td>
-                      <td className="px-2 py-1.5 text-muted-foreground">{r.cbo ? (r.cboDesc ? `${r.cboDesc} (${r.cbo})` : r.cbo) : <span className="italic">Não identificado</span>}</td>
+                      <td className="px-2 py-1.5 text-muted-foreground">{r.cboLabel || <span className="italic">Não identificado</span>}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap">{r.ultimoMes ? mesLabel(r.ultimoMes) : "—"}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums">{r.qtdPeriodo.toLocaleString("pt-BR")}</td>
                     </tr>
@@ -443,8 +443,11 @@ function RelatoriosPage() {
               </table>
             </div>
           )}
-          {inativos && inativos.excluidosNaoClinico > 0 && (
-            <p className="mt-2 text-[11px] text-muted-foreground">{inativos.excluidosNaoClinico} profissional(is) com CBO não assistencial foram desconsiderados.</p>
+          {inativos && (inativos.excluidosNaoClinico > 0 || inativos.semCboCount > 0) && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {inativos.excluidosNaoClinico > 0 && <>{inativos.excluidosNaoClinico} com CBO só de apoio foram excluídos. </>}
+              {inativos.semCboCount > 0 && <>{inativos.semCboCount} sem CBO identificado no vínculo (mantidos na lista para conferência).</>}
+            </p>
           )}
         </section>
 
