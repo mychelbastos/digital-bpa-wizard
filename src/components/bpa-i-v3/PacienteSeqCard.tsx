@@ -87,11 +87,19 @@ export function PacienteSeqCard(props: {
             <div className="truncate text-sm font-semibold text-emerald-900">{seq.nomePac || "Paciente"}</div>
             <div className="text-[11px] text-emerald-700">{docDaSeq(seq)}</div>
           </div>
-          {ultimo && !props.travado && (
-            <button type="button" onClick={() => onUsarUltimoProcSafe(ultimo, props.onUsarUltimoProc)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-2 py-1.5 text-xs font-medium text-sky-800 hover:bg-sky-100">
-              <Repeat className="size-3.5" /> Utilizar o mesmo procedimento da última vez
-            </button>
+          {!props.travado && (
+            ultimo ? (
+              <button type="button" onClick={() => onUsarUltimoProcSafe(ultimo, props.onUsarUltimoProc)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-2 py-1.5 text-xs font-medium text-sky-800 hover:bg-sky-100">
+                <Repeat className="size-3.5" /> Utilizar o mesmo procedimento da última vez
+              </button>
+            ) : (props.profCnsDig.length !== 15 || props.profCboDig.length < 6) ? (
+              // Sem CNS/CBO do profissional não dá para buscar o último atendimento — em vez de
+              // sumir com a ação (o que parece "botão que desapareceu"), explica o que falta.
+              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground">
+                <Repeat className="size-3.5 opacity-60" /> Preencha CNS e CBO do profissional para trazer o último procedimento.
+              </div>
+            ) : null
           )}
           {!props.travado && (
             <div className="flex gap-2">
