@@ -168,6 +168,33 @@ export async function carregarInativos(opts: {
     }
   }
 
+  // "Nunca" de verdade = sem produção em NENHUM mês (nas unidades consideradas). Quem produziu
+  // FORA da janela vira "sumiu" com o último mês real — assim o rótulo NUNCA não mente para quem
+  // só produziu há mais tempo. (A janela conta só o qtd do período; ultimoMes reflete o real.)
+  const nuncaCns = [...new Set(candidatos.filter((c) => c.situacao === "nunca").map((c) => c.cns))];
+  if (nuncaCns.length) {
+    const antigo = new Map<string, { ultimoMes: string; cbo: string | null }>();
+    for (let i = 0; i < nuncaCns.length; i += 300) {
+      const bloco = nuncaCns.slice(i, i + 300);
+      const linhas = await buscarTodasPaginado<{ profissional_cns: string | null; cbo: string | null; mes_producao: string | null }>((de, ate) =>
+        supabase!.from("producao_dashboard").select("profissional_cns, cbo, mes_producao")
+          .in("cnes", cnesList).in("profissional_cns", bloco)
+          .order("id", { ascending: true }).range(de, ate));
+      for (const r of linhas) {
+        const cns = (r.profissional_cns ?? "").trim();
+        const mes = r.mes_producao ?? "";
+        if (!cns || !mes) continue;
+        const cur = antigo.get(cns);
+        if (!cur || mes > cur.ultimoMes) antigo.set(cns, { ultimoMes: mes, cbo: r.cbo || cur?.cbo || null });
+      }
+    }
+    for (const c of candidatos) {
+      if (c.situacao !== "nunca") continue;
+      const a = antigo.get(c.cns);
+      if (a) { c.situacao = "sumiu"; c.ultimoMes = a.ultimoMes; if (!c.cboProducao) c.cboProducao = a.cbo; }
+    }
+  }
+
   // CBOs do vínculo (por CNS+CNES). Fallback: o CBO carimbado na produção (quem já produziu).
   const vinc = await carregarVinculosCbo(candidatos.map((c) => ({ cns: c.cns, cnes: c.cnes })));
   const faltamDesc: string[] = [];
