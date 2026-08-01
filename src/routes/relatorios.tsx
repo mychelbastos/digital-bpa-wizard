@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2,
+  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX,
 } from "lucide-react";
 import {
   carregarProducaoDashboard, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo,
@@ -18,6 +18,8 @@ import { construirPdfTfd, construirPdfTfdPorUnidade } from "@/lib/tfd/relatorio-
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
 import { coletarErros, ROTULO_CATEGORIA, type CategoriaErro, type ErroItem } from "@/lib/relatorios/erros";
 import { csvErros, construirPdfErros } from "@/lib/relatorios/erros-pdf";
+import { carregarInativos, type InativosResultado } from "@/lib/relatorios/inativos";
+import { csvInativos, construirPdfInativos } from "@/lib/relatorios/inativos-pdf";
 import { AlertTriangle } from "lucide-react";
 import {
   montarRelatorioTfd, csvTabela, AGRUPAMENTOS, STATUS_ROTULO, compLabelTfd, brlTfd, type AgrupamentoRel,
@@ -64,6 +66,12 @@ function RelatoriosPage() {
   const [erros, setErros] = useState<ErroItem[] | null>(null);
   const [verificando, setVerificando] = useState(false);
   const [filtroGrav, setFiltroGrav] = useState<"todas" | "erro" | "aviso">("todas");
+  // Profissionais inativos / sem produção
+  const [inaCnes, setInaCnes] = useState("todos");
+  const [inaJanela, setInaJanela] = useState(3);
+  const [inaIncluirRoster, setInaIncluirRoster] = useState(false);
+  const [inativos, setInativos] = useState<InativosResultado | null>(null);
+  const [inaLoading, setInaLoading] = useState(false);
 
   // Filtros
   const [cnes, setCnes] = useState("todos");
@@ -83,7 +91,7 @@ function RelatoriosPage() {
     setLoading(false);
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [competencia]);
-  useEffect(() => { setCnes("todos"); setProf("todos"); setProc("todos"); setTipo("todos"); setCid("todos"); setCarater("todos"); }, [competencia]);
+  useEffect(() => { setCnes("todos"); setProf("todos"); setProc("todos"); setTipo("todos"); setCid("todos"); setCarater("todos"); setInativos(null); }, [competencia]);
   useEffect(() => {
     carregarLogoOrg().then(setLogo);
     carregarVinculosUsuario().then(async (v) => {
@@ -156,6 +164,24 @@ function RelatoriosPage() {
   const nAvisos = (erros ?? []).length - nErros;
   const baixarCsvErros = () => { if (!errosFiltrados.length) return; baixarCsv(`erros-${competencia}.csv`, csvErros(errosFiltrados)); toast.success("CSV gerado."); };
   const baixarPdfErros = () => { if (!errosFiltrados.length) return; construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo }).save(`erros-${competencia}.pdf`); toast.success("PDF gerado."); };
+
+  // ---- Profissionais inativos / sem produção ----
+  const nomesUnidade = useMemo(() => Object.fromEntries(cnesOpcoes.map((u) => [u.cnes, u.nome])), [cnesOpcoes]);
+  const verificarInativos = async () => {
+    const cnesList = inaCnes === "todos" ? cnesOpcoes.map((u) => u.cnes) : [inaCnes];
+    if (cnesList.length === 0) { toast.error("Sem unidade vinculada."); return; }
+    setInaLoading(true);
+    try {
+      setInativos(await carregarInativos({ cnesList, nomesUnidade, competencia, janelaMeses: inaJanela, incluirRosterSemProducao: inaIncluirRoster }));
+    } finally { setInaLoading(false); }
+  };
+  const inaSubtitulo = () => {
+    const uni = inaCnes === "todos" ? `Todas as unidades (${cnesOpcoes.length})` : (nomesUnidade[inaCnes] ?? inaCnes);
+    return `${uni} · sem produção em ${mesLabel(competencia)} · janela ${inaJanela} ${inaJanela === 1 ? "mês" : "meses"} anteriores`;
+  };
+  const inaNomeArq = () => `sem-producao-${competencia}${inaCnes !== "todos" ? `-${inaCnes}` : ""}`;
+  const baixarCsvInativos = () => { if (!inativos?.rows.length) return; baixarCsv(`${inaNomeArq()}.csv`, csvInativos(inativos.rows)); toast.success("CSV gerado."); };
+  const baixarPdfInativos = () => { if (!inativos?.rows.length) return; construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo }).save(`${inaNomeArq()}.pdf`); toast.success("PDF gerado."); };
 
   const nomeArq = () => `producao-${competencia}${cnes !== "todos" ? `-${cnes}` : ""}`;
   const baixarCsvProd = () => {
@@ -338,6 +364,86 @@ function RelatoriosPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+
+        {/* ============ Profissionais inativos / sem produção ============ */}
+        <section className={`${cardCls} mb-5`}>
+          <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground"><UserX className="size-4 text-primary" /> Profissionais sem produção</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Profissionais que atendem pacientes e que <strong>não lançaram produção</strong> em {mesLabel(competencia)} (mês selecionado acima).
+            A base considera quem <strong>já produziu BPA</strong> na janela anterior — porteiro, vigia, cozinheiro e afins não entram (nunca lançam produção).
+          </p>
+          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Unidade</span>
+              <select value={inaCnes} onChange={(e) => setInaCnes(e.target.value)} className={selCls}>
+                <option value="todos">Todas ({cnesOpcoes.length})</option>
+                {cnesOpcoes.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Janela anterior</span>
+              <select value={inaJanela} onChange={(e) => setInaJanela(Number(e.target.value))} className={selCls}>
+                <option value={3}>Últimos 3 meses</option>
+                <option value={6}>Últimos 6 meses</option>
+                <option value={12}>Últimos 12 meses</option>
+              </select>
+            </label>
+            <label className="col-span-2 flex items-end gap-2 pb-1 text-xs text-muted-foreground sm:col-span-2">
+              <input type="checkbox" checked={inaIncluirRoster} onChange={(e) => setInaIncluirRoster(e.target.checked)} className="size-4 rounded border-border" />
+              Incluir cadastrados no CNES que <strong>nunca</strong> lançaram produção (CBO não identificado).
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={verificarInativos} disabled={inaLoading || cnesOpcoes.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {inaLoading ? <Loader2 className="size-4 animate-spin" /> : <UserX className="size-4" />} Verificar
+            </button>
+            {inativos && (
+              <>
+                <span className="text-sm">
+                  <b className="text-amber-600">{inativos.rows.filter((r) => r.situacao === "sumiu").length}</b> sem produção no mês
+                  {inaIncluirRoster && <> · <b className="text-muted-foreground">{inativos.rows.filter((r) => r.situacao === "nunca").length}</b> nunca lançaram</>}
+                </span>
+                <button onClick={baixarCsvInativos} disabled={!inativos.rows.length} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><Download className="size-4" /> CSV</button>
+                <button onClick={baixarPdfInativos} disabled={!inativos.rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><FileText className="size-4" /> PDF</button>
+              </>
+            )}
+          </div>
+          {inativos && (
+            <div className="mt-4 max-h-[420px] overflow-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted/80 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left">Situação</th>
+                    <th className="px-2 py-1.5 text-left">Profissional</th>
+                    <th className="px-2 py-1.5 text-left">Unidade</th>
+                    <th className="px-2 py-1.5 text-left">Ocupação (CBO)</th>
+                    <th className="px-2 py-1.5 text-left">Últ. produção</th>
+                    <th className="px-2 py-1.5 text-right">Qtd período</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inativos.rows.length === 0 && <tr><td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">{inaLoading ? "Verificando…" : "Todos os profissionais assistenciais lançaram produção neste mês 🎉"}</td></tr>}
+                  {inativos.rows.map((r) => (
+                    <tr key={`${r.cns}~${r.cnes}`} className="border-t border-border align-top">
+                      <td className="px-2 py-1.5 whitespace-nowrap">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${r.situacao === "sumiu" ? "bg-amber-100 text-amber-700" : "bg-muted text-muted-foreground"}`}>{r.situacao === "sumiu" ? "SEM PRODUÇÃO" : "NUNCA"}</span>
+                      </td>
+                      <td className="px-2 py-1.5">{r.nome}<span className="block font-mono text-[10px] text-muted-foreground">{r.cns}</span></td>
+                      <td className="px-2 py-1.5">{r.nomeUnidade}</td>
+                      <td className="px-2 py-1.5 text-muted-foreground">{r.cbo ? (r.cboDesc ? `${r.cboDesc} (${r.cbo})` : r.cbo) : <span className="italic">Não identificado</span>}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{r.ultimoMes ? mesLabel(r.ultimoMes) : "—"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">{r.qtdPeriodo.toLocaleString("pt-BR")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {inativos && inativos.excluidosNaoClinico > 0 && (
+            <p className="mt-2 text-[11px] text-muted-foreground">{inativos.excluidosNaoClinico} profissional(is) com CBO não assistencial foram desconsiderados.</p>
           )}
         </section>
 
