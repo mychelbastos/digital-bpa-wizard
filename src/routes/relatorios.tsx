@@ -393,7 +393,7 @@ function RelatoriosPage() {
             </label>
             <label className="col-span-2 flex items-end gap-2 pb-1 text-xs text-muted-foreground sm:col-span-2">
               <input type="checkbox" checked={inaIncluirRoster} onChange={(e) => setInaIncluirRoster(e.target.checked)} className="size-4 rounded border-border" />
-              Incluir cadastrados no CNES que <strong>nunca</strong> lançaram produção (CBO não identificado).
+              Incluir cadastrados no CNES que <strong>nunca</strong> lançaram produção (já filtrados pelo CBO assistencial do vínculo).
             </label>
           </div>
           <div className="flex flex-wrap items-center gap-2">
