@@ -12,8 +12,9 @@ import {
   cnesEditaveisFpo, type FpoComparacaoRow, type FpoItemResolvido,
 } from "@/lib/fpo/fpo";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
-import { gerarRelatorioFpo } from "@/lib/fpo/relatorio-fpo";
+import { construirPdfFpo } from "@/lib/fpo/relatorio-fpo";
 import { carregarLogoOrg } from "@/lib/org-logo";
+import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 
 export const Route = createFileRoute("/fpo")({
   // Aceita ?cnes=&comp= para abrir já numa unidade/competência (vindo do card da dashboard).
@@ -35,6 +36,7 @@ const compLabel = (c: string) => `${c.slice(4, 6)}/${c.slice(0, 4)}`;
 
 function FpoPage() {
   const user = useAuthUser();
+  const { abrirPreview, previewNode } = usePreviewPdf();
   const search = Route.useSearch();
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
   const [editaveis, setEditaveis] = useState<Set<string>>(new Set());
@@ -144,7 +146,7 @@ function FpoPage() {
             <h1 className="flex items-center gap-2 text-base font-semibold"><FileSpreadsheet className="size-4" /> FPO — Ficha de Programação Orçamentária</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={async () => gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome, logo: await carregarLogoOrg() })}
+            <button onClick={async () => abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome, logo: await carregarLogoOrg() }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção")}
               disabled={rows.length === 0}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
               <FileDown className="size-4" /> Gerar relatório
@@ -424,6 +426,8 @@ function FpoPage() {
           onImportado={(comp) => { setImportOpen(false); if (comp) setCompetencia(comp); carregar(); }}
         />
       )}
+
+      {previewNode}
 
       {addOpen && (
         <AdicionarProcedimentoModal

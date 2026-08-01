@@ -13,13 +13,14 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { CNES_TFD, carregarRelatorioTfd, type TfdStatus, type TfdRelatorioRow } from "@/lib/tfd/tfd";
 import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
-import { gerarRelatorioFpo, gerarRelatorioFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
+import { construirPdfFpo, construirPdfFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
 import { construirPdfTfd, construirPdfTfdPorUnidade } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
 import { coletarErros, ROTULO_CATEGORIA, type CategoriaErro, type ErroItem } from "@/lib/relatorios/erros";
 import { csvErros, construirPdfErros } from "@/lib/relatorios/erros-pdf";
 import { carregarInativos, type InativosResultado } from "@/lib/relatorios/inativos";
 import { csvInativos, construirPdfInativos } from "@/lib/relatorios/inativos-pdf";
+import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { AlertTriangle } from "lucide-react";
 import {
   montarRelatorioTfd, csvTabela, AGRUPAMENTOS, STATUS_ROTULO, compLabelTfd, brlTfd, type AgrupamentoRel,
@@ -49,6 +50,7 @@ const ultimosMeses = (n: number): string[] => {
 
 function RelatoriosPage() {
   const user = useAuthUser();
+  const { abrirPreview, previewNode } = usePreviewPdf();
   const [competencia, setCompetencia] = useState(competenciaAtual());
   const [rows, setRows] = useState<ProducaoBpaRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,7 +165,7 @@ function RelatoriosPage() {
   const nErros = (erros ?? []).filter((e) => e.gravidade === "erro").length;
   const nAvisos = (erros ?? []).length - nErros;
   const baixarCsvErros = () => { if (!errosFiltrados.length) return; baixarCsv(`erros-${competencia}.csv`, csvErros(errosFiltrados)); toast.success("CSV gerado."); };
-  const baixarPdfErros = () => { if (!errosFiltrados.length) return; construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo }).save(`erros-${competencia}.pdf`); toast.success("PDF gerado."); };
+  const baixarPdfErros = () => { if (!errosFiltrados.length) return; abrirPreview(construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo }), `erros-${competencia}.pdf`, "Relatório de erros / crivo"); };
 
   // ---- Profissionais inativos / sem produção ----
   const nomesUnidade = useMemo(() => Object.fromEntries(cnesOpcoes.map((u) => [u.cnes, u.nome])), [cnesOpcoes]);
@@ -181,7 +183,7 @@ function RelatoriosPage() {
   };
   const inaNomeArq = () => `sem-producao-${competencia}${inaCnes !== "todos" ? `-${inaCnes}` : ""}`;
   const baixarCsvInativos = () => { if (!inativos?.rows.length) return; baixarCsv(`${inaNomeArq()}.csv`, csvInativos(inativos.rows)); toast.success("CSV gerado."); };
-  const baixarPdfInativos = () => { if (!inativos?.rows.length) return; construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo }).save(`${inaNomeArq()}.pdf`); toast.success("PDF gerado."); };
+  const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
 
   const nomeArq = () => `producao-${competencia}${cnes !== "todos" ? `-${cnes}` : ""}`;
   const baixarCsvProd = () => {
@@ -192,8 +194,7 @@ function RelatoriosPage() {
   const baixarPdfProd = () => {
     if (filtradas.length === 0) return;
     const pdf = construirPdfProducao({ rows: filtradas, mapas, competenciaMes: competencia, filtros: filtrosLabel(), logo, responsavel: user?.nome ?? null });
-    pdf.save(`${nomeArq()}.pdf`);
-    toast.success("PDF gerado.");
+    abrirPreview(pdf, `${nomeArq()}.pdf`, "Relatório de Produção");
   };
   const imprimirFichas = () => {
     const ids = [...new Set(filtradas.map((r) => `${r.tipo === "BPA-C" ? "C" : "I"}~${r.ficha_id}`))];
@@ -463,6 +464,7 @@ function RelatoriosPage() {
 
       {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
       {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} onClose={() => setTfdOpen(false)} />}
+      {previewNode}
     </div>
   );
 }
@@ -531,6 +533,7 @@ function agregarFpo(rows: FpoComparacaoRow[]): FpoComparacaoRow[] {
 
 // ---- FPO: unidade (ou todas) + competência → PDF (timbre) gerado aqui ----
 function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; responsavel: string | null; onClose: () => void }) {
+  const { abrirPreview, previewNode } = usePreviewPdf();
   const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
   const [competencia, setCompetencia] = useState(competenciaAtual());
   const [formato, setFormato] = useState<"porUnidade" | "consolidado">("porUnidade");
@@ -544,24 +547,23 @@ function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: 
         if (formato === "porUnidade") {
           const comRows = unidades.map((u, i) => ({ nome: u.nome, cnes: u.cnes, rows: todas[i] })).filter((x) => x.rows.length > 0);
           if (comRows.length === 0) { toast.error("Sem dados de FPO/produção nesta competência."); return; }
-          gerarRelatorioFpoPorUnidade({ unidades: comRows, competencia, logo, responsavel });
-          toast.success("PDF do FPO gerado."); onClose(); return;
+          abrirPreview(construirPdfFpoPorUnidade({ unidades: comRows, competencia, logo, responsavel }), `relatorio-fpo-todas-${competencia}.pdf`, "FPO × Produção — todas as unidades");
+          return;
         }
         const rows = agregarFpo(todas.flat());
         if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta competência."); return; }
-        gerarRelatorioFpo({ nomeUnidade: `Todas as unidades (${unidades.length})`, cnes: "TODAS", competencia, rows, responsavel, logo });
+        abrirPreview(construirPdfFpo({ nomeUnidade: `Todas as unidades (${unidades.length})`, cnes: "TODAS", competencia, rows, responsavel, logo }), `relatorio-fpo-todas-${competencia}.pdf`, "FPO × Produção — consolidado");
       } else {
         const rows = await carregarComparacaoFpo(cnes, competencia);
         if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta unidade/competência."); return; }
         const nomeUnidade = unidades.find((u) => u.cnes === cnes)?.nome ?? cnes;
-        gerarRelatorioFpo({ nomeUnidade, cnes, competencia, rows, responsavel, logo });
+        abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel, logo }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção");
       }
-      toast.success("PDF do FPO gerado.");
-      onClose();
     } finally { setGerando(false); }
   };
   return (
     <ModalRel titulo="Relatório FPO × Produção" onClose={onClose}>
+      {previewNode}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block sm:col-span-2">
           <span className={lblCls2}>Unidade</span>
@@ -598,6 +600,7 @@ function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: 
 
 // ---- TFD: unidade + faixa de competência + status + agrupamento → CSV/PDF aqui ----
 function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; onClose: () => void }) {
+  const { abrirPreview, previewNode } = usePreviewPdf();
   const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
   const [compDe, setCompDe] = useState(competenciaAtual());
   const [compAte, setCompAte] = useState(competenciaAtual());
@@ -643,8 +646,7 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
         totalGeralTfd: montado.totalTfd, totalGeralViagens: montado.totalViagens, totalGeralRS: brlTfd(montado.totalRS),
         resumoPorUnidade: secoes.map(({ u, m }) => [u.nome, u.cnes, String(m.totalTfd), String(m.totalViagens), brlTfd(m.totalRS)]),
       });
-      pdf.save(`tfd_todas_por-unidade_${compDe}-${compAte}.pdf`);
-      toast.success("PDF gerado."); return;
+      abrirPreview(pdf, `tfd_todas_por-unidade_${compDe}-${compAte}.pdf`, "Relatório de TFD — todas as unidades"); return;
     }
     const pdf = construirPdfTfd({
       logo, nomeUnidade, periodo, status: status ? STATUS_ROTULO[status] : "Todos",
@@ -652,12 +654,12 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
       colunas: montado.colunas, dados: montado.dados, totalTfd: montado.totalTfd,
       totalViagens: montado.totalViagens, totalRS: brlTfd(montado.totalRS),
     });
-    pdf.save(`tfd_${agrup}_${compDe}-${compAte}.pdf`);
-    toast.success("PDF gerado.");
+    abrirPreview(pdf, `tfd_${agrup}_${compDe}-${compAte}.pdf`, "Relatório de TFD");
   };
 
   return (
     <ModalRel titulo="Relatório de TFD" onClose={onClose}>
+      {previewNode}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block sm:col-span-2">
           <span className={lblCls2}>Unidade</span>
