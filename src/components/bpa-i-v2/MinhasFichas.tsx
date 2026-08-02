@@ -14,7 +14,7 @@ interface Props {
   /** Chamado quando a ficha renomeada é a que está aberta no formulário agora. */
   onRenomeada?: (id: string, titulo: string) => void;
   /** Filtra as fichas por tipo (omitido = todas). */
-  tipo?: "BPA-C" | "BPA-I";
+  tipo?: "BPA-C" | "BPA-I" | "RAAS";
 }
 
 // Lista de fichas salvas no Supabase (do usuário logado). Abrir / nova / excluir.
@@ -54,7 +54,8 @@ export function MinhasFichas({ open, fichaAtualId, onClose, onCarregar, onNova, 
 
   // Rótulo exibido: resolve tipo duplicado e CNS -> nome (fichas importadas). Cai no
   // título salvo para fichas renomeadas/digitadas.
-  const rotulo = (f: FichaResumo) => rotuloExibicao(f) || (tipo === "BPA-C" ? "Ficha BPA-C" : "Ficha BPA-I");
+  const rotulo = (f: FichaResumo) =>
+    rotuloExibicao(f) || (tipo ? `Ficha ${tipo}` : "Ficha");
 
   const iniciarRenomeio = (f: FichaResumo) => {
     setEditandoId(f.id);

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TfdRouteImport } from './routes/tfd'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
+import { Route as RaasRouteImport } from './routes/raas'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as MinhasFichasRouteImport } from './routes/minhas-fichas'
 import { Route as LaudoAihRouteImport } from './routes/laudo-aih'
@@ -35,6 +36,11 @@ const TfdRoute = TfdRouteImport.update({
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RaasRoute = RaasRouteImport.update({
+  id: '/raas',
+  path: '/raas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PerfilRoute = PerfilRouteImport.update({
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
+  '/raas': typeof RaasRoute
   '/relatorios': typeof RelatoriosRoute
   '/tfd': typeof TfdRoute
 }
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
+  '/raas': typeof RaasRoute
   '/relatorios': typeof RelatoriosRoute
   '/tfd': typeof TfdRoute
 }
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/laudo-aih': typeof LaudoAihRoute
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
+  '/raas': typeof RaasRoute
   '/relatorios': typeof RelatoriosRoute
   '/tfd': typeof TfdRoute
 }
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
+    | '/raas'
     | '/relatorios'
     | '/tfd'
   fileRoutesByTo: FileRoutesByTo
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
+    | '/raas'
     | '/relatorios'
     | '/tfd'
   id:
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/laudo-aih'
     | '/minhas-fichas'
     | '/perfil'
+    | '/raas'
     | '/relatorios'
     | '/tfd'
   fileRoutesById: FileRoutesById
@@ -247,6 +259,7 @@ export interface RootRouteChildren {
   LaudoAihRoute: typeof LaudoAihRoute
   MinhasFichasRoute: typeof MinhasFichasRoute
   PerfilRoute: typeof PerfilRoute
+  RaasRoute: typeof RaasRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TfdRoute: typeof TfdRoute
 }
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/raas': {
+      id: '/raas'
+      path: '/raas'
+      fullPath: '/raas'
+      preLoaderRoute: typeof RaasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/perfil': {
@@ -391,6 +411,7 @@ const rootRouteChildren: RootRouteChildren = {
   LaudoAihRoute: LaudoAihRoute,
   MinhasFichasRoute: MinhasFichasRoute,
   PerfilRoute: PerfilRoute,
+  RaasRoute: RaasRoute,
   RelatoriosRoute: RelatoriosRoute,
   TfdRoute: TfdRoute,
 }

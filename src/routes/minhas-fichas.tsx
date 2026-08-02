@@ -21,11 +21,13 @@ function labelComp(comp: string | null): string {
   return `${meses[Number(comp.slice(4, 6)) - 1]}/${comp.slice(0, 4)}`;
 }
 
-const rotaDoTipo = (tipo: FichaResumo["tipo"], id: string) => (tipo === "BPA-C" ? `/bpa-c-v3?ficha=${id}` : `/bpa-i-v3?ficha=${id}`);
-// Token de uma ficha para a página /imprimir ("I~<id>" ou "C~<id>").
+const rotaDoTipo = (tipo: FichaResumo["tipo"], id: string) =>
+  tipo === "BPA-C" ? `/bpa-c-v3?ficha=${id}` : tipo === "RAAS" ? `/raas?ficha=${id}` : `/bpa-i-v3?ficha=${id}`;
+// Token de uma ficha para a página /imprimir ("I~<id>" ou "C~<id>"). RAAS ainda não tem
+// impressão/overlay — não gera token (é filtrado antes de entrar na seleção de impressão).
 const tokenImpressao = (f: FichaResumo) => `${f.tipo === "BPA-C" ? "C" : "I"}~${f.id}`;
 
-type TipoFiltro = "todos" | "BPA-C" | "BPA-I";
+type TipoFiltro = "todos" | "BPA-C" | "BPA-I" | "RAAS";
 
 function MinhasFichasPage() {
   const [fichas, setFichas] = useState<FichaResumo[]>([]);
@@ -154,8 +156,10 @@ function MinhasFichasPage() {
 
   const rolar = (dir: -1 | 1) => stripRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
 
-  // Seleção p/ impressão em lote.
-  const idsPagina = itensPagina.map((f) => f.id);
+  // Seleção p/ impressão em lote. RAAS ainda não tem impressão (sem PDF/overlay) — fica
+  // fora da seleção para não gerar token quebrado no /imprimir.
+  const imprimivel = (f: FichaResumo) => f.tipo !== "RAAS";
+  const idsPagina = itensPagina.filter(imprimivel).map((f) => f.id);
   const todasPaginaSel = idsPagina.length > 0 && idsPagina.every((id) => sel.has(id));
   const toggleSel = (id: string) => setSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleTodasPagina = () => setSel((prev) => {
@@ -220,7 +224,7 @@ function MinhasFichasPage() {
             {/* Filtro por tipo de formulário + ação de imprimir várias (linha de cima). */}
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Tipo:</span>
-              {(["todos", "BPA-C", "BPA-I"] as TipoFiltro[]).map((t) => (
+              {(["todos", "BPA-C", "BPA-I", "RAAS"] as TipoFiltro[]).map((t) => (
                 <button key={t} onClick={() => setTipoSel(t)} className={pill(tipoSel === t)}>
                   {t === "todos" ? "Todos" : t}
                 </button>
@@ -308,15 +312,17 @@ function MinhasFichasPage() {
                         return (
                         <div
                           key={f.id}
-                          onClick={selMode ? () => toggleSel(f.id) : undefined}
-                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${selMode ? "cursor-pointer select-none" : ""} ${marcada && selMode ? "border-primary bg-primary/5 ring-1 ring-inset ring-primary/20" : "border-border bg-card"}`}
+                          onClick={selMode && imprimivel(f) ? () => toggleSel(f.id) : undefined}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${selMode && imprimivel(f) ? "cursor-pointer select-none" : ""} ${selMode && !imprimivel(f) ? "opacity-50" : ""} ${marcada && selMode ? "border-primary bg-primary/5 ring-1 ring-inset ring-primary/20" : "border-border bg-card"}`}
                         >
                           {selMode && (
-                            marcada
-                              ? <CheckSquare className="size-4 shrink-0 text-primary" />
-                              : <Square className="size-4 shrink-0 text-muted-foreground" />
+                            !imprimivel(f)
+                              ? <Square className="size-4 shrink-0 text-muted-foreground/40" />
+                              : marcada
+                                ? <CheckSquare className="size-4 shrink-0 text-primary" />
+                                : <Square className="size-4 shrink-0 text-muted-foreground" />
                           )}
-                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${f.tipo === "BPA-C" ? "bg-teal-100 text-teal-700" : "bg-sky-100 text-sky-700"}`}>{f.tipo}</span>
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${f.tipo === "BPA-C" ? "bg-teal-100 text-teal-700" : f.tipo === "RAAS" ? "bg-violet-100 text-violet-700" : "bg-sky-100 text-sky-700"}`}>{f.tipo}</span>
                           {f.competencia && f.competencia !== mesProd(f) && (
                             <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium capitalize text-amber-800" title="Atendimento retroativo — apresentado neste mês de produção">
                               atend. {labelComp(f.competencia)}
@@ -341,14 +347,16 @@ function MinhasFichasPage() {
                                 <div className="text-xs text-muted-foreground">Atualizada {new Date(f.updated_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</div>
                               </a>
                               <a href={rotaDoTipo(f.tipo, f.id)} className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"><FileText className="mr-1 inline size-3.5" />Abrir</a>
-                              <a
-                                href={`/imprimir?itens=${tokenImpressao(f)}`}
-                                target="_blank"
-                                rel="noopener"
-                                aria-label="Imprimir (abre a impressão do navegador)"
-                                title="Imprimir no navegador (sem baixar)"
-                                className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                              ><Printer className="mr-1 inline size-3.5" />Imprimir</a>
+                              {imprimivel(f) && (
+                                <a
+                                  href={`/imprimir?itens=${tokenImpressao(f)}`}
+                                  target="_blank"
+                                  rel="noopener"
+                                  aria-label="Imprimir (abre a impressão do navegador)"
+                                  title="Imprimir no navegador (sem baixar)"
+                                  className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                                ><Printer className="mr-1 inline size-3.5" />Imprimir</a>
+                              )}
                               <button aria-label="Renomear" onClick={() => { setEditandoId(f.id); setNovoNome(f.titulo || ""); }} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-4" /></button>
                               {!f.congelada && (
                                 <button aria-label="Excluir ficha" title="Excluir ficha (não exportada)" onClick={() => setExcluirAlvo(f)} className="shrink-0 rounded-md p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="size-4" /></button>

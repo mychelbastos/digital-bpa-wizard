@@ -9,7 +9,7 @@ export interface FichaResumo {
   competencia: string | null;
   mes_producao: string | null;
   updated_at: string;
-  tipo: "BPA-I" | "BPA-C";
+  tipo: "BPA-I" | "BPA-C" | "RAAS";
   // Campos p/ o rótulo padronizado da lista (CNES · nome/CNS · comp · folha). Vêm de
   // subcampos do jsonb `dados`; profNome/profCns só existem no BPA-I.
   origem?: string | null;
@@ -26,7 +26,7 @@ export interface FichaResumo {
 // as linhas. `mes_producao` = mês em que foi criada (agrupamento da produção).
 export interface FichaCompleta {
   id: string;
-  tipo: "BPA-I" | "BPA-C";
+  tipo: "BPA-I" | "BPA-C" | "RAAS";
   mes_producao: string | null;
   dados: unknown;
 }
@@ -38,7 +38,7 @@ function mesProducaoAtual(): string {
 }
 
 export interface FichaMetadados {
-  tipo?: "BPA-C" | "BPA-I";
+  tipo?: "BPA-C" | "BPA-I" | "RAAS";
   cnes?: string | null;
   profissionalCns?: string | null;
   profissionalNome?: string | null;
@@ -103,7 +103,7 @@ export async function renomearFicha(id: string, titulo: string): Promise<boolean
 
 // Lista as fichas do usuário. `tipo` opcional filtra por BPA-C/BPA-I (omitido = todas —
 // mantém o comportamento atual de quem não passa o filtro).
-export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResumo[]> {
+export async function listarFichas(tipo?: "BPA-C" | "BPA-I" | "RAAS"): Promise<FichaResumo[]> {
   if (!supabase) return [];
   try {
     // Pagina TODAS as fichas: antes havia um .limit(200) por updated_at desc, então uma
@@ -133,7 +133,7 @@ export async function listarFichas(tipo?: "BPA-C" | "BPA-I"): Promise<FichaResum
         competencia: (r.competencia as string) ?? null,
         mes_producao: (r.mes_producao as string) ?? null,
         updated_at: r.updated_at as string,
-        tipo: r.tipo as "BPA-I" | "BPA-C",
+        tipo: r.tipo as "BPA-I" | "BPA-C" | "RAAS",
         origem: (r.origem as string) ?? null,
         cnes: juntar(r.cnesArr),
         // `dados->profNome` (seta `->`, igual a cnes/profCns) — o alias com `->>` retornava
