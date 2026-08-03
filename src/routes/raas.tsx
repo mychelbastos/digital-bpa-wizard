@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { UserRound, X, Plus, Trash2, Search, FolderOpen } from "lucide-react";
+import { UserRound, X, Plus, Trash2, Search, FolderOpen, FileDown } from "lucide-react";
 import { PacientePicker } from "@/components/pacientes/PacientePicker";
 import type { Paciente } from "@/lib/pacientes";
 import { orgDoCnes } from "@/lib/tfd/tfd";
@@ -426,6 +426,12 @@ function RaasPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-violet-100 px-2 py-1 text-xs font-bold tracking-wide text-violet-700">RAAS</span>
+            {/* Abre a folha oficial (overlay) numa nova aba: preenchida com o que está na tela
+                (rascunho local, sempre atualizado) para conferir/calibrar posições e gerar o PDF. */}
+            <a href="/raas-folha" target="_blank" rel="noopener"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+              <FileDown className="size-3.5" /> Folha oficial (PDF)
+            </a>
             <button onClick={() => setFichasOpen(true)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
               <FolderOpen className="size-3.5" /> Minhas fichas
             </button>

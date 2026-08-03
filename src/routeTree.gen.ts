@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TfdRouteImport } from './routes/tfd'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
+import { Route as RaasFolhaRouteImport } from './routes/raas-folha'
 import { Route as RaasRouteImport } from './routes/raas'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as MinhasFichasRouteImport } from './routes/minhas-fichas'
@@ -36,6 +37,11 @@ const TfdRoute = TfdRouteImport.update({
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RaasFolhaRoute = RaasFolhaRouteImport.update({
+  id: '/raas-folha',
+  path: '/raas-folha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RaasRoute = RaasRouteImport.update({
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
   '/raas': typeof RaasRoute
+  '/raas-folha': typeof RaasFolhaRoute
   '/relatorios': typeof RelatoriosRoute
   '/tfd': typeof TfdRoute
 }
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
   '/raas': typeof RaasRoute
+  '/raas-folha': typeof RaasFolhaRoute
   '/relatorios': typeof RelatoriosRoute
   '/tfd': typeof TfdRoute
 }
@@ -177,6 +185,7 @@ export interface FileRoutesById {
   '/minhas-fichas': typeof MinhasFichasRoute
   '/perfil': typeof PerfilRoute
   '/raas': typeof RaasRoute
+  '/raas-folha': typeof RaasFolhaRoute
   '/relatorios': typeof RelatoriosRoute
   '/tfd': typeof TfdRoute
 }
@@ -199,6 +208,7 @@ export interface FileRouteTypes {
     | '/minhas-fichas'
     | '/perfil'
     | '/raas'
+    | '/raas-folha'
     | '/relatorios'
     | '/tfd'
   fileRoutesByTo: FileRoutesByTo
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/minhas-fichas'
     | '/perfil'
     | '/raas'
+    | '/raas-folha'
     | '/relatorios'
     | '/tfd'
   id:
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/minhas-fichas'
     | '/perfil'
     | '/raas'
+    | '/raas-folha'
     | '/relatorios'
     | '/tfd'
   fileRoutesById: FileRoutesById
@@ -260,6 +272,7 @@ export interface RootRouteChildren {
   MinhasFichasRoute: typeof MinhasFichasRoute
   PerfilRoute: typeof PerfilRoute
   RaasRoute: typeof RaasRoute
+  RaasFolhaRoute: typeof RaasFolhaRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TfdRoute: typeof TfdRoute
 }
@@ -278,6 +291,13 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/raas-folha': {
+      id: '/raas-folha'
+      path: '/raas-folha'
+      fullPath: '/raas-folha'
+      preLoaderRoute: typeof RaasFolhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/raas': {
@@ -412,6 +432,7 @@ const rootRouteChildren: RootRouteChildren = {
   MinhasFichasRoute: MinhasFichasRoute,
   PerfilRoute: PerfilRoute,
   RaasRoute: RaasRoute,
+  RaasFolhaRoute: RaasFolhaRoute,
   RelatoriosRoute: RelatoriosRoute,
   TfdRoute: TfdRoute,
 }

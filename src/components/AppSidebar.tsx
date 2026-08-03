@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   Home, FileText, FolderOpen, CalendarCheck, FileSpreadsheet, Database, UserCog, LogOut,
-  ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X,
+  ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { souAdmin } from "@/lib/permissoes";
@@ -28,7 +28,8 @@ const BG_LOGO = "linear-gradient(135deg, oklch(0.72 0.16 235), oklch(0.6 0.19 28
 const linkBase = "flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13.5px] font-medium transition-colors";
 
 // Conteúdo da navegação (reusado no desktop e no drawer mobile).
-function NavConteudo({ onNavegar }: { onNavegar?: () => void }) {
+// `onColapsar` (só no desktop) mostra o botão de ocultar a barra.
+function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onColapsar?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useAuthUser();
   const [formOpen, setFormOpen] = useState(true);
@@ -53,6 +54,17 @@ function NavConteudo({ onNavegar }: { onNavegar?: () => void }) {
       <div className="flex items-center gap-2.5 px-2 pb-6 pt-1">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold text-white" style={{ background: BG_LOGO }}>SP</span>
         <span className="text-[15px] font-bold tracking-tight text-white">SPA Digital</span>
+        {onColapsar && (
+          <button
+            type="button"
+            onClick={onColapsar}
+            title="Ocultar menu"
+            aria-label="Ocultar menu"
+            className="ml-auto rounded-lg p-1.5 text-slate-300/80 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <PanelLeftClose className="size-4" />
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto">
@@ -108,18 +120,46 @@ function NavConteudo({ onNavegar }: { onNavegar?: () => void }) {
   );
 }
 
+const SIDEBAR_COLAPSADA_KEY = "sidebar-colapsada";
+
 export function AppSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Recolher a barra no DESKTOP (preferência lembrada). Começa `false` para não divergir na
+  // hidratação (SSR); depois lê a preferência salva.
+  const [colapsada, setColapsada] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // Fecha o drawer ao trocar de rota (segurança extra além do onNavegar).
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => {
+    try { setColapsada(localStorage.getItem(SIDEBAR_COLAPSADA_KEY) === "1"); } catch { /* noop */ }
+  }, []);
+  const alternarColapso = (v: boolean) => {
+    setColapsada(v);
+    try { localStorage.setItem(SIDEBAR_COLAPSADA_KEY, v ? "1" : "0"); } catch { /* noop */ }
+  };
 
   return (
     <>
       {/* Desktop */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col px-4 py-5 md:flex" style={{ background: BG_SIDEBAR }}>
-        <NavConteudo />
+      <aside className={`sticky top-0 hidden h-screen w-60 shrink-0 flex-col px-4 py-5 ${colapsada ? "md:hidden" : "md:flex"}`} style={{ background: BG_SIDEBAR }}>
+        <NavConteudo onColapsar={() => alternarColapso(true)} />
       </aside>
+
+      {/* Desktop: botão flutuante p/ reabrir a barra quando recolhida. Fica no canto
+          INFERIOR esquerdo (a sarjeta esquerda é sempre livre — o conteúdo é centralizado),
+          para não cobrir o "← Início" dos cabeçalhos fixos das páginas. */}
+      {colapsada && (
+        <button
+          type="button"
+          onClick={() => alternarColapso(false)}
+          title="Mostrar menu"
+          aria-label="Mostrar menu"
+          className="fixed bottom-4 left-4 z-40 hidden items-center justify-center rounded-full border border-white/10 p-2.5 text-white shadow-lg transition-colors hover:brightness-110 md:flex"
+          style={{ background: BG_SIDEBAR }}
+        >
+          <PanelLeftOpen className="size-5" />
+        </button>
+      )}
 
       {/* Mobile: barra superior fixa (o conteúdo das páginas ganha pt-[52px] no layout). */}
       <div className="fixed inset-x-0 top-0 z-40 flex h-[52px] items-center gap-3 px-4 text-white shadow-md md:hidden" style={{ background: BG_SIDEBAR }}>
