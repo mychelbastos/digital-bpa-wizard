@@ -37,7 +37,7 @@ function ImportarPage() {
   const [processando, setProcessando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [feito, setFeito] = useState<{ fichas: number; bpaC: number; bpaI: number } | null>(null);
-  const [feitoRaas, setFeitoRaas] = useState<{ fichas: number; acoes: number } | null>(null);
+  const [feitoRaas, setFeitoRaas] = useState<{ fichas: number; acoes: number; bloqueadas: { cnes: string; fichas: number; motivo: string }[] } | null>(null);
 
   const totalFichas = parsed ? parsed.fichasC.length + parsed.fichasI.length : 0;
   const totalQtd = parsed ? parsed.totais.quantidadeBpaC + parsed.totais.quantidadeBpaI : 0;
@@ -108,8 +108,14 @@ function ImportarPage() {
     const res = await gravarRaas(parsedRaas.fichas, mesProducao);
     setSalvando(false);
     if (res.erro) { toast.error(`Falha ao gravar: ${res.erro}`); return; }
-    toast.success(`${res.fichas} ficha(s) RAAS importada(s) em ${compLabel(mesProducao)}.`);
-    setFeitoRaas({ fichas: res.fichas, acoes: res.acoes });
+    if (res.fichas === 0) {
+      const b = res.bloqueadas[0];
+      toast.error(b ? `Nada gravado — ${b.motivo}.` : "Nada foi gravado.");
+      return;
+    }
+    const nb = res.bloqueadas.reduce((s, x) => s + x.fichas, 0);
+    toast.success(`${res.fichas} ficha(s) RAAS importada(s) em ${compLabel(mesProducao)}${nb ? ` · ${nb} bloqueada(s)` : ""}.`);
+    setFeitoRaas({ fichas: res.fichas, acoes: res.acoes, bloqueadas: res.bloqueadas });
     setParsedRaas(null);
     setFileName("");
   };
@@ -140,9 +146,18 @@ function ImportarPage() {
         )}
 
         {feitoRaas && (
-          <div className="flex items-center gap-3 rounded-2xl border border-violet-300 bg-violet-50 p-4 text-sm text-violet-800">
-            <CheckCircle2 className="size-5 shrink-0" />
-            <span>Importado: <strong>{feitoRaas.fichas}</strong> ficha(s) RAAS · {int(feitoRaas.acoes)} ação(ões). <Link to="/minhas-fichas" className="font-semibold underline">Ver em Minhas fichas</Link></span>
+          <div className="space-y-2 rounded-2xl border border-violet-300 bg-violet-50 p-4 text-sm text-violet-800">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="size-5 shrink-0" />
+              <span>Importado: <strong>{feitoRaas.fichas}</strong> ficha(s) RAAS · {int(feitoRaas.acoes)} ação(ões). <Link to="/minhas-fichas" className="font-semibold underline">Ver em Minhas fichas</Link></span>
+            </div>
+            {feitoRaas.bloqueadas.length > 0 && (
+              <ul className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                {feitoRaas.bloqueadas.map((b) => (
+                  <li key={b.cnes} className="flex gap-1.5"><AlertTriangle className="mt-px size-3 shrink-0" /> {b.fichas} ficha(s) do CNES <span className="font-mono">{b.cnes}</span> não importada(s): {b.motivo}.</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
