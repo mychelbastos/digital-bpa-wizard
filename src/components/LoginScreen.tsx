@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { Ripple, AnimatedForm, TechOrbitDisplay } from "@/components/blocks/modern-animated-sign-in";
 import { signIn } from "@/lib/bpa-i-v2/auth";
+import spaLogo from "@/assets/spa-logo-full.png";
 
 // Ícones que orbitam no lado esquerdo (do componente original). Convertidos p/ <img>.
 type OrbitIcon = {
@@ -78,11 +79,12 @@ export function LoginScreen() {
       {/* Lado esquerdo: ripple + ícones orbitando */}
       <span className="relative flex w-1/2 flex-col justify-center overflow-hidden max-lg:hidden">
         <Ripple mainCircleSize={100} />
-        <TechOrbitDisplay iconsArray={iconsArray} text="SPA Digital" subtitle="(Sistema de Produção Ambulatorial)" />
+        <TechOrbitDisplay iconsArray={iconsArray} text="SPA Digital" logo={spaLogo} />
       </span>
 
       {/* Lado direito: formulário */}
       <span className="flex h-[100dvh] w-1/2 flex-col items-center justify-center max-lg:w-full max-lg:px-[10%]">
+        <img src={spaLogo} alt="SPA Digital" className="mb-2 w-52 max-w-[70%] lg:hidden" />
         <AnimatedForm {...formFields} errorField={erro} onSubmit={handleSubmit} />
         <p className="mt-6 max-w-sm px-6 text-center text-xs text-muted-foreground">
           Contas são criadas pela administração. Sem acesso? Fale com o gestor da sua unidade.

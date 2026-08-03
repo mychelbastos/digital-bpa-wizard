@@ -285,19 +285,29 @@ type TechnologyOrbitDisplayProps = {
   iconsArray: IconConfig[];
   text?: string;
   subtitle?: string;
+  logo?: string;
 };
 
 const TechOrbitDisplay = memo(function TechOrbitDisplay({
   iconsArray,
   text = 'Animated Login',
   subtitle,
+  logo,
 }: TechnologyOrbitDisplayProps) {
   return (
     <section className='relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-lg'>
-      <span className='pointer-events-none whitespace-pre-wrap bg-gradient-to-b from-black to-gray-300/80 bg-clip-text text-center text-7xl font-semibold leading-none text-transparent dark:from-white dark:to-slate-900/10'>
-        {text}
-      </span>
-      {subtitle && (
+      {logo ? (
+        <img
+          src={logo}
+          alt={text}
+          className='pointer-events-none relative z-10 w-[62%] max-w-sm drop-shadow-sm'
+        />
+      ) : (
+        <span className='pointer-events-none whitespace-pre-wrap bg-gradient-to-b from-black to-gray-300/80 bg-clip-text text-center text-7xl font-semibold leading-none text-transparent dark:from-white dark:to-slate-900/10'>
+          {text}
+        </span>
+      )}
+      {!logo && subtitle && (
         <span className='pointer-events-none mt-3 text-center text-sm font-medium text-neutral-500 dark:text-neutral-400'>
           {subtitle}
         </span>

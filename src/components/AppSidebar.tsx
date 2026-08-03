@@ -5,6 +5,7 @@ import {
   ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
+import spaEmblem from "@/assets/spa-emblem.png";
 import { souAdmin } from "@/lib/permissoes";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { CNES_TFD } from "@/lib/tfd/tfd";
@@ -52,7 +53,9 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
   return (
     <>
       <div className="flex items-center gap-2.5 px-2 pb-6 pt-1">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold text-white" style={{ background: BG_LOGO }}>SP</span>
+        <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-white p-0.5 shadow-sm">
+          <img src={spaEmblem} alt="SPA Digital" className="size-full object-contain" />
+        </span>
         <span className="text-[15px] font-bold tracking-tight text-white">SPA Digital</span>
         {onColapsar && (
           <button
@@ -164,7 +167,7 @@ export function AppSidebar() {
       {/* Mobile: barra superior fixa (o conteúdo das páginas ganha pt-[52px] no layout). */}
       <div className="fixed inset-x-0 top-0 z-40 flex h-[52px] items-center gap-3 px-4 text-white shadow-md md:hidden" style={{ background: BG_SIDEBAR }}>
         <button type="button" onClick={() => setMobileOpen(true)} aria-label="Abrir menu" className="-ml-1 p-1"><Menu className="size-6" /></button>
-        <span className="flex size-7 items-center justify-center rounded-lg text-[11px] font-bold" style={{ background: BG_LOGO }}>SP</span>
+        <span className="flex size-7 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5"><img src={spaEmblem} alt="SPA Digital" className="size-full object-contain" /></span>
         <span className="text-[15px] font-bold">SPA Digital</span>
       </div>
 

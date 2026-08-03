@@ -14,6 +14,7 @@ import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { carregarResumoFpo, type FpoResumoUnidade } from "@/lib/fpo/fpo";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { carregarLogoOrg } from "@/lib/org-logo";
+import spaEmblem from "@/assets/spa-emblem.png";
 
 const CARATER_NOME = new Map(CARATERES.map((c) => [c.code, c.label]));
 const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? null : null);
@@ -224,9 +225,12 @@ function Home() {
     <div className="min-h-screen bg-muted/40">
       <header className="sticky top-[52px] z-30 border-b border-border bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">SIA / SUS</p>
-            <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard SPA Digital</h1>
+          <div className="flex items-center gap-3">
+            <img src={spaEmblem} alt="SPA Digital" className="size-10 shrink-0 object-contain" />
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">SIA / SUS</p>
+              <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard SPA Digital</h1>
+            </div>
           </div>
           <button onClick={carregar} disabled={loading} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_-8px_oklch(0.6_0.18_260/0.55)] transition-opacity hover:opacity-90 disabled:opacity-60"
             style={{ background: "linear-gradient(135deg, oklch(0.62 0.17 250), oklch(0.55 0.19 278))" }}>
