@@ -1,38 +1,7 @@
-import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import { Ripple, AnimatedForm, TechOrbitDisplay } from "@/components/blocks/modern-animated-sign-in";
+import { useState, type ChangeEvent, type FormEvent } from "react";
+import { Ripple, AnimatedForm } from "@/components/blocks/modern-animated-sign-in";
 import { signIn } from "@/lib/bpa-i-v2/auth";
 import spaLogo from "@/assets/spa-logo-full.png";
-
-// Ícones que orbitam no lado esquerdo (do componente original). Convertidos p/ <img>.
-type OrbitIcon = {
-  component: () => ReactNode;
-  className: string;
-  duration?: number;
-  delay?: number;
-  radius?: number;
-  path?: boolean;
-  reverse?: boolean;
-};
-
-const dev = (nome: string, arquivo: string) => () => (
-  <img
-    width={100}
-    height={100}
-    src={`https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/${arquivo}`}
-    alt={nome}
-  />
-);
-
-const iconsArray: OrbitIcon[] = [
-  { component: dev("HTML5", "html5/html5-original.svg"), className: "size-[30px] border-none bg-transparent", duration: 20, delay: 20, radius: 100, path: false, reverse: false },
-  { component: dev("CSS3", "css3/css3-original.svg"), className: "size-[30px] border-none bg-transparent", duration: 20, delay: 10, radius: 100, path: false, reverse: false },
-  { component: dev("TypeScript", "typescript/typescript-original.svg"), className: "size-[50px] border-none bg-transparent", radius: 210, duration: 20, path: false, reverse: false },
-  { component: dev("JavaScript", "javascript/javascript-original.svg"), className: "size-[50px] border-none bg-transparent", radius: 210, duration: 20, delay: 20, path: false, reverse: false },
-  { component: dev("TailwindCSS", "tailwindcss/tailwindcss-original.svg"), className: "size-[30px] border-none bg-transparent", duration: 20, delay: 20, radius: 150, path: false, reverse: true },
-  { component: dev("React", "react/react-original.svg"), className: "size-[50px] border-none bg-transparent", radius: 270, duration: 20, path: false, reverse: true },
-  { component: dev("Supabase", "supabase/supabase-original.svg"), className: "size-[50px] border-none bg-transparent", radius: 270, duration: 20, delay: 60, path: false, reverse: true },
-  { component: dev("Git", "git/git-original.svg"), className: "size-[50px] border-none bg-transparent", radius: 320, duration: 20, delay: 20, path: false, reverse: false },
-];
 
 // Tela de login (gate do app). Religada ao Supabase (e-mail+senha, sem signup).
 // Ao logar com sucesso, o onAuthStateChange atualiza o guard, que troca p/ o conteúdo.
@@ -76,10 +45,10 @@ export function LoginScreen() {
 
   return (
     <section className="flex min-h-[100dvh] max-lg:justify-center">
-      {/* Lado esquerdo: ripple + ícones orbitando */}
-      <span className="relative flex w-1/2 flex-col justify-center overflow-hidden max-lg:hidden">
-        <Ripple mainCircleSize={100} />
-        <TechOrbitDisplay iconsArray={iconsArray} text="SPA Digital" logo={spaLogo} />
+      {/* Lado esquerdo: anéis (ripple) + logo centralizada */}
+      <span className="relative flex w-1/2 flex-col items-center justify-center overflow-hidden max-lg:hidden">
+        <Ripple mainCircleSize={120} />
+        <img src={spaLogo} alt="SPA Digital" className="relative z-10 w-[26rem] max-w-[70%] drop-shadow-sm" />
       </span>
 
       {/* Lado direito: formulário */}
