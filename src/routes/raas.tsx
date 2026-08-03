@@ -66,10 +66,16 @@ function Secao({ titulo, children, cols = 2 }: { titulo: string; children: React
   );
 }
 
-function Campo({ label, children, span }: { label: string; children: React.ReactNode; span?: boolean }) {
+function Campo({ label, children, span, aas }: { label: string; children: React.ReactNode; span?: boolean; aas?: boolean }) {
   return (
     <label className={`flex flex-col gap-1 ${span ? "md:col-span-2" : ""}`}>
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+        {aas && (
+          <span title="Campo só do arquivo .AAS — não aparece na folha impressa"
+            className="rounded bg-violet-100 px-1 py-px text-[9px] font-bold leading-none tracking-wide text-violet-700">.AAS</span>
+        )}
+      </span>
       {children}
     </label>
   );
@@ -465,31 +471,28 @@ function RaasPage() {
       </header>
 
       <main className="mx-auto mt-4 max-w-[1100px] space-y-4 px-4">
-        {/* Estabelecimento / competência */}
-        <Secao titulo="Estabelecimento e competência" cols={3}>
-          <Campo label="CNES (7 dígitos)">
-            <Txt inputMode="numeric" maxLength={7} value={state.cnes}
-              onChange={(e) => set("cnes", e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder="0000000" />
-          </Campo>
-          <Campo label="Estabelecimento" span>
+        {/* Legenda do selo .AAS */}
+        <p className="text-xs text-muted-foreground">
+          Campos marcados com{" "}
+          <span className="rounded bg-violet-100 px-1 py-px text-[9px] font-bold text-violet-700">.AAS</span>{" "}
+          existem só para o arquivo magnético (.AAS) e <strong>não aparecem na folha impressa</strong>.
+        </p>
+
+        {/* 1. Identificação do estabelecimento de saúde */}
+        <Secao titulo="Identificação do estabelecimento de saúde" cols={3}>
+          <Campo label="Nome do estabelecimento de saúde" span>
             <EstabInput nome={state.estabelecimentoNome}
               onChangeNome={(v) => set("estabelecimentoNome", v)}
               onPick={(e) => setState((p) => ({ ...p, estabelecimentoNome: e.nome, cnes: e.cnes }))} />
           </Campo>
-          <Campo label="Competência">
-            <Txt type="month" value={compParaInput(state.competencia)}
-              onChange={(e) => set("competencia", inputParaComp(e.target.value))} />
-          </Campo>
-          <Campo label="Início da validade">
-            <Txt type="date" value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
-          </Campo>
-          <Campo label="Fim da validade (opcional)">
-            <Txt type="date" value={state.validadeFim} onChange={(e) => set("validadeFim", e.target.value)} />
+          <Campo label="CNES (7 dígitos)">
+            <Txt inputMode="numeric" maxLength={7} value={state.cnes}
+              onChange={(e) => set("cnes", e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder="0000000" />
           </Campo>
         </Secao>
 
-        {/* Paciente */}
-        <Secao titulo="Paciente" cols={3}>
+        {/* 2. Identificação do usuário do SUS (identificação + endereço) */}
+        <Secao titulo="Identificação do usuário do SUS" cols={3}>
           <div className="md:col-span-3">
             <button type="button" disabled={!orgId} onClick={() => setPickerOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
@@ -498,48 +501,56 @@ function RaasPage() {
             {!orgId && <span className="ml-2 text-xs text-muted-foreground">Preencha o CNES (7 dígitos) para habilitar a busca de pacientes.</span>}
             {state.pacienteId && <span className="ml-2 text-xs text-emerald-700">Paciente vinculado ao cadastro — os campos abaixo vieram do cadastro e podem ser ajustados.</span>}
           </div>
-          <Campo label="CNS do paciente">
-            <Txt inputMode="numeric" maxLength={15} value={state.cnsPaciente}
-              onChange={(e) => set("cnsPaciente", e.target.value.replace(/\D/g, "").slice(0, 15))} />
-          </Campo>
-          <Campo label="CPF do paciente">
-            <Txt inputMode="numeric" maxLength={11} value={state.cpfPaciente}
-              onChange={(e) => set("cpfPaciente", e.target.value.replace(/\D/g, "").slice(0, 11))} />
-          </Campo>
-          <Campo label="Prontuário (CAPS)">
+          <Campo label="Nº do prontuário (CAPS)">
             <Txt value={state.prontuario} onChange={(e) => set("prontuario", e.target.value.replace(/\D/g, ""))} />
           </Campo>
           <Campo label="Nome do paciente" span>
             <Txt uppercase value={state.nomePaciente} onChange={(e) => set("nomePaciente", e.target.value)} />
           </Campo>
-          <Campo label="Data de nascimento">
-            <Txt type="date" value={state.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
+          <Campo label="Cartão Nacional de Saúde (CNS)">
+            <Txt inputMode="numeric" maxLength={15} value={state.cnsPaciente}
+              onChange={(e) => set("cnsPaciente", e.target.value.replace(/\D/g, "").slice(0, 15))} />
           </Campo>
-          <Campo label="Nome da mãe" span>
-            <Txt uppercase value={state.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} />
+          <Campo label="CPF do paciente" aas>
+            <Txt inputMode="numeric" maxLength={11} value={state.cpfPaciente}
+              onChange={(e) => set("cpfPaciente", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
           <Campo label="Sexo">
             <Sel value={state.sexo} onChange={(v) => set("sexo", v)} options={[{ code: "M", label: "Masculino" }, { code: "F", label: "Feminino" }]} />
           </Campo>
-          <Campo label="Raça/Cor">
-            <Sel value={state.raca} onChange={(v) => set("raca", v)} options={RACAS} />
-          </Campo>
-          <Campo label="Etnia (se indígena)">
-            <Txt inputMode="numeric" maxLength={4} value={state.etnia}
-              onChange={(e) => set("etnia", e.target.value.replace(/\D/g, "").slice(0, 4))} disabled={state.raca !== "05"} />
+          <Campo label="Data de nascimento">
+            <Txt type="date" value={state.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
           </Campo>
           <Campo label="Nacionalidade (cód. 3 díg.)">
             <Txt inputMode="numeric" maxLength={3} value={state.nacionalidade}
               onChange={(e) => set("nacionalidade", e.target.value.replace(/\D/g, "").slice(0, 3))} />
           </Campo>
+          <Campo label="Raça/Cor">
+            <Sel value={state.raca} onChange={(v) => set("raca", v)} options={RACAS} />
+          </Campo>
+          <Campo label="Etnia indígena (se raça = indígena)">
+            <Txt inputMode="numeric" maxLength={4} value={state.etnia}
+              onChange={(e) => set("etnia", e.target.value.replace(/\D/g, "").slice(0, 4))} disabled={state.raca !== "05"} />
+          </Campo>
+          <Campo label="Nome da mãe" span>
+            <Txt uppercase value={state.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} />
+          </Campo>
           <Campo label="Nome do responsável" span>
             <Txt uppercase value={state.nomeResponsavel} onChange={(e) => set("nomeResponsavel", e.target.value)} />
           </Campo>
-        </Secao>
-
-        {/* Endereço */}
-        <Secao titulo="Endereço do paciente" cols={3}>
-          <Campo label="Logradouro" span>
+          <Campo label="Cód. IBGE município (7 díg.)">
+            <Txt inputMode="numeric" maxLength={7} value={state.municipioIbge}
+              onChange={(e) => setState((p) => { const m = e.target.value.replace(/\D/g, "").slice(0, 7); return { ...p, municipioIbge: m, coduf: m ? ufDeMunicipio(m) : p.coduf }; })} />
+          </Campo>
+          <Campo label="UF (IBGE 2 díg.)">
+            <Txt inputMode="numeric" maxLength={2} value={state.coduf}
+              onChange={(e) => set("coduf", e.target.value.replace(/\D/g, "").slice(0, 2))} />
+          </Campo>
+          <Campo label="CEP de residência">
+            <Txt inputMode="numeric" maxLength={8} value={state.cep}
+              onChange={(e) => set("cep", e.target.value.replace(/\D/g, "").slice(0, 8))} />
+          </Campo>
+          <Campo label="Endereço (logradouro)" span>
             <Txt uppercase value={state.logradouro} onChange={(e) => set("logradouro", e.target.value)} />
           </Campo>
           <Campo label="Número">
@@ -548,90 +559,38 @@ function RaasPage() {
           <Campo label="Complemento">
             <Txt uppercase value={state.complemento} onChange={(e) => set("complemento", e.target.value.slice(0, 10))} />
           </Campo>
-          <Campo label="Bairro">
+          <Campo label="Bairro" aas>
             <Txt uppercase value={state.bairro} onChange={(e) => set("bairro", e.target.value.slice(0, 30))} />
           </Campo>
-          <Campo label="CEP">
-            <Txt inputMode="numeric" maxLength={8} value={state.cep}
-              onChange={(e) => set("cep", e.target.value.replace(/\D/g, "").slice(0, 8))} />
-          </Campo>
-          <Campo label="Município (IBGE 7 díg.)">
-            <Txt inputMode="numeric" maxLength={7} value={state.municipioIbge}
-              onChange={(e) => setState((p) => { const m = e.target.value.replace(/\D/g, "").slice(0, 7); return { ...p, municipioIbge: m, coduf: m ? ufDeMunicipio(m) : p.coduf }; })} />
-          </Campo>
-          <Campo label="UF (IBGE 2 díg.)">
-            <Txt inputMode="numeric" maxLength={2} value={state.coduf}
-              onChange={(e) => set("coduf", e.target.value.replace(/\D/g, "").slice(0, 2))} />
-          </Campo>
-          <Campo label="Telefone">
-            <Txt inputMode="numeric" maxLength={11} value={state.telefone}
-              onChange={(e) => set("telefone", e.target.value.replace(/\D/g, "").slice(0, 11))} />
-          </Campo>
-          <Campo label="Celular">
+          <Campo label="Telefone celular">
             <Txt inputMode="numeric" maxLength={11} value={state.celular}
               onChange={(e) => set("celular", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
-          <Campo label="E-mail" span>
+          <Campo label="Telefone de contato">
+            <Txt inputMode="numeric" maxLength={11} value={state.telefone}
+              onChange={(e) => set("telefone", e.target.value.replace(/\D/g, "").slice(0, 11))} />
+          </Campo>
+          <Campo label="E-mail" aas>
             <Txt type="email" value={state.email} onChange={(e) => set("email", e.target.value)} />
           </Campo>
         </Secao>
 
-        {/* Clínico */}
-        <Secao titulo="Dados clínicos" cols={3}>
-          <Campo label="CID principal">
-            <Txt uppercase maxLength={4} value={state.cidPrincipal}
-              onChange={(e) => set("cidPrincipal", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+        {/* 3. Dados do atendimento */}
+        <Secao titulo="Dados do atendimento" cols={3}>
+          <Campo label="Início da validade" aas>
+            <Txt type="date" value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
           </Campo>
-          <Campo label="CID secundário 1">
-            <Txt uppercase maxLength={4} value={state.cidSec1}
-              onChange={(e) => set("cidSec1", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          <Campo label="Fim da validade (opcional)" aas>
+            <Txt type="date" value={state.validadeFim} onChange={(e) => set("validadeFim", e.target.value)} />
           </Campo>
-          <Campo label="CID secundário 2">
-            <Txt uppercase maxLength={4} value={state.cidSec2}
-              onChange={(e) => set("cidSec2", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          <Campo label="Mês de atendimento (competência)">
+            <Txt type="month" value={compParaInput(state.competencia)}
+              onChange={(e) => set("competencia", inputParaComp(e.target.value))} />
           </Campo>
-          <Campo label="CID secundário 3">
-            <Txt uppercase maxLength={4} value={state.cidSec3}
-              onChange={(e) => set("cidSec3", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          <Campo label="Nº da autorização">
+            <Txt maxLength={13} value={state.autorizacao} onChange={(e) => set("autorizacao", e.target.value.replace(/\D/g, "").slice(0, 13))} />
           </Campo>
-          <Campo label="CID causas associadas">
-            <Txt uppercase maxLength={4} value={state.cidCausas}
-              onChange={(e) => set("cidCausas", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
-          </Campo>
-          <Campo label="Caráter do atendimento">
-            <Sel value={state.carater} onChange={(v) => set("carater", v)} options={CARATERES} />
-          </Campo>
-          <Campo label="Origem do paciente">
-            <Sel value={state.origemPaciente} onChange={(v) => set("origemPaciente", v)} options={RAAS_ORIGEM_PACIENTE} />
-          </Campo>
-          <Campo label="Destino do paciente">
-            <Sel value={state.destinoPaciente} onChange={(v) => set("destinoPaciente", v)} options={RAAS_DESTINO_PACIENTE} />
-          </Campo>
-          <Campo label="Motivo saída/perm. (opcional — vem do Destino)">
-            <Txt inputMode="numeric" maxLength={2} value={state.motivoSaida}
-              onChange={(e) => set("motivoSaida", e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="derivado do Destino" />
-          </Campo>
-          <Campo label="Data de óbito/alta (opcional)">
-            <Txt type="date" value={state.dataObitoAlta} onChange={(e) => set("dataObitoAlta", e.target.value)} />
-          </Campo>
-        </Secao>
-
-        {/* ESF + social */}
-        <Secao titulo="ESF e situação social" cols={3}>
-          <Campo label="Cobertura ESF?">
-            <Sel value={state.coberturaEsf} onChange={(v) => set("coberturaEsf", v)} options={RAAS_SIM_NAO} vazio="—" />
-          </Campo>
-          <Campo label="CNES da ESF (se cobertura = Sim)">
-            <Txt inputMode="numeric" maxLength={7} value={state.cnesEsf}
-              onChange={(e) => set("cnesEsf", e.target.value.replace(/\D/g, "").slice(0, 7))} disabled={state.coberturaEsf !== "S"} />
-          </Campo>
-          <Campo label="Origem das informações">
-            <Sel value={state.origemInfo} onChange={(v) => set("origemInfo", v)} options={RAAS_ORIGEM_INFO} vazio="—" />
-          </Campo>
-          <Campo label="Situação de rua?">
-            <Sel value={state.situacaoRua} onChange={(v) => set("situacaoRua", v)} options={RAAS_SIM_NAO} vazio="—" />
-          </Campo>
-          <Campo label="Usuário de drogas?">
+          <Campo label="Usuário de álcool e/ou outras drogas?">
             <Sel value={state.usuarioDroga} onChange={(v) => set("usuarioDroga", v)} options={RAAS_SIM_NAO} vazio="—" />
           </Campo>
           <Campo label="Tipos de droga (se usuário)">
@@ -651,8 +610,54 @@ function RaasPage() {
               })}
             </div>
           </Campo>
-          <Campo label="Nº da autorização">
-            <Txt maxLength={13} value={state.autorizacao} onChange={(e) => set("autorizacao", e.target.value.replace(/\D/g, "").slice(0, 13))} />
+          <Campo label="Origem do paciente">
+            <Sel value={state.origemPaciente} onChange={(v) => set("origemPaciente", v)} options={RAAS_ORIGEM_PACIENTE} />
+          </Campo>
+          <Campo label="CID10 principal">
+            <Txt uppercase maxLength={4} value={state.cidPrincipal}
+              onChange={(e) => set("cidPrincipal", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          </Campo>
+          <Campo label="CID10 causas associadas">
+            <Txt uppercase maxLength={4} value={state.cidCausas}
+              onChange={(e) => set("cidCausas", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          </Campo>
+          <Campo label="CID secundário 1" aas>
+            <Txt uppercase maxLength={4} value={state.cidSec1}
+              onChange={(e) => set("cidSec1", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          </Campo>
+          <Campo label="CID secundário 2" aas>
+            <Txt uppercase maxLength={4} value={state.cidSec2}
+              onChange={(e) => set("cidSec2", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          </Campo>
+          <Campo label="CID secundário 3" aas>
+            <Txt uppercase maxLength={4} value={state.cidSec3}
+              onChange={(e) => set("cidSec3", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+          </Campo>
+          <Campo label="Caráter do atendimento" aas>
+            <Sel value={state.carater} onChange={(v) => set("carater", v)} options={CARATERES} />
+          </Campo>
+          <Campo label="Existe cobertura de ESF?">
+            <Sel value={state.coberturaEsf} onChange={(v) => set("coberturaEsf", v)} options={RAAS_SIM_NAO} vazio="—" />
+          </Campo>
+          <Campo label="CNES da ESF (se cobertura = Sim)">
+            <Txt inputMode="numeric" maxLength={7} value={state.cnesEsf}
+              onChange={(e) => set("cnesEsf", e.target.value.replace(/\D/g, "").slice(0, 7))} disabled={state.coberturaEsf !== "S"} />
+          </Campo>
+          <Campo label="Encaminhamento (destino do paciente)">
+            <Sel value={state.destinoPaciente} onChange={(v) => set("destinoPaciente", v)} options={RAAS_DESTINO_PACIENTE} />
+          </Campo>
+          <Campo label="Data de conclusão (óbito/alta)">
+            <Txt type="date" value={state.dataObitoAlta} onChange={(e) => set("dataObitoAlta", e.target.value)} />
+          </Campo>
+          <Campo label="Motivo saída/perm. (vem do Destino)" aas>
+            <Txt inputMode="numeric" maxLength={2} value={state.motivoSaida}
+              onChange={(e) => set("motivoSaida", e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="derivado do Destino" />
+          </Campo>
+          <Campo label="Origem das informações" aas>
+            <Sel value={state.origemInfo} onChange={(v) => set("origemInfo", v)} options={RAAS_ORIGEM_INFO} vazio="—" />
+          </Campo>
+          <Campo label="Situação de rua?" aas>
+            <Sel value={state.situacaoRua} onChange={(v) => set("situacaoRua", v)} options={RAAS_SIM_NAO} vazio="—" />
           </Campo>
         </Secao>
 
@@ -660,7 +665,7 @@ function RaasPage() {
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-              Ações do período <span className="text-primary">({total})</span>
+              Ações realizadas <span className="text-primary">({total})</span>
             </h2>
             <button type="button" onClick={addAcao} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10">
               <Plus className="size-3.5" /> Adicionar ação
