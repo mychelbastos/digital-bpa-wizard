@@ -50,35 +50,26 @@ const CHART_COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--col
 // Tick do eixo X do gráfico de unidades: nomes de estabelecimento são longos e se
 // sobrepõem. Quebra em até 2 linhas (~18 chars cada) e trunca com reticências o excedente,
 // centralizado sob a barra. O nome completo continua no tooltip da barra.
+// Rótulo do eixo X das unidades. Antes vinha centralizado em até 2 linhas, mas com
+// barras estreitas (mobile, até 8 unidades) os nomes se sobrepunham. Agora vem em uma
+// única linha rotacionada (âncora no fim), que não colide independente da largura da barra.
 function TickUnidade({ x, y, payload }: { x?: number; y?: number; payload?: { value?: string } }) {
-  const full = payload?.value ?? "";
-  const MAX_LINHA = 18;
-  const palavras = full.split(/\s+/);
-  const linhas: string[] = [];
-  let atual = "";
-  for (const w of palavras) {
-    const tentativa = atual ? `${atual} ${w}` : w;
-    if (tentativa.length > MAX_LINHA && atual) {
-      linhas.push(atual);
-      atual = w;
-    } else {
-      atual = tentativa;
-    }
-    if (linhas.length === 2) break; // no máximo 2 linhas
-  }
-  if (atual && linhas.length < 2) linhas.push(atual);
-  // Se sobrou texto (mais de 2 linhas), sinaliza corte com reticências na 2ª linha.
-  const usadas = linhas.join(" ");
-  if (usadas.length < full.replace(/\s+/g, " ").length && linhas.length === 2) {
-    linhas[1] = `${linhas[1].slice(0, MAX_LINHA - 1)}…`;
-  }
+  const full = (payload?.value ?? "").replace(/\s+/g, " ").trim();
+  const MAX = 22;
+  const texto = full.length > MAX ? `${full.slice(0, MAX - 1)}…` : full;
   return (
     <g transform={`translate(${x},${y})`}>
-      {linhas.map((l, i) => (
-        <text key={i} x={0} y={0} dy={12 + i * 11} textAnchor="middle" className="fill-muted-foreground" fontSize={10}>
-          {l}
-        </text>
-      ))}
+      <text
+        x={0}
+        y={0}
+        dy={10}
+        textAnchor="end"
+        transform="rotate(-35)"
+        className="fill-muted-foreground"
+        fontSize={10}
+      >
+        {texto}
+      </text>
     </g>
   );
 }
@@ -300,9 +291,9 @@ function Home() {
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartBox title="Produção por unidade" className="lg:col-span-2">
               <ChartContainer config={{ quantidade: { label: "Quantidade", color: "var(--color-chart-1)" } }} className="h-72 w-full">
-                <BarChart data={topUnidades} margin={{ left: 0, right: 8 }}>
+                <BarChart data={topUnidades} margin={{ left: 0, right: 8, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" interval={0} height={44} tickLine={false} axisLine={false} tick={<TickUnidade />} />
+                  <XAxis dataKey="name" interval={0} height={96} tickMargin={8} tickLine={false} axisLine={false} tick={<TickUnidade />} />
                   <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Bar dataKey="quantidade" radius={[6, 6, 0, 0]}>
