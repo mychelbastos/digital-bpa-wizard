@@ -163,6 +163,8 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
   const [telefone, setTelefone] = useState(ini?.telefone ?? "");
   const [nomeMae, setNomeMae] = useState(ini?.nome_mae ?? "");
   const [prontuario, setProntuario] = useState(ini?.prontuario ?? "");
+  const [responsavelTipo, setResponsavelTipo] = useState<"" | "paciente" | "mae" | "outro">((ini?.responsavel_tipo as "paciente" | "mae" | "outro") ?? "");
+  const [nomeResponsavel, setNomeResponsavel] = useState(ini?.nome_responsavel ?? "");
   const [nacionalidade, setNacionalidade] = useState(ini?.nacionalidade ?? NACIONALIDADE_BRASILEIRO);
   const [racaCor, setRacaCor] = useState(ini?.raca_cor ?? "");
   const [etnia, setEtnia] = useState(ini?.etnia ?? "");
@@ -200,6 +202,13 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
   useEffect(() => {
     if (ini?.acompanhante_id) carregarPaciente(ini.acompanhante_id, false).then((p) => p && setAcompanhante(p));
   }, [ini?.acompanhante_id]);
+
+  // Responsável = o próprio paciente ou a mãe: o nome é derivado automaticamente (e
+  // acompanha edições em Nome / Nome da mãe). "Outro" deixa o campo livre para digitar.
+  useEffect(() => {
+    if (responsavelTipo === "paciente") setNomeResponsavel(nome);
+    else if (responsavelTipo === "mae") setNomeResponsavel(nomeMae);
+  }, [responsavelTipo, nome, nomeMae]);
 
   // "Usar o mesmo endereço": copia o endereço-modelo (ex.: do paciente) para os campos.
   const ep = props.enderecoPadrao;
@@ -253,7 +262,8 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
     const res = await salvarPaciente({
       id: props.paciente?.id, tfd: marcarTfd, origem: props.origem, acompanhante_id: acompanhante?.id ?? null,
       organizacao_id: props.orgId, nome, nome_social: nomeSocial, cns, cpf, sexo: sexo || null,
-      nascimento: nascimento || null, nome_mae: nomeMae, prontuario, nacionalidade, raca_cor: racaCor || null,
+      nascimento: nascimento || null, nome_mae: nomeMae, nome_responsavel: nomeResponsavel, responsavel_tipo: responsavelTipo || null,
+      prontuario, nacionalidade, raca_cor: racaCor || null,
       etnia: etnia || null, situacao_rua: situacaoRua || null, email, telefone, cep,
       cod_logradouro: codLog, logradouro, numero, complemento, bairro,
       municipio_nome: municipioNome, municipio_ibge: municipioIbge, uf,
@@ -279,6 +289,21 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         <div className="sm:col-span-2">
           <div className={label}>Nome da mãe</div>
           <input value={nomeMae} onChange={(e) => setNomeMae(e.target.value)} className={campo} />
+        </div>
+        <div className="sm:col-span-2">
+          <div className={label}>Responsável é</div>
+          <select value={responsavelTipo} onChange={(e) => setResponsavelTipo(e.target.value as "" | "paciente" | "mae" | "outro")} className={campo} data-nocaps>
+            <option value="">—</option>
+            <option value="paciente">Próprio paciente</option>
+            <option value="mae">Mãe</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div className="sm:col-span-2">
+          <div className={label}>Nome do responsável</div>
+          <input value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)}
+            readOnly={responsavelTipo === "paciente" || responsavelTipo === "mae"}
+            className={campo + ((responsavelTipo === "paciente" || responsavelTipo === "mae") ? " bg-muted/60 text-muted-foreground cursor-not-allowed" : "")} />
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Nº do prontuário (CAPS)</div>

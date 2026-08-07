@@ -14,6 +14,8 @@ export interface Paciente {
   sexo: "M" | "F" | null;
   nascimento: string | null; // YYYY-MM-DD
   nome_mae: string | null;
+  nome_responsavel: string | null; // responsável pelo paciente (RAAS ras_nomresp)
+  responsavel_tipo: string | null; // 'paciente' | 'mae' | 'outro' (como o nome é preenchido)
   prontuario: string | null; // Nº do prontuário no CAPS (RAAS PSI)
   telefone: string | null;
   email: string | null;
@@ -61,7 +63,7 @@ export function pacienteFaltando(p: Partial<Paciente>): string[] {
 }
 
 const COLS =
-  "id, organizacao_id, cns, cpf, nome, nome_social, sexo, nascimento, nome_mae, prontuario, telefone, email, nacionalidade, raca_cor, etnia, situacao_rua, cod_logradouro, logradouro, numero, complemento, bairro, cep, municipio_ibge, municipio_nome, uf, acompanhante_id";
+  "id, organizacao_id, cns, cpf, nome, nome_social, sexo, nascimento, nome_mae, nome_responsavel, responsavel_tipo, prontuario, telefone, email, nacionalidade, raca_cor, etnia, situacao_rua, cod_logradouro, logradouro, numero, complemento, bairro, cep, municipio_ibge, municipio_nome, uf, acompanhante_id";
 
 const soDigitos = (s: string | null | undefined) => (s || "").replace(/\D/g, "");
 
@@ -134,6 +136,8 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
     sexo: input.sexo ?? null,
     nascimento: input.nascimento || null,
     nome_mae: input.nome_mae?.trim().toUpperCase() || null,
+    nome_responsavel: input.nome_responsavel?.trim().toUpperCase() || null,
+    responsavel_tipo: input.responsavel_tipo?.trim() || null,
     prontuario: input.prontuario?.trim() || null, // aceita dígitos e "/"
     telefone: soDigitos(input.telefone) || null,
     email: input.email?.trim().toLowerCase() || null, // e-mail sempre minúsculo

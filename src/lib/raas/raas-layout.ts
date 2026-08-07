@@ -77,6 +77,18 @@ export function nomeNacionalidadeRaas(code: string): string {
   return RAAS_NACIONALIDADES.find((n) => n.code === c)?.label ?? "";
 }
 
+// Converte a *Situação* de nacionalidade do cadastro CADSUS (1 díg: 1 Brasileiro,
+// 2 Naturalizado, 3 Estrangeiro) no código de 3 díg do RAAS (Anexo VIII). O estrangeiro
+// não tem código único (é um país específico do Anexo VIII, que não enumeramos), então
+// devolve "" — o campo fica editável para o caso raro.
+export function situacaoParaNacionalidadeRaas(situacao: string | null | undefined): string {
+  switch ((situacao || "").trim()) {
+    case "1": return "010"; // Brasileiro
+    case "2": return "020"; // Naturalizado brasileiro
+    default: return "";     // Estrangeiro (3) ou vazio
+  }
+}
+
 // ---- Ação (linha 16) ----
 // Campos que se repetem da folha (coduf, cmp, codcnes, cnspct, dtiinval, org, cpfpct)
 // são herdados da folha na exportação — não precisam ser digitados por ação.

@@ -16,7 +16,7 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import {
   emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
   RAAS_ORIGEM_PACIENTE, RAAS_DESTINO_PACIENTE, RAAS_TIPO_DROGA, RAAS_LOCAL_REALIZACAO,
-  RAAS_ORIGEM_INFO, RAAS_SIM_NAO, RAAS_NACIONALIDADES,
+  RAAS_ORIGEM_INFO, RAAS_SIM_NAO, RAAS_NACIONALIDADES, situacaoParaNacionalidadeRaas,
   type RaasState, type RaasAcao, type ComboOption,
 } from "@/lib/raas/raas-layout";
 import { RACAS } from "@/lib/bpa-i-v2/racas";
@@ -350,8 +350,10 @@ function RaasPage() {
       nomePaciente: p.nome ?? "",
       prontuario: p.prontuario ?? "",
       nomeMae: p.nome_mae ?? "",
+      nomeResponsavel: p.nome_responsavel ?? "",
       dataNascimento: p.nascimento ?? "",
       sexo: p.sexo ?? "",
+      nacionalidade: situacaoParaNacionalidadeRaas(p.nacionalidade),
       raca: p.raca_cor ?? "",
       etnia: p.etnia ?? "",
       logradouro: p.logradouro ?? "",
@@ -535,7 +537,7 @@ function RaasPage() {
             <Txt type="date" readOnly={pt} value={state.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
           </Campo>
           <Campo label="Nacionalidade">
-            <Sel value={state.nacionalidade} onChange={(v) => set("nacionalidade", v)} options={RAAS_NACIONALIDADES} />
+            <Sel value={state.nacionalidade} onChange={(v) => set("nacionalidade", v)} options={RAAS_NACIONALIDADES} disabled={pt && state.nacionalidade !== ""} />
           </Campo>
           <Campo label="Raça/Cor">
             <Sel value={state.raca} onChange={(v) => set("raca", v)} options={RACAS} disabled={pt} />
@@ -548,7 +550,7 @@ function RaasPage() {
             <Txt uppercase readOnly={pt} value={state.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} />
           </Campo>
           <Campo label="Nome do responsável" span>
-            <Txt uppercase value={state.nomeResponsavel} onChange={(e) => set("nomeResponsavel", e.target.value)} />
+            <Txt uppercase readOnly={pt} value={state.nomeResponsavel} onChange={(e) => set("nomeResponsavel", e.target.value)} />
           </Campo>
           <Campo label="Cód. IBGE município (7 díg.)">
             <Txt inputMode="numeric" maxLength={7} readOnly={pt} value={state.municipioIbge}
