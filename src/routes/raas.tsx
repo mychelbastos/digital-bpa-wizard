@@ -502,7 +502,7 @@ function RaasPage() {
             {state.pacienteId && <span className="ml-2 text-xs text-emerald-700">Paciente vinculado ao cadastro — os campos abaixo vieram do cadastro e podem ser ajustados.</span>}
           </div>
           <Campo label="Nº do prontuário (CAPS)">
-            <Txt value={state.prontuario} onChange={(e) => set("prontuario", e.target.value.replace(/\D/g, ""))} />
+            <Txt value={state.prontuario} onChange={(e) => set("prontuario", e.target.value.replace(/[^\d/]/g, ""))} />
           </Campo>
           <Campo label="Nome do paciente" span>
             <Txt uppercase value={state.nomePaciente} onChange={(e) => set("nomePaciente", e.target.value)} />
