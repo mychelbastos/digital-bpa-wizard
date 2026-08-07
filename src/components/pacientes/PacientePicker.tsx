@@ -13,6 +13,7 @@ import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 import { validarCns } from "@/lib/bpa-i-v2/validacao";
 import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
 import { emailValido } from "@/lib/validacao-email";
+import { telefoneValido, cepValido } from "@/lib/validacao-contato";
 import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/nacionalidades";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
@@ -192,6 +193,8 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
   const cpfCurto = cpfDig.length > 0 && cpfDig.length < 11;
   const cpfOk = cpfDig.length === 11 && validarCpf(cpfDig);
   const emailInvalido = email.trim().length > 0 && !emailValido(email);
+  const telInvalido = digitos(telefone).length > 0 && !telefoneValido(telefone);
+  const cepInvalido = digitos(cep).length > 0 && !cepValido(cep);
 
   // Carrega o acompanhante habitual já vinculado a este paciente (edição).
   useEffect(() => {
@@ -355,11 +358,15 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Telefone (DDD + número)</div>
-          <input value={telefone} onChange={(e) => setTelefone(digitos(e.target.value).slice(0, 11))} className={campo} />
+          <input value={telefone} onChange={(e) => setTelefone(digitos(e.target.value).slice(0, 11))}
+            className={campo + (telInvalido ? " !border-destructive" : "")} inputMode="numeric" data-nocaps />
+          {telInvalido && <div className="mt-0.5 text-[11px] text-destructive">Telefone inválido</div>}
         </div>
         <div>
           <div className={label}>CEP *</div>
-          <input value={cep} onChange={(e) => aoMudarCep(e.target.value)} className={campo + errCls("cep")} />
+          <input value={cep} onChange={(e) => aoMudarCep(e.target.value)}
+            className={campo + errCls("cep") + (cepInvalido ? " !border-destructive" : "")} inputMode="numeric" data-nocaps />
+          {cepInvalido && <div className="mt-0.5 text-[11px] text-destructive">CEP deve ter 8 dígitos</div>}
         </div>
         <div>
           <div className={label}>Tipo logradouro</div>
