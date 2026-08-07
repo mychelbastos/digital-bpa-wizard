@@ -163,6 +163,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
   const [telefone, setTelefone] = useState(ini?.telefone ?? "");
   const [nomeMae, setNomeMae] = useState(ini?.nome_mae ?? "");
   const [prontuario, setProntuario] = useState(ini?.prontuario ?? "");
+  const [dataAdmissao, setDataAdmissao] = useState(ini?.data_admissao ?? "");
   const [responsavelTipo, setResponsavelTipo] = useState<"" | "paciente" | "mae">(
     ini?.responsavel_tipo === "paciente" || ini?.responsavel_tipo === "mae" ? ini.responsavel_tipo : "",
   );
@@ -265,7 +266,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
       id: props.paciente?.id, tfd: marcarTfd, origem: props.origem, acompanhante_id: acompanhante?.id ?? null,
       organizacao_id: props.orgId, nome, nome_social: nomeSocial, cns, cpf, sexo: sexo || null,
       nascimento: nascimento || null, nome_mae: nomeMae, nome_responsavel: nomeResponsavel, responsavel_tipo: responsavelTipo || null,
-      prontuario, nacionalidade, raca_cor: racaCor || null,
+      data_admissao: dataAdmissao || null, prontuario, nacionalidade, raca_cor: racaCor || null,
       etnia: etnia || null, situacao_rua: situacaoRua || null, email, telefone, cep,
       cod_logradouro: codLog, logradouro, numero, complemento, bairro,
       municipio_nome: municipioNome, municipio_ibge: municipioIbge, uf,
@@ -309,6 +310,10 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         <div className="sm:col-span-2">
           <div className={label}>Nº do prontuário (CAPS)</div>
           <input value={prontuario} onChange={(e) => setProntuario(e.target.value.replace(/[^\d/]/g, ""))} data-nocaps inputMode="numeric" className={campo} />
+        </div>
+        <div className="sm:col-span-2">
+          <div className={label}>Data de admissão (CAPS)</div>
+          <input type="date" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} data-nocaps className={campo} />
         </div>
         <div>
           <div className={label}>CNS</div>

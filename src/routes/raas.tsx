@@ -349,6 +349,7 @@ function RaasPage() {
       cpfPaciente: p.cpf ?? "",
       nomePaciente: p.nome ?? "",
       prontuario: p.prontuario ?? "",
+      validadeInicio: p.data_admissao ?? "",
       nomeMae: p.nome_mae ?? "",
       nomeResponsavel: p.nome_responsavel ?? "",
       dataNascimento: p.nascimento ?? "",
@@ -592,7 +593,7 @@ function RaasPage() {
         {/* 3. Dados do atendimento */}
         <Secao titulo="Dados do atendimento" cols={3}>
           <Campo label="Data de admissão">
-            <Txt type="date" value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
+            <Txt type="date" readOnly={pt && state.validadeInicio !== ""} value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
           </Campo>
           <Campo label="Mês de atendimento (competência)">
             <Txt type="month" value={compParaInput(state.competencia)}
