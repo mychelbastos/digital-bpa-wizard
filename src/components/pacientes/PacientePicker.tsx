@@ -303,7 +303,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         <div>
           <div className={label}>Nacionalidade *</div>
           <select value={nacionalidade} onChange={(e) => setNacionalidade(e.target.value)} className={campo + errCls("nacionalidade")}>
-            {NACIONALIDADES.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
+            {NACIONALIDADES.map((o) => <option key={o.code} value={o.code}>{o.code} — {o.label}</option>)}
           </select>
         </div>
         <div>
