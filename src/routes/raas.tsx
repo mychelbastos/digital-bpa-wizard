@@ -16,7 +16,7 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import {
   emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
   RAAS_ORIGEM_PACIENTE, RAAS_DESTINO_PACIENTE, RAAS_TIPO_DROGA, RAAS_LOCAL_REALIZACAO,
-  RAAS_ORIGEM_INFO, RAAS_SIM_NAO, nomeNacionalidadeRaas,
+  RAAS_ORIGEM_INFO, RAAS_SIM_NAO, RAAS_NACIONALIDADES,
   type RaasState, type RaasAcao, type ComboOption,
 } from "@/lib/raas/raas-layout";
 import { RACAS } from "@/lib/bpa-i-v2/racas";
@@ -510,14 +510,8 @@ function RaasPage() {
           <Campo label="Data de nascimento">
             <Txt type="date" value={state.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
           </Campo>
-          <Campo label="Nacionalidade (cód. 3 díg.)">
-            <Txt inputMode="numeric" maxLength={3} value={state.nacionalidade}
-              onChange={(e) => set("nacionalidade", e.target.value.replace(/\D/g, "").slice(0, 3))} />
-            {nomeNacionalidadeRaas(state.nacionalidade) && (
-              <span className="mt-0.5 text-[11px] normal-case text-muted-foreground">
-                {state.nacionalidade.padStart(3, "0")} — {nomeNacionalidadeRaas(state.nacionalidade)}
-              </span>
-            )}
+          <Campo label="Nacionalidade">
+            <Sel value={state.nacionalidade} onChange={(v) => set("nacionalidade", v)} options={RAAS_NACIONALIDADES} />
           </Campo>
           <Campo label="Raça/Cor">
             <Sel value={state.raca} onChange={(v) => set("raca", v)} options={RACAS} />

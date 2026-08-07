@@ -62,18 +62,19 @@ export const RAAS_SIM_NAO: ComboOption[] = [
 // 010 = Brasileiro. O campo é editável (não enumeramos as ~200 nacionalidades).
 export const RAAS_NACIONALIDADE_PADRAO = "010";
 
-// Nomes das nacionalidades RAAS que conhecemos com certeza. NÃO enumeramos os ~200
-// códigos de país do Anexo VIII (regra do projeto: não deduzir tabelas DATASUS) — nos
-// arquivos reais do município 100% dos registros são "010". Serve só para exibir o nome
-// ao lado do código digitado; código desconhecido fica sem nome (mostra só o número).
-const RAAS_NACIONALIDADES: Record<string, string> = {
-  "010": "Brasileiro",
-  "020": "Naturalizado brasileiro",
-};
+// Nacionalidades RAAS que conhecemos com certeza. NÃO enumeramos os ~200 códigos de país
+// do Anexo VIII (regra do projeto: não deduzir tabelas DATASUS) — nos arquivos reais do
+// município 100% dos registros são "010" (Brasileiro). Se um dia precisar de outra
+// nacionalidade, acrescentar a partir de fonte verificada, não por dedução.
+export const RAAS_NACIONALIDADES: ComboOption[] = [
+  { code: "010", label: "Brasileiro" },
+  { code: "020", label: "Naturalizado brasileiro" },
+];
 
 // Nome da nacionalidade para exibição ("010" -> "Brasileiro"). "" se não reconhecido.
 export function nomeNacionalidadeRaas(code: string): string {
-  return RAAS_NACIONALIDADES[(code || "").padStart(3, "0")] ?? "";
+  const c = (code || "").padStart(3, "0");
+  return RAAS_NACIONALIDADES.find((n) => n.code === c)?.label ?? "";
 }
 
 // ---- Ação (linha 16) ----
