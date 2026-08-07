@@ -16,7 +16,7 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import {
   emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
   RAAS_ORIGEM_PACIENTE, RAAS_DESTINO_PACIENTE, RAAS_TIPO_DROGA, RAAS_LOCAL_REALIZACAO,
-  RAAS_ORIGEM_INFO, RAAS_SIM_NAO,
+  RAAS_ORIGEM_INFO, RAAS_SIM_NAO, nomeNacionalidadeRaas,
   type RaasState, type RaasAcao, type ComboOption,
 } from "@/lib/raas/raas-layout";
 import { RACAS } from "@/lib/bpa-i-v2/racas";
@@ -66,15 +66,11 @@ function Secao({ titulo, children, cols = 2 }: { titulo: string; children: React
   );
 }
 
-function Campo({ label, children, span, aas }: { label: string; children: React.ReactNode; span?: boolean; aas?: boolean }) {
+function Campo({ label, children, span }: { label: string; children: React.ReactNode; span?: boolean }) {
   return (
     <label className={`flex flex-col gap-1 ${span ? "md:col-span-2" : ""}`}>
       <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
-        {aas && (
-          <span title="Campo só do arquivo .AAS — não aparece na folha impressa"
-            className="rounded bg-violet-100 px-1 py-px text-[9px] font-bold leading-none tracking-wide text-violet-700">.AAS</span>
-        )}
       </span>
       {children}
     </label>
@@ -471,13 +467,6 @@ function RaasPage() {
       </header>
 
       <main className="mx-auto mt-4 max-w-[1100px] space-y-4 px-4">
-        {/* Legenda do selo .AAS */}
-        <p className="text-xs text-muted-foreground">
-          Campos marcados com{" "}
-          <span className="rounded bg-violet-100 px-1 py-px text-[9px] font-bold text-violet-700">.AAS</span>{" "}
-          existem só para o arquivo magnético (.AAS) e <strong>não aparecem na folha impressa</strong>.
-        </p>
-
         {/* 1. Identificação do estabelecimento de saúde */}
         <Secao titulo="Identificação do estabelecimento de saúde" cols={3}>
           <Campo label="Nome do estabelecimento de saúde" span>
@@ -511,7 +500,7 @@ function RaasPage() {
             <Txt inputMode="numeric" maxLength={15} value={state.cnsPaciente}
               onChange={(e) => set("cnsPaciente", e.target.value.replace(/\D/g, "").slice(0, 15))} />
           </Campo>
-          <Campo label="CPF do paciente" aas>
+          <Campo label="CPF do paciente">
             <Txt inputMode="numeric" maxLength={11} value={state.cpfPaciente}
               onChange={(e) => set("cpfPaciente", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
@@ -524,6 +513,11 @@ function RaasPage() {
           <Campo label="Nacionalidade (cód. 3 díg.)">
             <Txt inputMode="numeric" maxLength={3} value={state.nacionalidade}
               onChange={(e) => set("nacionalidade", e.target.value.replace(/\D/g, "").slice(0, 3))} />
+            {nomeNacionalidadeRaas(state.nacionalidade) && (
+              <span className="mt-0.5 text-[11px] normal-case text-muted-foreground">
+                {state.nacionalidade.padStart(3, "0")} — {nomeNacionalidadeRaas(state.nacionalidade)}
+              </span>
+            )}
           </Campo>
           <Campo label="Raça/Cor">
             <Sel value={state.raca} onChange={(v) => set("raca", v)} options={RACAS} />
@@ -559,7 +553,7 @@ function RaasPage() {
           <Campo label="Complemento">
             <Txt uppercase value={state.complemento} onChange={(e) => set("complemento", e.target.value.slice(0, 10))} />
           </Campo>
-          <Campo label="Bairro" aas>
+          <Campo label="Bairro">
             <Txt uppercase value={state.bairro} onChange={(e) => set("bairro", e.target.value.slice(0, 30))} />
           </Campo>
           <Campo label="Telefone celular">
@@ -570,17 +564,17 @@ function RaasPage() {
             <Txt inputMode="numeric" maxLength={11} value={state.telefone}
               onChange={(e) => set("telefone", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
-          <Campo label="E-mail" aas>
+          <Campo label="E-mail">
             <Txt type="email" value={state.email} onChange={(e) => set("email", e.target.value)} />
           </Campo>
         </Secao>
 
         {/* 3. Dados do atendimento */}
         <Secao titulo="Dados do atendimento" cols={3}>
-          <Campo label="Início da validade" aas>
+          <Campo label="Início da validade">
             <Txt type="date" value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
           </Campo>
-          <Campo label="Fim da validade (opcional)" aas>
+          <Campo label="Fim da validade (opcional)">
             <Txt type="date" value={state.validadeFim} onChange={(e) => set("validadeFim", e.target.value)} />
           </Campo>
           <Campo label="Mês de atendimento (competência)">
@@ -621,19 +615,19 @@ function RaasPage() {
             <Txt uppercase maxLength={4} value={state.cidCausas}
               onChange={(e) => set("cidCausas", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
           </Campo>
-          <Campo label="CID secundário 1" aas>
+          <Campo label="CID secundário 1">
             <Txt uppercase maxLength={4} value={state.cidSec1}
               onChange={(e) => set("cidSec1", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
           </Campo>
-          <Campo label="CID secundário 2" aas>
+          <Campo label="CID secundário 2">
             <Txt uppercase maxLength={4} value={state.cidSec2}
               onChange={(e) => set("cidSec2", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
           </Campo>
-          <Campo label="CID secundário 3" aas>
+          <Campo label="CID secundário 3">
             <Txt uppercase maxLength={4} value={state.cidSec3}
               onChange={(e) => set("cidSec3", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
           </Campo>
-          <Campo label="Caráter do atendimento" aas>
+          <Campo label="Caráter do atendimento">
             <Sel value={state.carater} onChange={(v) => set("carater", v)} options={CARATERES} />
           </Campo>
           <Campo label="Existe cobertura de ESF?">
@@ -649,14 +643,14 @@ function RaasPage() {
           <Campo label="Data de conclusão (óbito/alta)">
             <Txt type="date" value={state.dataObitoAlta} onChange={(e) => set("dataObitoAlta", e.target.value)} />
           </Campo>
-          <Campo label="Motivo saída/perm. (vem do Destino)" aas>
+          <Campo label="Motivo saída/perm. (vem do Destino)">
             <Txt inputMode="numeric" maxLength={2} value={state.motivoSaida}
               onChange={(e) => set("motivoSaida", e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="derivado do Destino" />
           </Campo>
-          <Campo label="Origem das informações" aas>
+          <Campo label="Origem das informações">
             <Sel value={state.origemInfo} onChange={(v) => set("origemInfo", v)} options={RAAS_ORIGEM_INFO} vazio="—" />
           </Campo>
-          <Campo label="Situação de rua?" aas>
+          <Campo label="Situação de rua?">
             <Sel value={state.situacaoRua} onChange={(v) => set("situacaoRua", v)} options={RAAS_SIM_NAO} vazio="—" />
           </Campo>
         </Secao>

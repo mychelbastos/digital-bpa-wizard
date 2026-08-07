@@ -275,7 +275,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
           <input value={nomeMae} onChange={(e) => setNomeMae(e.target.value)} className={campo} />
         </div>
         <div>
-          <div className={label}>CNS <span className="font-normal normal-case text-muted-foreground">(informe CNS *ou* CPF)</span></div>
+          <div className={label}>CNS</div>
           <input value={cns} onChange={(e) => setCns(digitos(e.target.value).slice(0, 15))} data-nocaps inputMode="numeric"
             className={campo + errCls("documento (CNS/CPF)") + (cnsInvalido ? " !border-destructive" : cnsOk ? " !border-emerald-500" : "")} />
           {cnsInvalido && <div className="mt-0.5 text-[11px] text-destructive">CNS inválido</div>}
