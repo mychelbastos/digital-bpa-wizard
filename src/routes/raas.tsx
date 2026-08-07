@@ -348,6 +348,7 @@ function RaasPage() {
       cnsPaciente: p.cns ?? "",
       cpfPaciente: p.cpf ?? "",
       nomePaciente: p.nome ?? "",
+      prontuario: p.prontuario ?? "",
       nomeMae: p.nome_mae ?? "",
       dataNascimento: p.nascimento ?? "",
       sexo: p.sexo ?? "",
@@ -514,7 +515,7 @@ function RaasPage() {
             {state.pacienteId && <span className="text-xs text-emerald-700">Paciente vinculado — os dados abaixo estão travados; use <strong>Editar paciente</strong> para corrigir no cadastro.</span>}
           </div>
           <Campo label="Nº do prontuário (CAPS)">
-            <Txt value={state.prontuario} onChange={(e) => set("prontuario", e.target.value.replace(/[^\d/]/g, ""))} />
+            <Txt readOnly={pt} value={state.prontuario} onChange={(e) => set("prontuario", e.target.value.replace(/[^\d/]/g, ""))} />
           </Campo>
           <Campo label="Nome do paciente" span>
             <Txt uppercase readOnly={pt} value={state.nomePaciente} onChange={(e) => set("nomePaciente", e.target.value)} />

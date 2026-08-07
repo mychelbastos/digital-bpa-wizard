@@ -14,6 +14,7 @@ export interface Paciente {
   sexo: "M" | "F" | null;
   nascimento: string | null; // YYYY-MM-DD
   nome_mae: string | null;
+  prontuario: string | null; // Nº do prontuário no CAPS (RAAS PSI)
   telefone: string | null;
   email: string | null;
   nacionalidade: string | null; // código CADSUS (1 = Brasileiro)
@@ -60,7 +61,7 @@ export function pacienteFaltando(p: Partial<Paciente>): string[] {
 }
 
 const COLS =
-  "id, organizacao_id, cns, cpf, nome, nome_social, sexo, nascimento, nome_mae, telefone, email, nacionalidade, raca_cor, etnia, situacao_rua, cod_logradouro, logradouro, numero, complemento, bairro, cep, municipio_ibge, municipio_nome, uf, acompanhante_id";
+  "id, organizacao_id, cns, cpf, nome, nome_social, sexo, nascimento, nome_mae, prontuario, telefone, email, nacionalidade, raca_cor, etnia, situacao_rua, cod_logradouro, logradouro, numero, complemento, bairro, cep, municipio_ibge, municipio_nome, uf, acompanhante_id";
 
 const soDigitos = (s: string | null | undefined) => (s || "").replace(/\D/g, "");
 
@@ -133,6 +134,7 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
     sexo: input.sexo ?? null,
     nascimento: input.nascimento || null,
     nome_mae: input.nome_mae?.trim().toUpperCase() || null,
+    prontuario: input.prontuario?.trim() || null, // aceita dígitos e "/"
     telefone: soDigitos(input.telefone) || null,
     email: input.email?.trim().toLowerCase() || null, // e-mail sempre minúsculo
     nacionalidade: input.nacionalidade?.trim() || null,

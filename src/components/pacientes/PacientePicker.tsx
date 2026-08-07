@@ -160,6 +160,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
   const [nascimento, setNascimento] = useState(ini?.nascimento ?? "");
   const [telefone, setTelefone] = useState(ini?.telefone ?? "");
   const [nomeMae, setNomeMae] = useState(ini?.nome_mae ?? "");
+  const [prontuario, setProntuario] = useState(ini?.prontuario ?? "");
   const [nacionalidade, setNacionalidade] = useState(ini?.nacionalidade ?? NACIONALIDADE_BRASILEIRO);
   const [racaCor, setRacaCor] = useState(ini?.raca_cor ?? "");
   const [etnia, setEtnia] = useState(ini?.etnia ?? "");
@@ -247,7 +248,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
     const res = await salvarPaciente({
       id: props.paciente?.id, tfd: marcarTfd, origem: props.origem, acompanhante_id: acompanhante?.id ?? null,
       organizacao_id: props.orgId, nome, nome_social: nomeSocial, cns, cpf, sexo: sexo || null,
-      nascimento: nascimento || null, nome_mae: nomeMae, nacionalidade, raca_cor: racaCor || null,
+      nascimento: nascimento || null, nome_mae: nomeMae, prontuario, nacionalidade, raca_cor: racaCor || null,
       etnia: etnia || null, situacao_rua: situacaoRua || null, email, telefone, cep,
       cod_logradouro: codLog, logradouro, numero, complemento, bairro,
       municipio_nome: municipioNome, municipio_ibge: municipioIbge, uf,
@@ -273,6 +274,10 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         <div className="sm:col-span-2">
           <div className={label}>Nome da mãe</div>
           <input value={nomeMae} onChange={(e) => setNomeMae(e.target.value)} className={campo} />
+        </div>
+        <div className="sm:col-span-2">
+          <div className={label}>Nº do prontuário (CAPS)</div>
+          <input value={prontuario} onChange={(e) => setProntuario(e.target.value.replace(/[^\d/]/g, ""))} data-nocaps inputMode="numeric" className={campo} />
         </div>
         <div>
           <div className={label}>CNS</div>
