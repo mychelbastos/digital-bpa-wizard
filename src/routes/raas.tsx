@@ -36,9 +36,13 @@ const STORAGE_KEY = "raas-state-v1";
 const FICHA_ID_KEY = "raas-ficha-id";
 const FICHA_TITULO_KEY = "raas-ficha-titulo";
 
-// "AAAAMM" <-> valor do <input type="month"> ("AAAA-MM").
+// "AAAAMM" -> valor do <input type="month"> ("AAAA-MM") e -> rótulo "MM/AAAA".
 const compParaInput = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(0, 4)}-${c.slice(4, 6)}` : "");
-const inputParaComp = (v: string) => v.replace("-", "");
+const fmtComp = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c);
+
+// Mês (AAAAMM) da data de execução de uma ação preenchida (procedimento + data válida).
+const mesDaAcao = (a: { procedimento: string; dataExec: string }) =>
+  a.procedimento && /^\d{4}-\d{2}-\d{2}$/.test(a.dataExec) ? a.dataExec.slice(0, 7).replace("-", "") : null;
 
 function loadState(): RaasState {
   if (typeof window === "undefined") return emptyRaasState();
@@ -415,6 +419,27 @@ function RaasPage() {
   // nacionalidade RAAS 3-díg, responsável, celular, dados clínicos) seguem editáveis.
   const pt = Boolean(state.pacienteId);
 
+  // Competência do RAAS = mês de produção = mês em que as ações foram executadas (ras_dtexec).
+  // Derivamos do conjunto de ações preenchidas com data. Se houver ações em meses diferentes,
+  // usamos o mês predominante (empate = mais recente) e avisamos para o digitador acertar.
+  const freqMeses = new Map<string, number>();
+  for (const a of state.acoes) {
+    const m = mesDaAcao(a);
+    if (m) freqMeses.set(m, (freqMeses.get(m) ?? 0) + 1);
+  }
+  const mesesAcoes = [...freqMeses.entries()];
+  const competenciaDerivada = mesesAcoes.length
+    ? [...mesesAcoes].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? 1 : -1))[0][0]
+    : "";
+  const competenciaAmbigua = mesesAcoes.length > 1;
+
+  // Mantém a competência do estado em sincronia com o mês das ações (só quando há datas).
+  useEffect(() => {
+    if (competenciaDerivada && competenciaDerivada !== state.competencia) {
+      setState((prev) => ({ ...prev, competencia: competenciaDerivada }));
+    }
+  }, [competenciaDerivada, state.competencia]);
+
   return (
     <div className="min-h-screen bg-muted/40 pb-20">
       <ConfirmModal open={novaFichaOpen} title="Nova ficha" confirmLabel="Começar nova ficha" onCancel={() => setNovaFichaOpen(false)} onConfirm={() => { setNovaFichaOpen(false); novaFicha(); }}>
@@ -596,8 +621,15 @@ function RaasPage() {
             <Txt type="date" readOnly={pt && state.validadeInicio !== ""} value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
           </Campo>
           <Campo label="Mês de atendimento (competência)">
-            <Txt type="month" value={compParaInput(state.competencia)}
-              onChange={(e) => set("competencia", inputParaComp(e.target.value))} />
+            <Txt type="month" readOnly value={compParaInput(state.competencia)} />
+            <span className="mt-0.5 text-[11px] normal-case text-muted-foreground">
+              Definida pelo mês das ações realizadas (data de execução).
+            </span>
+            {competenciaAmbigua && (
+              <span className="mt-0.5 text-[11px] normal-case text-amber-700">
+                Há ações em meses diferentes ({mesesAcoes.map(([m]) => fmtComp(m)).join(", ")}). Usando {fmtComp(state.competencia)} — ajuste as datas para o mesmo mês.
+              </span>
+            )}
           </Campo>
           <Campo label="Nº da autorização">
             <Txt maxLength={13} value={state.autorizacao} onChange={(e) => set("autorizacao", e.target.value.replace(/\D/g, "").slice(0, 13))} />
