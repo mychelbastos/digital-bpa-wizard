@@ -12,6 +12,7 @@ import {
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 import { validarCns } from "@/lib/bpa-i-v2/validacao";
 import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
+import { emailValido } from "@/lib/validacao-email";
 import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/nacionalidades";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
@@ -190,6 +191,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
   const cpfInvalido = cpfDig.length === 11 && !validarCpf(cpfDig);
   const cpfCurto = cpfDig.length > 0 && cpfDig.length < 11;
   const cpfOk = cpfDig.length === 11 && validarCpf(cpfDig);
+  const emailInvalido = email.trim().length > 0 && !emailValido(email);
 
   // Carrega o acompanhante habitual já vinculado a este paciente (edição).
   useEffect(() => {
@@ -347,7 +349,9 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
         <div className="sm:col-span-2">
           <div className={label}>E-mail</div>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} data-nocaps />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            className={campo + (emailInvalido ? " !border-destructive" : "")} data-nocaps />
+          {emailInvalido && <div className="mt-0.5 text-[11px] text-destructive">E-mail inválido</div>}
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Telefone (DDD + número)</div>
