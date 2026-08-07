@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { UserRound, X, Plus, Trash2, Search, FolderOpen, FileDown } from "lucide-react";
-import { PacientePicker } from "@/components/pacientes/PacientePicker";
-import type { Paciente } from "@/lib/pacientes";
+import { UserRound, X, Plus, Trash2, Search, FolderOpen, FileDown, Pencil } from "lucide-react";
+import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePicker";
+import { carregarPaciente, type Paciente } from "@/lib/pacientes";
 import { orgDoCnes } from "@/lib/tfd/tfd";
 import { buscarEstabelecimento, buscarEstabelecimentosPorNome, type EstabelecimentoSug } from "@/lib/bpa-i-v2/estabelecimentos";
 import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
@@ -80,12 +80,15 @@ function Campo({ label, children, span }: { label: string; children: React.React
 const inputCls =
   "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
+const lockedCls = "bg-muted/60 text-muted-foreground cursor-not-allowed";
+
 function Txt(props: React.InputHTMLAttributes<HTMLInputElement> & { uppercase?: boolean }) {
   const { uppercase, className, style, ...rest } = props;
+  const locked = rest.readOnly || rest.disabled;
   return (
     <input
       {...rest}
-      className={`${inputCls} ${className ?? ""}`}
+      className={`${inputCls} ${locked ? lockedCls : ""} ${className ?? ""}`}
       style={uppercase ? { textTransform: "uppercase", ...style } : style}
     />
   );
@@ -95,7 +98,7 @@ function Sel({ value, onChange, options, vazio = "—", disabled }: {
   value: string; onChange: (v: string) => void; options: ComboOption[]; vazio?: string; disabled?: boolean;
 }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className={inputCls}>
+    <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className={`${inputCls} ${disabled ? lockedCls : ""}`}>
       <option value="">{vazio}</option>
       {options.map((o) => (
         <option key={o.code} value={o.code}>{o.code} — {o.label}</option>
@@ -209,6 +212,7 @@ function RaasPage() {
   const [fichaTitulo, setFichaTitulo] = useState<string | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editPaciente, setEditPaciente] = useState<Paciente | null>(null);
   const [salvarOpen, setSalvarOpen] = useState(false);
   const [salvarComoNovo, setSalvarComoNovo] = useState(false);
   const [novaFichaOpen, setNovaFichaOpen] = useState(false);
@@ -363,6 +367,14 @@ function RaasPage() {
     toast.success(`Paciente ${p.nome} preenchido.`);
   };
 
+  // Abre o cadastro do paciente vinculado para correção. Ao salvar, reidrata a ficha.
+  const abrirEdicaoPaciente = async () => {
+    if (!state.pacienteId) return;
+    const p = await carregarPaciente(state.pacienteId);
+    if (p) setEditPaciente(p);
+    else toast.error("Não foi possível carregar o paciente para edição.");
+  };
+
   // ----- ações (linha 16) -----
   const updateAcao = (i: number, patch: Partial<RaasAcao>) => {
     setState((prev) => {
@@ -393,6 +405,11 @@ function RaasPage() {
   if (totalAcoes(state.acoes) === 0) faltando.push("Ao menos uma ação com procedimento");
 
   const total = totalAcoes(state.acoes);
+
+  // Paciente vinculado ao cadastro: os campos que vieram do cadastro ficam travados na
+  // ficha (edição só via "Editar paciente"). Campos que NÃO vêm do cadastro (prontuário,
+  // nacionalidade RAAS 3-díg, responsável, celular, dados clínicos) seguem editáveis.
+  const pt = Boolean(state.pacienteId);
 
   return (
     <div className="min-h-screen bg-muted/40 pb-20">
@@ -482,84 +499,90 @@ function RaasPage() {
 
         {/* 2. Identificação do usuário do SUS (identificação + endereço) */}
         <Secao titulo="Identificação do usuário do SUS" cols={3}>
-          <div className="md:col-span-3">
+          <div className="md:col-span-3 flex flex-wrap items-center gap-2">
             <button type="button" disabled={!orgId} onClick={() => setPickerOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              <UserRound className="size-4" /> {state.pacienteId ? "Trocar paciente" : "Buscar / cadastrar paciente"}
+              <UserRound className="size-4" /> Buscar paciente
             </button>
-            {!orgId && <span className="ml-2 text-xs text-muted-foreground">Preencha o CNES (7 dígitos) para habilitar a busca de pacientes.</span>}
-            {state.pacienteId && <span className="ml-2 text-xs text-emerald-700">Paciente vinculado ao cadastro — os campos abaixo vieram do cadastro e podem ser ajustados.</span>}
+            {state.pacienteId && (
+              <button type="button" onClick={abrirEdicaoPaciente}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted">
+                <Pencil className="size-4" /> Editar paciente
+              </button>
+            )}
+            {!orgId && <span className="text-xs text-muted-foreground">Preencha o CNES (7 dígitos) para habilitar a busca de pacientes.</span>}
+            {state.pacienteId && <span className="text-xs text-emerald-700">Paciente vinculado — os dados abaixo estão travados; use <strong>Editar paciente</strong> para corrigir no cadastro.</span>}
           </div>
           <Campo label="Nº do prontuário (CAPS)">
             <Txt value={state.prontuario} onChange={(e) => set("prontuario", e.target.value.replace(/[^\d/]/g, ""))} />
           </Campo>
           <Campo label="Nome do paciente" span>
-            <Txt uppercase value={state.nomePaciente} onChange={(e) => set("nomePaciente", e.target.value)} />
+            <Txt uppercase readOnly={pt} value={state.nomePaciente} onChange={(e) => set("nomePaciente", e.target.value)} />
           </Campo>
           <Campo label="Cartão Nacional de Saúde (CNS)">
-            <Txt inputMode="numeric" maxLength={15} value={state.cnsPaciente}
+            <Txt inputMode="numeric" maxLength={15} readOnly={pt} value={state.cnsPaciente}
               onChange={(e) => set("cnsPaciente", e.target.value.replace(/\D/g, "").slice(0, 15))} />
           </Campo>
           <Campo label="CPF do paciente">
-            <Txt inputMode="numeric" maxLength={11} value={state.cpfPaciente}
+            <Txt inputMode="numeric" maxLength={11} readOnly={pt} value={state.cpfPaciente}
               onChange={(e) => set("cpfPaciente", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
           <Campo label="Sexo">
-            <Sel value={state.sexo} onChange={(v) => set("sexo", v)} options={[{ code: "M", label: "Masculino" }, { code: "F", label: "Feminino" }]} />
+            <Sel value={state.sexo} onChange={(v) => set("sexo", v)} options={[{ code: "M", label: "Masculino" }, { code: "F", label: "Feminino" }]} disabled={pt} />
           </Campo>
           <Campo label="Data de nascimento">
-            <Txt type="date" value={state.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
+            <Txt type="date" readOnly={pt} value={state.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
           </Campo>
           <Campo label="Nacionalidade">
             <Sel value={state.nacionalidade} onChange={(v) => set("nacionalidade", v)} options={RAAS_NACIONALIDADES} />
           </Campo>
           <Campo label="Raça/Cor">
-            <Sel value={state.raca} onChange={(v) => set("raca", v)} options={RACAS} />
+            <Sel value={state.raca} onChange={(v) => set("raca", v)} options={RACAS} disabled={pt} />
           </Campo>
           <Campo label="Etnia indígena (se raça = indígena)">
             <Txt inputMode="numeric" maxLength={4} value={state.etnia}
-              onChange={(e) => set("etnia", e.target.value.replace(/\D/g, "").slice(0, 4))} disabled={state.raca !== "05"} />
+              onChange={(e) => set("etnia", e.target.value.replace(/\D/g, "").slice(0, 4))} disabled={pt || state.raca !== "05"} />
           </Campo>
           <Campo label="Nome da mãe" span>
-            <Txt uppercase value={state.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} />
+            <Txt uppercase readOnly={pt} value={state.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} />
           </Campo>
           <Campo label="Nome do responsável" span>
             <Txt uppercase value={state.nomeResponsavel} onChange={(e) => set("nomeResponsavel", e.target.value)} />
           </Campo>
           <Campo label="Cód. IBGE município (7 díg.)">
-            <Txt inputMode="numeric" maxLength={7} value={state.municipioIbge}
+            <Txt inputMode="numeric" maxLength={7} readOnly={pt} value={state.municipioIbge}
               onChange={(e) => setState((p) => { const m = e.target.value.replace(/\D/g, "").slice(0, 7); return { ...p, municipioIbge: m, coduf: m ? ufDeMunicipio(m) : p.coduf }; })} />
           </Campo>
           <Campo label="UF (IBGE 2 díg.)">
-            <Txt inputMode="numeric" maxLength={2} value={state.coduf}
+            <Txt inputMode="numeric" maxLength={2} readOnly={pt} value={state.coduf}
               onChange={(e) => set("coduf", e.target.value.replace(/\D/g, "").slice(0, 2))} />
           </Campo>
           <Campo label="CEP de residência">
-            <Txt inputMode="numeric" maxLength={8} value={state.cep}
+            <Txt inputMode="numeric" maxLength={8} readOnly={pt} value={state.cep}
               onChange={(e) => set("cep", e.target.value.replace(/\D/g, "").slice(0, 8))} />
           </Campo>
           <Campo label="Endereço (logradouro)" span>
-            <Txt uppercase value={state.logradouro} onChange={(e) => set("logradouro", e.target.value)} />
+            <Txt uppercase readOnly={pt} value={state.logradouro} onChange={(e) => set("logradouro", e.target.value)} />
           </Campo>
           <Campo label="Número">
-            <Txt value={state.numero} onChange={(e) => set("numero", e.target.value.slice(0, 5))} />
+            <Txt readOnly={pt} value={state.numero} onChange={(e) => set("numero", e.target.value.slice(0, 5))} />
           </Campo>
           <Campo label="Complemento">
-            <Txt uppercase value={state.complemento} onChange={(e) => set("complemento", e.target.value.slice(0, 10))} />
+            <Txt uppercase readOnly={pt} value={state.complemento} onChange={(e) => set("complemento", e.target.value.slice(0, 10))} />
           </Campo>
           <Campo label="Bairro">
-            <Txt uppercase value={state.bairro} onChange={(e) => set("bairro", e.target.value.slice(0, 30))} />
+            <Txt uppercase readOnly={pt} value={state.bairro} onChange={(e) => set("bairro", e.target.value.slice(0, 30))} />
           </Campo>
           <Campo label="Telefone celular">
             <Txt inputMode="numeric" maxLength={11} value={state.celular}
               onChange={(e) => set("celular", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
           <Campo label="Telefone de contato">
-            <Txt inputMode="numeric" maxLength={11} value={state.telefone}
+            <Txt inputMode="numeric" maxLength={11} readOnly={pt} value={state.telefone}
               onChange={(e) => set("telefone", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
           <Campo label="E-mail">
-            <Txt type="email" value={state.email} onChange={(e) => set("email", e.target.value)} />
+            <Txt type="email" readOnly={pt} value={state.email} onChange={(e) => set("email", e.target.value)} />
           </Campo>
         </Secao>
 
@@ -715,6 +738,15 @@ function RaasPage() {
         <Modal titulo="Paciente do RAAS" onClose={() => setPickerOpen(false)} wide>
           <PacientePicker orgId={orgId} paciente={null} apenasTfd={false} marcarTfd={false} origem="bpa_i"
             onEscolhe={aoEscolherPaciente} />
+        </Modal>
+      )}
+
+      {editPaciente && orgId && (
+        <Modal titulo="Editar paciente" onClose={() => setEditPaciente(null)} wide>
+          <PacienteForm orgId={orgId} paciente={editPaciente} permitirAcompanhante={false}
+            apenasTfd={false} marcarTfd={false}
+            onSalvo={(p) => { setEditPaciente(null); aoEscolherPaciente(p); }}
+            onCancela={() => setEditPaciente(null)} />
         </Modal>
       )}
     </div>
