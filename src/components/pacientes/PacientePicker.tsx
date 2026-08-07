@@ -310,7 +310,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
           <div className={label}>Raça/Cor *</div>
           <select value={racaCor} onChange={(e) => setRacaCor(e.target.value)} className={campo + errCls("raca_cor")}>
             <option value="">—</option>
-            {RACAS.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
+            {RACAS.map((o) => <option key={o.code} value={o.code}>{o.code} — {o.label}</option>)}
           </select>
         </div>
         {racaCor === RACA_INDIGENA && (
