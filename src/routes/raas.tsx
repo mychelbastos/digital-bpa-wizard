@@ -397,7 +397,7 @@ function RaasPage() {
   const faltando: string[] = [];
   if (cnesEstab.length !== 7) faltando.push("CNES do estabelecimento (7 dígitos)");
   if (!/^\d{6}$/.test(state.competencia)) faltando.push("Competência");
-  if (!state.validadeInicio) faltando.push("Início da validade");
+  if (!state.validadeInicio) faltando.push("Data de admissão");
   if (!docPaciente()) faltando.push("CNS ou CPF do paciente");
   if (!state.nomePaciente.trim()) faltando.push("Nome do paciente");
   if (!state.origemPaciente) faltando.push("Origem do paciente");
@@ -591,11 +591,8 @@ function RaasPage() {
 
         {/* 3. Dados do atendimento */}
         <Secao titulo="Dados do atendimento" cols={3}>
-          <Campo label="Início da validade">
+          <Campo label="Data de admissão">
             <Txt type="date" value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
-          </Campo>
-          <Campo label="Fim da validade (opcional)">
-            <Txt type="date" value={state.validadeFim} onChange={(e) => set("validadeFim", e.target.value)} />
           </Campo>
           <Campo label="Mês de atendimento (competência)">
             <Txt type="month" value={compParaInput(state.competencia)}
