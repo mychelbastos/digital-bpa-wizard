@@ -355,6 +355,7 @@ function Home() {
             chave={profDetalhe}
             rows={filtradas.filter((r) => (chaveProfissional(r)) === profDetalhe)}
             nomeProc={nomeProc}
+            nomeCbo={nomeCbo}
             rotuloCid={rotuloCid}
             competenciaLabel={mesLabel(competencia)}
             logo={logoOrg}
@@ -638,7 +639,7 @@ interface ItemAgrupado { key: string; name: string; quantidade: number; atendime
 // conteúdo do modal) e dispara a impressão nativa do navegador. Não mexe no CSS da
 // dashboard — o relatório é um documento próprio, com seu próprio estilo de impressão.
 function imprimirProducaoProfissional(d: {
-  nome: string; cns: string | null; cbo: string | null; competenciaLabel: string;
+  nome: string; cns: string | null; cbo: string | null; cboNome: string | null; competenciaLabel: string;
   logo: string | null;
   totalQtd: number; atendimentos: number; bpaC: number; bpaI: number;
   procedimentos: ItemAgrupado[]; unidades: ItemAgrupado[]; carateres: ItemAgrupado[]; cids: ItemAgrupado[];
@@ -699,8 +700,9 @@ function imprimirProducaoProfissional(d: {
       <h1>${esc(d.nome)}</h1>
       <div class="meta">
         <span>Competência: <b>${esc(d.competenciaLabel)}</b></span>
-        ${d.cns ? `<span>CNS: ${esc(d.cns)}</span>` : ""}
-        ${d.cbo ? `<span>CBO: ${esc(d.cbo)}</span>` : ""}
+        <span>CNS: ${esc(d.cns || "não informado")}</span>
+        <span>CBO: ${d.cbo ? esc(d.cbo) : "não informado"}${d.cboNome ? ` — ${esc(d.cboNome)}` : ""}</span>
+        ${d.unidades.map((u) => `<span>Unidade: ${esc(u.name)}${u.name !== u.key ? ` (CNES ${esc(u.key)})` : ""}</span>`).join("")}
       </div>
     </div>
     ${d.logo ? `<img class="logo" src="${esc(d.logo)}" alt="Logo" />` : ""}
@@ -715,7 +717,6 @@ function imprimirProducaoProfissional(d: {
     <h2>Procedimentos realizados</h2>
     <table><tbody>${d.procedimentos.map(linhaProc).join("")}</tbody></table>
   </section>
-  ${bloco("Unidades", d.unidades, false)}
   ${bloco("Caráter de atendimento", d.carateres, true)}
   ${bloco("CID mais frequentes", d.cids, false)}
   <footer>Gerado pelo SPA Digital em ${new Date().toLocaleString("pt-BR")}.</footer>
@@ -730,10 +731,11 @@ function imprimirProducaoProfissional(d: {
   win.onload = () => { win.focus(); win.print(); };
 }
 
-function ProfissionalDetalhe({ chave, rows, nomeProc, rotuloCid, competenciaLabel, logo, onClose }: {
+function ProfissionalDetalhe({ chave, rows, nomeProc, nomeCbo, rotuloCid, competenciaLabel, logo, onClose }: {
   chave: string;
   rows: ProducaoBpaRow[];
   nomeProc: (codigo: string) => string | null;
+  nomeCbo: (cbo: string | null) => string | null;
   rotuloCid: (cid: string | null) => string;
   competenciaLabel: string;
   logo: string | null;
@@ -757,10 +759,11 @@ function ProfissionalDetalhe({ chave, rows, nomeProc, rotuloCid, competenciaLabe
   const cids = agrupar(rows.filter((r) => r.cid), (r) => r.cid || "?", (r) => rotuloCid(r.cid));
   const carateres = agrupar(rows.filter((r) => r.carater), (r) => r.carater || "?", (r) => nomeCarater(r.carater) || `Caráter ${r.carater}`);
 
+  const cboNome = nomeCbo(cbo);
   const [fichasOpen, setFichasOpen] = useState(false);
 
   const imprimir = () => imprimirProducaoProfissional({
-    nome, cns, cbo, competenciaLabel, logo,
+    nome, cns, cbo, cboNome, competenciaLabel, logo,
     totalQtd, atendimentos, bpaC, bpaI,
     procedimentos, unidades, carateres, cids,
   });
@@ -773,16 +776,28 @@ function ProfissionalDetalhe({ chave, rows, nomeProc, rotuloCid, competenciaLabe
         onClick={(e) => e.stopPropagation()}
       >
         <header className="sticky top-0 flex items-start justify-between gap-3 border-b border-border bg-card/95 px-5 py-4 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
               {(nome || "?").trim().slice(0, 2).toUpperCase()}
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-foreground">{nome}</h2>
-              <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                {cns && <span className="inline-flex items-center gap-1"><IdCard className="size-3" /> CNS {cns}</span>}
-                {cbo && <span className="inline-flex items-center gap-1"><Stethoscope className="size-3" /> CBO {cbo}</span>}
-              </p>
+              <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                <p className="flex items-start gap-1.5">
+                  <IdCard className="mt-0.5 size-3 shrink-0" />
+                  <span>CNS {cns || "não informado"}</span>
+                </p>
+                <p className="flex items-start gap-1.5">
+                  <Stethoscope className="mt-0.5 size-3 shrink-0" />
+                  <span>CBO {cbo || "não informado"}{cboNome ? ` — ${cboNome}` : ""}</span>
+                </p>
+                {unidades.map((u) => (
+                  <p key={u.key} className="flex items-start gap-1.5">
+                    <MapPin className="mt-0.5 size-3 shrink-0" />
+                    <span>{u.name}{u.name !== u.key ? ` — CNES ${u.key}` : ""}</span>
+                  </p>
+                ))}
+              </div>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -821,16 +836,6 @@ function ProfissionalDetalhe({ chave, rows, nomeProc, rotuloCid, competenciaLabe
                     {p.name !== p.key && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{p.key}</span>}
                   </span>
                   <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">{p.quantidade.toLocaleString("pt-BR")}</span>
-                </li>
-              ))}
-            </ul>
-          </DetalheBloco>
-
-          <DetalheBloco titulo="Unidades" icon={<MapPin className="size-3.5" />}>
-            <ul className="flex flex-wrap gap-2">
-              {unidades.map((u) => (
-                <li key={u.key} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs text-foreground">
-                  {u.name} <span className="rounded-full bg-primary/10 px-1.5 font-semibold tabular-nums text-primary">{u.quantidade}</span>
                 </li>
               ))}
             </ul>
