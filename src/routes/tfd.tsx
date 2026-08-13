@@ -1134,6 +1134,7 @@ function ProfPicker(props: {
   const [termo, setTermo] = useState(props.nome || props.cns);
   const [sug, setSug] = useState<{ cns: string; nome: string }[]>([]);
   const [aberto, setAberto] = useState(false);
+  const [cboOpcoes, setCboOpcoes] = useState<{ codigo: string; descricao: string }[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -1146,8 +1147,11 @@ function ProfPicker(props: {
   const escolher = async (p: { cns: string; nome: string }) => {
     setTermo(p.nome);
     setAberto(false);
+    setCboOpcoes([]);
     const cbos = await buscarCbosVinculo(p.cns, cnes);
-    props.onMuda({ cns: p.cns, nome: p.nome, cbo: cbos[0]?.codigo ?? "" });
+    // 1 vínculo: auto-preenche. >1: oferece a escolha do CBO do momento. 0: deixa manual.
+    props.onMuda({ cns: p.cns, nome: p.nome, cbo: cbos.length === 1 ? cbos[0].codigo : "" });
+    if (cbos.length > 1) setCboOpcoes(cbos);
   };
 
   return (
@@ -1171,6 +1175,22 @@ function ProfPicker(props: {
         <input value={props.cbo} onChange={(e) => props.onMuda({ cns: props.cns, nome: props.nome, cbo: digitos(e.target.value).slice(0, 6) })}
           placeholder="CBO" className={campo} />
       </div>
+      {cboOpcoes.length > 1 && (
+        <div className="overflow-hidden rounded-md border border-amber-300 bg-amber-50 sm:col-span-3">
+          <div className="flex items-center justify-between px-3 py-1.5 text-xs font-medium text-amber-800">
+            <span>Este profissional tem mais de um CBO aqui — escolha o do momento:</span>
+            <button type="button" className="ml-2 shrink-0 text-amber-700 hover:underline"
+              onClick={() => setCboOpcoes([])}>fechar</button>
+          </div>
+          {cboOpcoes.map((c) => (
+            <button key={c.codigo} type="button"
+              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-amber-100"
+              onClick={() => { props.onMuda({ cns: props.cns, nome: props.nome, cbo: c.codigo }); setCboOpcoes([]); }}>
+              <span className="font-mono">{c.codigo}</span> — {c.descricao}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

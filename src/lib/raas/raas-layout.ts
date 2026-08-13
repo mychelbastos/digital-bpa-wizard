@@ -97,6 +97,7 @@ export interface RaasAcao {
   procedimentoNome: string; // só exibição (não exportado)
   cbo: string; // ras_cbo — CBO do executante (6)
   cnsExecutante: string; // ras_cns — CNS do executante (15)
+  cnsExecutanteNome: string; // só exibição (não exportado) — nome do profissional executante
   dataExec: string; // ras_dtexec — "YYYY-MM-DD"
   servico: string; // ras_srv (3)
   classificacao: string; // ras_class (3)
@@ -110,6 +111,7 @@ export function emptyAcao(): RaasAcao {
     procedimentoNome: "",
     cbo: "",
     cnsExecutante: "",
+    cnsExecutanteNome: "",
     dataExec: "",
     servico: "",
     classificacao: "",

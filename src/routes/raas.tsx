@@ -7,6 +7,7 @@ import { carregarPaciente, type Paciente } from "@/lib/pacientes";
 import { orgDoCnes } from "@/lib/tfd/tfd";
 import { buscarEstabelecimento, buscarEstabelecimentosPorNome, type EstabelecimentoSug } from "@/lib/bpa-i-v2/estabelecimentos";
 import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { buscarProfissionais, buscarCbosVinculo, sincronizarProfissionais, type ProfissionalCache, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
@@ -205,6 +206,86 @@ function ProcedimentoInput({ codigo, nome, onPick }: {
   );
 }
 
+// Autocomplete do profissional EXECUTANTE da ação (linha 16): busca por nome no cache local
+// do estabelecimento (CNES). Ao escolher, preenche CNS + nome e busca o(s) CBO(s) do vínculo
+// naquele estabelecimento — auto-preenche quando há só um; oferece a escolha quando o
+// profissional tem mais de um vínculo (CBO) ali. 0 vínculos: deixa o CBO p/ digitação manual.
+function ProfExecutanteInput({ cnes, nome, onPatch }: {
+  cnes: string;
+  nome: string;
+  onPatch: (patch: Partial<RaasAcao>) => void;
+}) {
+  const [termo, setTermo] = useState("");
+  const [sug, setSug] = useState<ProfissionalCache[]>([]);
+  const [aberto, setAberto] = useState(false);
+  const [cboOpcoes, setCboOpcoes] = useState<CboVinculo[]>([]);
+  const semCnes = cnes.length !== 7;
+
+  useEffect(() => {
+    if (semCnes) { setSug([]); return; }
+    const t = setTimeout(async () => {
+      if (termo.trim().length < 2) { setSug([]); return; }
+      setSug(await buscarProfissionais(cnes, termo.trim()));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [termo, cnes, semCnes]);
+
+  const escolher = (p: ProfissionalCache) => {
+    setAberto(false);
+    setSug([]);
+    setCboOpcoes([]);
+    onPatch({ cnsExecutante: p.cns, cnsExecutanteNome: p.nome });
+    buscarCbosVinculo(p.cns, cnes).then((cbos) => {
+      if (cbos.length === 1) onPatch({ cbo: cbos[0].codigo });
+      else if (cbos.length > 1) setCboOpcoes(cbos); // deixa a pessoa escolher o vínculo do momento
+    });
+  };
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-1">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          value={aberto ? termo : nome}
+          onChange={(e) => { setTermo(e.target.value.toUpperCase()); setAberto(true); }}
+          onFocus={() => { setTermo(""); setAberto(true); }}
+          onBlur={() => setTimeout(() => setAberto(false), 150)}
+          placeholder={semCnes ? "Informe o CNES do estabelecimento acima" : "Nome do profissional"}
+          disabled={semCnes}
+          className={`${inputCls} w-full ${semCnes ? lockedCls : ""}`}
+        />
+      </div>
+      {aberto && sug.length > 0 && (
+        <div className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-popover shadow-lg">
+          {sug.map((p) => (
+            <button key={p.cns} type="button" onMouseDown={(e) => { e.preventDefault(); escolher(p); }}
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">
+              <div className="font-medium leading-tight">{p.nome}</div>
+              <div className="font-mono text-xs text-muted-foreground">CNS {p.cns}</div>
+            </button>
+          ))}
+        </div>
+      )}
+      {cboOpcoes.length > 1 && (
+        <div className="mt-1.5 overflow-hidden rounded-lg border border-amber-300 bg-amber-50">
+          <div className="flex items-center justify-between px-3 py-1.5 text-xs font-medium text-amber-800">
+            <span>Este profissional tem mais de um CBO aqui — escolha o do momento:</span>
+            <button type="button" className="ml-2 shrink-0 text-amber-700 hover:underline"
+              onMouseDown={(e) => { e.preventDefault(); setCboOpcoes([]); }}>fechar</button>
+          </div>
+          {cboOpcoes.map((c) => (
+            <button key={c.codigo} type="button"
+              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-amber-100"
+              onMouseDown={(e) => { e.preventDefault(); onPatch({ cbo: c.codigo }); setCboOpcoes([]); }}>
+              <span className="font-mono">{c.codigo}</span> — {c.descricao}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RaasPage() {
   const [state, setState] = useState<RaasState>(emptyRaasState);
   const [hydrated, setHydrated] = useState(false);
@@ -257,6 +338,7 @@ function RaasPage() {
     if (cnesEstab.length !== 7) { setOrgId(null); return; }
     let cancel = false;
     orgDoCnes(cnesEstab).then((o) => { if (!cancel) setOrgId(o); });
+    void sincronizarProfissionais(cnesEstab); // popula o cache p/ o autocomplete de executante
     buscarEstabelecimento(cnesEstab).then((nome) => {
       if (cancel || !nome) return;
       estabAutoCnesRef.current = cnesEstab;
@@ -730,13 +812,18 @@ function RaasPage() {
                     <ProcedimentoInput codigo={a.procedimento} nome={a.procedimentoNome}
                       onPick={(codigo, nome) => updateAcao(i, { procedimento: codigo, procedimentoNome: nome })} />
                   </div>
+                  <div className="md:col-span-3">
+                    <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Profissional executante</span>
+                    <ProfExecutanteInput cnes={cnesEstab} nome={a.cnsExecutanteNome}
+                      onPatch={(patch) => updateAcao(i, patch)} />
+                  </div>
                   <Campo label="CBO executante">
                     <Txt inputMode="numeric" maxLength={6} value={a.cbo}
                       onChange={(e) => updateAcao(i, { cbo: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
                   </Campo>
                   <Campo label="CNS executante">
                     <Txt inputMode="numeric" maxLength={15} value={a.cnsExecutante}
-                      onChange={(e) => updateAcao(i, { cnsExecutante: e.target.value.replace(/\D/g, "").slice(0, 15) })} />
+                      onChange={(e) => updateAcao(i, { cnsExecutante: e.target.value.replace(/\D/g, "").slice(0, 15), cnsExecutanteNome: "" })} />
                   </Campo>
                   <Campo label="Data da execução">
                     <Txt type="date" value={a.dataExec} onChange={(e) => updateAcao(i, { dataExec: e.target.value })} />
