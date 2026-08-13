@@ -313,7 +313,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Data de admissão (CAPS)</div>
-          <input type="date" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} data-nocaps className={campo} />
+          <input type="date" min="1900-01-01" max="9999-12-31" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} data-nocaps className={campo} />
         </div>
         <div>
           <div className={label}>CNS</div>
@@ -339,7 +339,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         </div>
         <div>
           <div className={label}>Nascimento *</div>
-          <input type="date" value={nascimento} onChange={(e) => setNascimento(e.target.value)} className={campo + errCls("nascimento")} />
+          <input type="date" min="1900-01-01" max="9999-12-31" value={nascimento} onChange={(e) => setNascimento(e.target.value)} className={campo + errCls("nascimento")} />
         </div>
         <div>
           <div className={label}>Nacionalidade *</div>
