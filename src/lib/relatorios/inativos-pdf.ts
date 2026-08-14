@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { desenharCabecalhoPdf } from "@/lib/relatorio-comum";
+import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
 import type { ProfInativoRow } from "./inativos";
 
 const compLabel = (c: string | null) => (c && /^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : "—");
@@ -70,5 +71,6 @@ export function construirPdfInativos(d: { rows: ProfInativoRow[]; subtitulo: str
   const nunca = d.rows.length - sumiu;
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(9.5); pdf.setTextColor(0);
   pdf.text(`Total: ${d.rows.length}  ·  ${sumiu} sem produção no mês  ·  ${nunca} nunca lançaram`, margem, y + 6);
+  carimbarRodapeSpa(pdf);
   return pdf;
 }

@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
 import type { ProducaoBpaRow } from "@/lib/dashboard-producao";
 
 // Relatórios de PRODUÇÃO (BPA-I/BPA-C) a partir das linhas achatadas do dashboard
@@ -209,5 +210,6 @@ export function construirPdfProducao(d: DadosRelatorioProducao): jsPDF {
   pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(...CINZA);
   pdf.text("Assinatura do responsável", cx, sy + (d.responsavel ? 26 : 14), { align: "center" });
 
+  carimbarRodapeSpa(pdf);
   return pdf;
 }

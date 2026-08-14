@@ -15,6 +15,7 @@ import { carregarResumoFpo, type FpoResumoUnidade } from "@/lib/fpo/fpo";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { carregarLogoOrg } from "@/lib/org-logo";
 import spaEmblem from "@/assets/spa-emblem.png";
+import { SPA_EMBLEMA_DATA_URI } from "@/lib/spa-emblem-pdf";
 
 const CARATER_NOME = new Map(CARATERES.map((c) => [c.code, c.label]));
 const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? null : null);
@@ -719,7 +720,7 @@ function imprimirProducaoProfissional(d: {
   </section>
   ${bloco("Caráter de atendimento", d.carateres, true)}
   ${bloco("CID mais frequentes", d.cids, false)}
-  <footer>Gerado pelo SPA Digital em ${new Date().toLocaleString("pt-BR")}.</footer>
+  <footer><img src="${SPA_EMBLEMA_DATA_URI}" alt="" style="height:12px;width:12px;vertical-align:-2px;margin-right:5px;opacity:.7" />Gerado pelo SPA Digital em ${new Date().toLocaleString("pt-BR")}.</footer>
 </body></html>`;
 
   const win = window.open("", "_blank");

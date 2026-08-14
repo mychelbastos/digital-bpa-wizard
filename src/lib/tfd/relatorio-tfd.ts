@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { desenharCabecalhoPdf } from "@/lib/relatorio-comum";
+import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
 
 export interface DadosRelatorioTfd {
   logo?: string | null;
@@ -76,6 +77,7 @@ export function construirPdfTfd(d: DadosRelatorioTfd): jsPDF {
   pdf.text(`Total: ${d.totalTfd} TFD · ${d.totalViagens} viagens`, margem, y + 6);
   pdf.text(d.totalRS, margem + dispon, y + 6, { align: "right" });
 
+  carimbarRodapeSpa(pdf);
   return pdf;
 }
 
@@ -166,5 +168,6 @@ export function construirPdfTfdPorUnidade(d: {
   pdf.text(`Total geral: ${d.totalGeralTfd} TFD · ${d.totalGeralViagens} viagens`, margem, y + 6);
   pdf.text(d.totalGeralRS, margem + dispon, y + 6, { align: "right" });
 
+  carimbarRodapeSpa(pdf);
   return pdf;
 }

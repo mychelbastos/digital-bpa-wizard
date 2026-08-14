@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
 import type { FpoComparacaoRow } from "./fpo";
 
 // Relatório PDF do FPO × Produção de uma unidade/competência. jsPDF nativo (texto/retângulos),
@@ -229,6 +230,7 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
   pdf.setTextColor(...CINZA);
   pdf.text("Assinatura do responsável", cx, sy + (responsavel ? 26 : 14), { align: "center" });
 
+  carimbarRodapeSpa(pdf);
   return pdf;
 }
 
@@ -414,5 +416,6 @@ export function construirPdfFpoPorUnidade({ unidades, competencia, logo, respons
   pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(...CINZA);
   pdf.text("Assinatura do responsável", cx2, sy + (responsavel ? 26 : 14), { align: "center" });
 
+  carimbarRodapeSpa(pdf);
   return pdf;
 }

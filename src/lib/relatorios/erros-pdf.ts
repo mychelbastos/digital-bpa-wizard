@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { desenharCabecalhoPdf } from "@/lib/relatorio-comum";
+import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
 import { ROTULO_CATEGORIA, type ErroItem } from "./erros";
 
 const compLabel = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c);
@@ -64,5 +65,6 @@ export function construirPdfErros(d: { itens: ErroItem[]; subtitulo: string; log
   const nAvisos = d.itens.length - nErros;
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(9.5); pdf.setTextColor(0);
   pdf.text(`Total: ${d.itens.length}  ·  ${nErros} erro(s)  ·  ${nAvisos} aviso(s)`, margem, y + 6);
+  carimbarRodapeSpa(pdf);
   return pdf;
 }
