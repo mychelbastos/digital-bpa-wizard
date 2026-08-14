@@ -19,13 +19,17 @@ interface Props {
   // e compartilhado com as demais checagens — evita repetir a mesma consulta aqui).
   naoEncontrado: boolean;
   nomeEncontrado: string | null;
+  // Linha duplicada na ficha (mesmo procedimento + idade de outra): acende vermelho, sem
+  // o balão "não encontrado no SIGTAP" (o código existe; o problema é a repetição).
+  duplicada?: boolean;
+  duplicadaTitle?: string;
 }
 
 // Código do Procedimento: autocomplete por histórico de uso (< 10 dígitos, igual ao
 // HistoricoField) + indicador visual de validade contra o SIGTAP (borda vermelha
 // quando completo mas não encontrado — mesmo padrão do CNS inválido — e balão com o
 // nome oficial quando encontrado, como confirmação de que é o código certo).
-export function ProcedimentoField({ id, top, height, boxes, values, onChange, clearable, onRepeat, naoEncontrado, nomeEncontrado }: Props) {
+export function ProcedimentoField({ id, top, height, boxes, values, onChange, clearable, onRepeat, naoEncontrado, nomeEncontrado, duplicada, duplicadaTitle }: Props) {
   const code = values.join("");
   const completo = code.length === boxes.length;
   const [sugs, setSugs] = useState<SugestaoHistorico[]>([]);
@@ -75,7 +79,8 @@ export function ProcedimentoField({ id, top, height, boxes, values, onChange, cl
         registerRefs={(els) => { refsRef.current = els; }}
         clearable={clearable}
         onRepeat={onRepeat}
-        invalid={naoEncontrado}
+        invalid={naoEncontrado || !!duplicada}
+        title={duplicada ? duplicadaTitle : undefined}
         compact
       />
       {openSugs && (

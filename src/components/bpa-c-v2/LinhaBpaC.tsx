@@ -14,6 +14,9 @@ interface Props {
   prevRow?: RowData;
   // Competência do boletim (AAAAMM) — usada como competência da linha no crivo SIGTAP.
   competencia: string | null;
+  // Duplicidade dentro da ficha: esta linha tem o MESMO procedimento e a MESMA idade de outra.
+  duplicada?: boolean;
+  dupDeLinha?: number; // nº (1-based) da primeira linha igual, p/ o aviso
   onUpdate: (field: keyof RowData, vals: string[]) => void;
   // Reporta ao pai os motivos de erro desta linha (crivo SIGTAP) — o pai agrega p/
   // acender o resumo e bloquear a geração enquanto houver campo em vermelho.
@@ -23,8 +26,9 @@ interface Props {
 // Uma linha do BPA-C com o crivo do SIGTAP: Procedimento (existe + nome no balão),
 // Idade (faixa etária), Quantidade (máximo) e CBO (compatível com o procedimento).
 // Extraído p/ chamar o hook de validação 1x por linha.
-export function LinhaBpaC({ i, top, height, row, prevRow, competencia, onUpdate, onValidacao }: Props) {
+export function LinhaBpaC({ i, top, height, row, prevRow, competencia, duplicada, dupDeLinha, onUpdate, onValidacao }: Props) {
   const v = useValidacaoLinhaBpaC(row, competencia);
+  const dupTitle = duplicada ? `Mesma idade e procedimento da Linha ${dupDeLinha} — some as quantidades numa linha só.` : undefined;
   useEffect(() => {
     onValidacao?.(i, v.motivos);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -40,7 +44,8 @@ export function LinhaBpaC({ i, top, height, row, prevRow, competencia, onUpdate,
       <ProcedimentoField id={`p-${i}`} top={top} height={height} boxes={procBoxes}
         values={row.procedimento} onChange={(vv) => onUpdate("procedimento", vv)}
         onRepeat={repetirProc}
-        naoEncontrado={v.naoEncontrado} nomeEncontrado={v.procNome} />
+        naoEncontrado={v.naoEncontrado} nomeEncontrado={v.procNome}
+        duplicada={duplicada} duplicadaTitle={dupTitle} />
       <CboField id={`c-${i}`} top={top} height={height} boxes={cboBoxes}
         values={row.cbo} onChange={(vv) => onUpdate("cbo", vv)}
         onRepeat={repetirCbo}
@@ -48,7 +53,7 @@ export function LinhaBpaC({ i, top, height, row, prevRow, competencia, onUpdate,
       <DigitBoxes id={`i-${i}`} top={top} height={height} boxes={idadeBoxes}
         values={row.idade} onChange={(vv) => onUpdate("idade", vv)}
         rightAlign
-        invalid={v.idadeInvalida} title={v.idadeMotivo} />
+        invalid={v.idadeInvalida || !!duplicada} title={duplicada ? dupTitle : v.idadeMotivo} />
       <DigitBoxes id={`q-${i}`} top={top} height={height} boxes={qtdBoxes}
         values={row.quantidade} onChange={(vv) => onUpdate("quantidade", vv)}
         rightAlign

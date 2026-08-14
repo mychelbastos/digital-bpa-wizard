@@ -210,7 +210,27 @@ function BpaCV3() {
   const onValidacaoLinha = useCallback((i: number, motivos: string[]) => {
     setErrosLinha((prev) => (prev[i]?.join("|") === motivos.join("|") ? prev : { ...prev, [i]: motivos }));
   }, []);
-  const motivosInvalidos = Object.entries(errosLinha).flatMap(([i, ms]) => ms.map((m) => `Linha ${Number(i) + 1}: ${m}`));
+  const motivosSigtap = Object.entries(errosLinha).flatMap(([i, ms]) => ms.map((m) => `Linha ${Number(i) + 1}: ${m}`));
+  // Duplicidade DENTRO da ficha: duas linhas com o MESMO procedimento e a MESMA idade são a
+  // mesma sequência — no BPA-C consolidado deveriam ser UMA linha com as quantidades somadas.
+  // duplicadaDe[i] = índice (0-based) da primeira linha igual; a linha i é a repetida.
+  const soDig = (a: string[]) => (a ?? []).join("").replace(/\D/g, "");
+  const duplicadaDe: Record<number, number> = {};
+  {
+    const vistos = new Map<string, number>();
+    state.rows.forEach((r, i) => {
+      const proc = soDig(r.procedimento);
+      if (proc.length !== 10) return; // só conta linha com procedimento completo
+      const chave = `${proc}|${soDig(r.idade)}`;
+      const antes = vistos.get(chave);
+      if (antes !== undefined) duplicadaDe[i] = antes;
+      else vistos.set(chave, i);
+    });
+  }
+  const avisosDuplicidade = Object.entries(duplicadaDe).map(
+    ([i, de]) => `Linha ${Number(i) + 1}: mesma idade e procedimento da Linha ${de + 1} — some as quantidades numa linha só.`,
+  );
+  const motivosInvalidos = [...motivosSigtap, ...avisosDuplicidade];
   const temCamposInvalidos = motivosInvalidos.length > 0;
 
   useEffect(() => {
@@ -625,7 +645,7 @@ function BpaCV3() {
           <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-800">
             <div className="mx-auto max-w-[1100px]">
               <p className="font-semibold">
-                {motivosInvalidos.length === 1 ? "1 campo em vermelho" : `${motivosInvalidos.length} campos em vermelho`} (crivo SIGTAP) — corrija antes de gerar o PDF:
+                {motivosInvalidos.length === 1 ? "1 campo em vermelho" : `${motivosInvalidos.length} campos em vermelho`} (crivo SIGTAP / duplicidade) — corrija antes de gerar o PDF:
               </p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4">
                 {motivosInvalidos.map((m, idx) => <li key={idx}>{m}</li>)}
@@ -699,6 +719,8 @@ function BpaCV3() {
             <LinhaBpaC key={i} i={i} top={top} height={ROW_HEIGHTS[i]}
               row={state.rows[i]} prevRow={i > 0 ? state.rows[i - 1] : undefined}
               competencia={competencia()}
+              duplicada={duplicadaDe[i] !== undefined}
+              dupDeLinha={duplicadaDe[i] !== undefined ? duplicadaDe[i] + 1 : undefined}
               onUpdate={(field, vals) => updateRow(i, field, vals)}
               onValidacao={onValidacaoLinha} />
           ))}
