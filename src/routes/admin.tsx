@@ -189,7 +189,13 @@ function Admin() {
   };
 
   // Toggle no nível da PESSOA: aplica a todos os vínculos. Se já é override, reseta ao padrão.
+  // Conta do dono do sistema (super-admin): intocável por quem não é super-admin. O banco
+  // também bloqueia (defesa em profundidade); aqui evitamos a tentativa e avisamos.
+  const protegido = (userId: string) => !superAdmin && donos.some((d) => d.user_id === userId);
+  const avisarProtegido = () => toast.error("Conta do dono do sistema — só o próprio dono pode alterar.");
+
   const togglePessoa = async (pessoa: PessoaAdmin, p: PermissaoCat, est: EstadoPerm) => {
+    if (protegido(pessoa.user_id)) return avisarProtegido();
     const chave = `${pessoa.user_id}:${p.codigo}`;
     setSalvando(chave);
     try {
@@ -204,6 +210,7 @@ function Admin() {
   };
 
   const trocarCargo = async (pessoa: PessoaAdmin, papel: string) => {
+    if (protegido(pessoa.user_id)) return avisarProtegido();
     if (papel === (pessoa.papeis.length === 1 ? pessoa.papeis[0] : "")) return;
     if (
       !window.confirm(
@@ -227,6 +234,7 @@ function Admin() {
 
   // Override por UNIDADE (um vínculo). Mesma lógica de ciclo contra o padrão do cargo do vínculo.
   const toggleVinculo = async (v: VinculoAdmin, p: PermissaoCat) => {
+    if (protegido(v.user_id)) return avisarProtegido();
     const padrao = (cargoDefaults[v.papel] ?? []).includes(p.codigo);
     const ativa = v.permissoes.includes(p.codigo);
     const override = ativa !== padrao;
@@ -244,6 +252,7 @@ function Admin() {
   };
 
   const vincular = async (pessoa: PessoaAdmin, cnes: string, papel: string) => {
+    if (protegido(pessoa.user_id)) return avisarProtegido();
     const chave = `${pessoa.user_id}:vinc`;
     setSalvando(chave);
     try {
@@ -258,6 +267,7 @@ function Admin() {
   };
 
   const desvincular = async (pessoa: PessoaAdmin, cnes: string) => {
+    if (protegido(pessoa.user_id)) return avisarProtegido();
     if (
       !window.confirm(
         `Desvincular ${pessoa.email} do CNES ${cnes}? ` +
