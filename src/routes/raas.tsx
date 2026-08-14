@@ -14,6 +14,7 @@ import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
+import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import {
   emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
   RAAS_ORIGEM_PACIENTE, RAAS_DESTINO_PACIENTE, RAAS_TIPO_DROGA, RAAS_LOCAL_REALIZACAO,
@@ -36,6 +37,10 @@ export const Route = createFileRoute("/raas")({
 const STORAGE_KEY = "raas-state-v1";
 const FICHA_ID_KEY = "raas-ficha-id";
 const FICHA_TITULO_KEY = "raas-ficha-titulo";
+
+// CNES de CAPS que pré-preenchem o cabeçalho do RAAS em ficha nova (o nome/org derivam do
+// CNES). Hoje: Ruy Barbosa/BA → 5847524 (CAPS RUY BARBOSA). Só vale se o usuário tiver vínculo.
+const CNES_RAAS_PADRAO = new Set(["5847524"]);
 
 // "AAAAMM" -> valor do <input type="month"> ("AAAA-MM") e -> rótulo "MM/AAAA".
 const compParaInput = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(0, 4)}-${c.slice(4, 6)}` : "");
@@ -328,6 +333,22 @@ function RaasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Pré-preenche o CNES do CAPS padrão do usuário (ex.: Ruy Barbosa → 5847524 "CAPS RUY
+  // BARBOSA") em ficha NOVA sem CNES. Detecta pelos vínculos; nome/org vêm do efeito de CNES.
+  const cnesPadraoRef = useRef("");
+  useEffect(() => {
+    if (!hydrated) return;
+    let cancel = false;
+    carregarVinculosUsuario().then((vincs) => {
+      if (cancel) return;
+      const cnes = vincs.map((v) => v.cnes).find((c) => CNES_RAAS_PADRAO.has(c)) ?? "";
+      cnesPadraoRef.current = cnes;
+      if (cnes) setState((p) => (p.cnes.replace(/\D/g, "") ? p : { ...p, cnes }));
+    });
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   // Autosave local.
   useEffect(() => {
     if (!hydrated) return;
@@ -426,7 +447,10 @@ function RaasPage() {
     setSalvando(false);
   };
 
-  const novaFicha = () => { setState(emptyRaasState()); limparFichaPersistida(); };
+  const novaFicha = () => {
+    setState(cnesPadraoRef.current ? { ...emptyRaasState(), cnes: cnesPadraoRef.current } : emptyRaasState());
+    limparFichaPersistida();
+  };
 
   // ----- paciente: autofill a partir do cadastro compartilhado -----
   const aoEscolherPaciente = (p: Paciente | null) => {
