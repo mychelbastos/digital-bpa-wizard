@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject, type KeyboardEvent as RKeyboardEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2 } from "lucide-react";
+import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
 import { focarProximoCampo } from "@/lib/foco-campos";
 import { carregarNomesProcedimentos, carregarDescricoesCid } from "@/lib/dashboard-producao";
 import { buscarEstabelecimento, buscarEstabelecimentosPorNome } from "@/lib/bpa-i-v2/estabelecimentos";
 import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { buscarProfissionais, sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
+import { orgDoCnes } from "@/lib/tfd/tfd";
+import { carregarPaciente, type Paciente } from "@/lib/pacientes";
+import type { ComboOption } from "@/lib/bpa-i-v2/racas";
+import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePicker";
+import { ExcluirPacienteModal } from "@/components/pacientes/ExcluirPacienteModal";
 
 const normTxt = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 // Uma opção do autocomplete: rótulo + sublegenda + ação de aplicar (preenche os campos).
@@ -42,9 +48,30 @@ export interface CampoForm {
   alvo?: string; // key do campo a preencher com o nome/descrição encontrado
   alvos?: Record<string, string>; // vários alvos (ex.: CEP → { ibge, uf, municipio })
   // Autocomplete por NOME → sugere e preenche o código/CNES + campos relacionados:
-  autocomplete?: "estabelecimento" | "procedimento" | "municipio";
+  autocomplete?: "estabelecimento" | "procedimento" | "municipio" | "profissional";
   codAlvo?: string; // key do campo de código (celulas) a preencher ao escolher
   cnesAlvo?: string; // idem, para estabelecimento (compat)
+  // Autocomplete de profissional (por nome, no cache do CNES):
+  cnsAlvo?: string; // key do campo de CNS (celulas) a preencher ao escolher
+  cnesCampo?: string; // key do campo CNES que define a base de profissionais
+  // Seletor de opções fixas (código — nome), ex.: raça/cor. Guarda o CÓDIGO no campo:
+  opcoes?: ComboOption[];
+}
+
+// Espalha os dados de um paciente escolhido pelos campos do overlay (ver integracaoPaciente).
+export interface PreenchePaciente {
+  texto: (key: string, v: string) => void;      // campo de texto simples
+  celulas: (key: string, digitos: string) => void; // campo de casinhas (esq. p/ dir.)
+  bruto: (key: string, valor: string) => void;   // valor cru "seg|seg|..." (p/ ancorar à direita)
+  check: (key: string, on: boolean) => void;      // marca/desmarca (respeita o grupo)
+}
+
+// Integração do cadastro central de pacientes num formulário-overlay (ex.: APAC): habilita a
+// barra Buscar/Editar/Excluir paciente e, ao escolher, espalha os dados pelos campos.
+export interface IntegracaoPaciente {
+  cnesCampo: string; // key do campo CNES que define a organização (habilita a busca)
+  aoEscolher: (p: Paciente, api: PreenchePaciente) => void;
+  aoLimpar?: (api: PreenchePaciente) => void;
 }
 export interface CheckForm {
   key: string;
@@ -71,9 +98,10 @@ function filtrar(c: CampoForm, v: string): string {
   return c.maxLen ? s.slice(0, c.maxLen) : s;
 }
 
-export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas, calibravel = false }: {
+export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas, calibravel = false, integracaoPaciente }: {
   titulo: string; storageKey: string; campos: CampoForm[]; checks: CheckForm[]; paginas: PaginaForm[];
   calibravel?: boolean; // mostra as ferramentas de calibração (Editar posições / Contornos)
+  integracaoPaciente?: IntegracaoPaciente; // opt-in: barra + busca de paciente (ex.: APAC)
 }) {
   const rectsKey = `${storageKey}-rects`;
   const sheetRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -88,6 +116,12 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
   const [crivoStatus, setCrivoStatus] = useState<Record<string, "ok" | "erro" | "buscando">>({});
   const [crivoLabel, setCrivoLabel] = useState<Record<string, string>>({}); // selo (ex.: "CPF"/"CNS")
   const [campoFocado, setCampoFocado] = useState<string | null>(null); // key do campo em foco
+  // Integração do cadastro de pacientes (opt-in via integracaoPaciente).
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [pacienteVinc, setPacienteVinc] = useState<Paciente | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [editPaciente, setEditPaciente] = useState<Paciente | null>(null);
+  const [excluirOpen, setExcluirOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -120,6 +154,48 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
   const digitos = (c: CampoForm, v: string) => (c.celulas || c.data || c.hora ? v.split("|").join("") : v).trim();
   // Preenche um campo de casinhas (celulas) a partir de uma string ("2510332" -> "2|5|1|0|3|3|2").
   const preencherCelulas = (key: string, s: string) => setTxt(key, s.split("").join("|"));
+  // Dígitos "puros" de um campo (útil p/ ler o CNES atual, que é guardado como "seg|seg|...").
+  const digitosCampo = (key: string) => (txt[key] ?? "").split("|").join("").replace(/\D/g, "");
+
+  // ----- integração com o cadastro de pacientes (opt-in) -----
+  const cnesOrg = integracaoPaciente ? digitosCampo(integracaoPaciente.cnesCampo) : "";
+  useEffect(() => {
+    if (!integracaoPaciente) return;
+    if (cnesOrg.length !== 7) { setOrgId(null); return; }
+    let cancel = false;
+    orgDoCnes(cnesOrg).then((o) => { if (!cancel) setOrgId(o); });
+    void sincronizarProfissionais(cnesOrg); // popula o cache p/ o autocomplete de profissional
+    return () => { cancel = true; };
+  }, [cnesOrg, integracaoPaciente]);
+
+  const apiPreenche: PreenchePaciente = {
+    texto: (key, v) => setTxt(key, v),
+    celulas: (key, dig) => preencherCelulas(key, dig),
+    bruto: (key, v) => setTxt(key, v),
+    check: (key, on) => setChkState((e) => {
+      const grupo = checks.find((c) => c.key === key)?.grupo;
+      const novo = { ...e };
+      if (grupo) checks.forEach((c) => { if (c.grupo === grupo) novo[c.key] = false; });
+      novo[key] = on;
+      return novo;
+    }),
+  };
+  const aoEscolherPaciente = (p: Paciente | null) => {
+    setPickerOpen(false);
+    if (!p || !integracaoPaciente) return;
+    setPacienteVinc(p);
+    integracaoPaciente.aoEscolher(p, apiPreenche);
+    toast.success(`Paciente ${p.nome} preenchido.`);
+  };
+  const abrirEdicaoPaciente = async () => {
+    if (!pacienteVinc) return;
+    const p = await carregarPaciente(pacienteVinc.id);
+    if (p) setEditPaciente(p); else toast.error("Não foi possível carregar o paciente para edição.");
+  };
+  const limparVinculo = () => {
+    setPacienteVinc(null);
+    integracaoPaciente?.aoLimpar?.(apiPreenche);
+  };
 
   // Crivo: valida contra as tabelas do sistema e, quando há alvo, preenche o nome/descrição.
   const dispararCrivo = async (c: CampoForm, valor: string) => {
@@ -271,6 +347,37 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
         )}
       </header>
 
+      {integracaoPaciente && !editar && (
+        <div className="border-b bg-muted/30 px-4 py-2">
+          <div className="mx-auto flex max-w-[1100px] flex-wrap items-center gap-2">
+            <button type="button" disabled={!orgId} onClick={() => setPickerOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50">
+              <UserRound className="size-4" /> Buscar paciente
+            </button>
+            {pacienteVinc && (
+              <button type="button" onClick={abrirEdicaoPaciente}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted">
+                <Pencil className="size-4" /> Editar paciente
+              </button>
+            )}
+            {pacienteVinc && (
+              <button type="button" onClick={() => setExcluirOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10">
+                <Trash2 className="size-4" /> Excluir paciente
+              </button>
+            )}
+            {pacienteVinc ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                Paciente: {pacienteVinc.nome}
+                <button type="button" onClick={limparVinculo} aria-label="Desvincular" className="rounded-full p-0.5 hover:bg-emerald-200"><X className="size-3" /></button>
+              </span>
+            ) : !orgId ? (
+              <span className="text-xs text-muted-foreground">Informe o CNES do estabelecimento solicitante para habilitar a busca de paciente.</span>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto mt-4 max-w-[1100px] space-y-4 px-4">
         {paginas.map((pg, pi) => {
           const nPag = pi + 1;
@@ -290,11 +397,19 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
                 if (c.hora) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={[2, 2]} />;
                 if (c.celulas) return <DataHoraCampo key={c.key} campo={c} rect={r} value={val} onChange={(v) => aoMudar(c, v)} contornoCls={cls} segmentos={Array(c.celulas).fill(1)} uniforme alfa={c.letras} />;
                 if (c.area) return <textarea key={c.key} value={val} onChange={(e) => setTxt(c.key, filtrar(c, e.target.value))} className={`form-text absolute resize-none whitespace-pre-wrap ${contornoCls}`} style={{ ...style, textAlign: "left", lineHeight: 1.2 }} />;
+                if (c.opcoes) return <CampoOpcoes key={c.key} id={`f-${c.key}`} rect={r} value={val} contornoCls={cls} opcoes={c.opcoes} onEscolhe={(code) => setTxt(c.key, code)} />;
                 if (c.autocomplete) {
                   const buscarOpcoes = async (termo: string): Promise<OpcaoAuto[]> => {
                     if (c.autocomplete === "procedimento") {
                       const rs = await buscarProcedimentosPorNome(termo);
                       return rs.map((p) => ({ label: p.nome, sub: p.codigo, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.codAlvo) { preencherCelulas(c.codAlvo, p.codigo); setCrivoStatus((s) => ({ ...s, [c.codAlvo!]: "ok" })); } } }));
+                    }
+                    if (c.autocomplete === "profissional") {
+                      const cnes = c.cnesCampo ? digitosCampo(c.cnesCampo) : "";
+                      if (cnes.length !== 7) return [];
+                      let rs = await buscarProfissionais(cnes, termo);
+                      if (rs.length === 0) { await sincronizarProfissionais(cnes); rs = await buscarProfissionais(cnes, termo); }
+                      return rs.map((p) => ({ label: p.nome, sub: `CNS ${p.cns}`, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.cnsAlvo) preencherCelulas(c.cnsAlvo, p.cns); } }));
                     }
                     if (c.autocomplete === "municipio") {
                       const t = normTxt(termo);
@@ -376,6 +491,37 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
           </div>
         </div>
       )}
+
+      {integracaoPaciente && pickerOpen && orgId && (
+        <ModalPaciente titulo="Buscar paciente" onClose={() => setPickerOpen(false)}>
+          <PacientePicker orgId={orgId} paciente={null} apenasTfd={false} marcarTfd={false} origem="manual" onEscolhe={aoEscolherPaciente} />
+        </ModalPaciente>
+      )}
+      {integracaoPaciente && editPaciente && orgId && (
+        <ModalPaciente titulo="Editar paciente" onClose={() => setEditPaciente(null)}>
+          <PacienteForm orgId={orgId} paciente={editPaciente} apenasTfd={false} marcarTfd={false} origem="manual" permitirAcompanhante={false}
+            onSalvo={(p) => { setEditPaciente(null); aoEscolherPaciente(p); }} onCancela={() => setEditPaciente(null)} />
+        </ModalPaciente>
+      )}
+      {integracaoPaciente && excluirOpen && pacienteVinc && (
+        <ExcluirPacienteModal paciente={pacienteVinc} onClose={() => setExcluirOpen(false)}
+          onExcluido={() => { setExcluirOpen(false); limparVinculo(); }} />
+      )}
+    </div>
+  );
+}
+
+// Modal simples (scrollável) p/ hospedar o PacientePicker/PacienteForm no overlay.
+function ModalPaciente({ titulo, onClose, children }: { titulo: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onMouseDown={onClose}>
+      <div className="mt-6 w-full max-w-2xl rounded-xl border border-border bg-card p-4 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-foreground">{titulo}</h2>
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
@@ -525,6 +671,36 @@ function CampoAutocomplete({ id, rect, value, contornoCls, onChangeNome, buscar 
               <button type="button" onMouseDown={(e) => { e.preventDefault(); o.aplicar(); setAberto(false); }}
                 className="block w-full px-2 py-1 text-left text-[11px] leading-tight hover:bg-muted">
                 <span className="font-medium text-foreground">{o.label}</span>{o.sub && <span className="text-muted-foreground"> · {o.sub}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+// Campo de opções fixas (código — nome): o campo mostra o CÓDIGO (cabe na casinha impressa);
+// ao clicar/focar, abre a lista com "código — nome" p/ escolher. Ex.: raça/cor no APAC.
+function CampoOpcoes({ id, rect, value, contornoCls, opcoes, onEscolhe }: {
+  id: string; rect: Rect; value: string; contornoCls: string; opcoes: ComboOption[]; onEscolhe: (code: string) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <>
+      <input id={id} value={value} readOnly autoComplete="off"
+        onFocus={() => setAberto(true)} onClick={() => setAberto(true)}
+        onKeyDown={aoTeclarEnter} onBlur={() => setTimeout(() => setAberto(false), 150)}
+        className={`form-text absolute cursor-pointer ${contornoCls}`}
+        style={{ top: pctS(rect.top), left: pctS(rect.left), width: pctS(rect.width), height: pctS(rect.height) }} />
+      {aberto && (
+        <ul className="absolute z-30 max-h-44 overflow-auto rounded-md border border-border bg-white shadow-lg"
+          style={{ top: `${rect.top + rect.height + 0.2}%`, left: pctS(rect.left), minWidth: pctS(Math.max(rect.width, 30)) }}>
+          {opcoes.map((o) => (
+            <li key={o.code}>
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); onEscolhe(o.code); setAberto(false); }}
+                className="block w-full px-2 py-1 text-left text-[11px] leading-tight hover:bg-muted">
+                <span className="font-mono text-muted-foreground">{o.code}</span> <span className="text-foreground">{o.label}</span>
               </button>
             </li>
           ))}

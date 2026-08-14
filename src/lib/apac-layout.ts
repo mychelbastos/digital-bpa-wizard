@@ -2,6 +2,7 @@
 // 2 páginas. Coordenadas em % da imagem de fundo (1653×2339), calibradas no editor da página.
 // Muitos campos têm casinhas de 1 dígito (celulas), datas (data) e códigos numéricos (num).
 import type { CampoForm as Campo, CheckForm as Check } from "@/components/FormularioOverlay";
+import { RACAS } from "@/lib/bpa-i-v2/racas";
 
 export const CAMPOS: Campo[] = [
   { key: "estab_solic_nome", top: 10.2, left: 5.5, width: 70.8, height: 1.9, upper: true, autocomplete: "estabelecimento", cnesAlvo: "estab_solic_cnes" },
@@ -10,7 +11,7 @@ export const CAMPOS: Campo[] = [
   { key: "pac_prontuario", top: 15.8, left: 65.4, width: 14.2, height: 1.4, num: true },
   { key: "pac_cpf_cns", top: 18.6, left: 5.6, width: 44, height: 1.5, celulas: 15, crivo: "cpfcns" },
   { key: "pac_nascimento", top: 18.6, left: 50.9, width: 13.7, height: 1.5, data: true },
-  { key: "pac_raca", top: 18.4, left: 76.9, width: 7.2, height: 1.7, num: true, maxLen: 2 },
+  { key: "pac_raca", top: 18.4, left: 76.9, width: 7.2, height: 1.7, opcoes: RACAS },
   { key: "pac_etnia", top: 18.5, left: 86.1, width: 8.1, height: 1.7, num: true, maxLen: 4 },
   { key: "pac_mae", top: 21.4, left: 5.7, width: 61.5, height: 1.5, upper: true },
   { key: "pac_ddd_cel", top: 21.8, left: 68.1, width: 5.1, height: 1.2, celulas: 2 },
@@ -66,10 +67,10 @@ export const CAMPOS: Campo[] = [
   { key: "cid_secundario", top: 77.5, left: 67.5, width: 11, height: 1.9, upper: true, maxLen: 4, crivo: "cid" },
   { key: "cid_causas", top: 77.5, left: 79.2, width: 15.6, height: 2.1, upper: true, maxLen: 4, crivo: "cid" },
   { key: "observacoes", top: 81.2, left: 5.6, width: 88.3, height: 14.6, area: true, upper: true },
-  { key: "prof_solic_nome", top: 11.6, left: 5.2, width: 44.2, height: 1.7, upper: true, pagina: 2 },
+  { key: "prof_solic_nome", top: 11.6, left: 5.2, width: 44.2, height: 1.7, upper: true, pagina: 2, autocomplete: "profissional", cnsAlvo: "prof_solic_cns", cnesCampo: "estab_solic_cnes" },
   { key: "data_solicitacao", top: 11.7, left: 50.5, width: 13.7, height: 1.6, data: true, pagina: 2 },
   { key: "prof_solic_cns", top: 14.9, left: 5.2, width: 59, height: 1.8, celulas: 15, pagina: 2 },
-  { key: "prof_autoriz_nome", top: 20.7, left: 4.8, width: 42, height: 1.5, upper: true, pagina: 2 },
+  { key: "prof_autoriz_nome", top: 20.7, left: 4.8, width: 42, height: 1.5, upper: true, pagina: 2, autocomplete: "profissional", cnsAlvo: "prof_autoriz_cns", cnesCampo: "estab_exec_cnes" },
   { key: "orgao_emissor", top: 20.8, left: 48.3, width: 15.7, height: 1.6, celulas: 4, pagina: 2 },
   { key: "num_autorizacao", top: 21, left: 65.2, width: 27.8, height: 3.8, celulas: 13, pagina: 2 },
   { key: "prof_autoriz_cns", top: 23.4, left: 5.2, width: 58.9, height: 1.5, celulas: 15, pagina: 2 },
