@@ -74,24 +74,27 @@ function ImprimirPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-200">
+    <div className="imprimir-root min-h-screen bg-neutral-200">
       <style>{`
         @page { size: A4 portrait; margin: 0; }
         @media print {
           html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+          .imprimir-root { min-height: 0 !important; background: #fff !important; }
           .no-print { display: none !important; }
           .folhas-wrap { max-width: none !important; margin: 0 !important; padding: 0 !important; }
-          /* Cada folha = EXATAMENTE uma página A4. A imagem (aspecto ~A4) é contida dentro
-             dos 210×297mm (width/height auto + max 100%), então nunca estoura para a página
-             seguinte — antes cada folha virava 2 páginas (25 fichas → 51 páginas). */
+          /* Cada folha = EXATAMENTE uma página A4. A imagem (aspecto ~A4) é CONTIDA por altura
+             (max-height !important vence o w-full do <img>). O container tem 296mm (não os 297mm
+             cheios): 1mm a menos evita o estouro por arredondamento do Chrome — que jogava ~0,1mm
+             para a página seguinte, gerando páginas em branco/fragmentos. */
           .folha-print {
-            margin: 0 !important; padding: 0 !important; box-shadow: none !important;
-            width: 210mm; height: 297mm; display: flex; align-items: center; justify-content: center;
+            margin: 0 !important; padding: 0 !important; box-shadow: none !important; border: 0 !important;
+            width: 210mm; height: 296mm; line-height: 0;
+            display: flex; align-items: center; justify-content: center;
             overflow: hidden; page-break-after: always; break-after: page;
             page-break-inside: avoid; break-inside: avoid;
           }
           .folha-print:last-child { page-break-after: auto; break-after: auto; }
-          .folha-print img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+          .folha-print img { display: block !important; width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; }
         }
       `}</style>
 
