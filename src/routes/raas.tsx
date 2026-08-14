@@ -38,9 +38,10 @@ const STORAGE_KEY = "raas-state-v1";
 const FICHA_ID_KEY = "raas-ficha-id";
 const FICHA_TITULO_KEY = "raas-ficha-titulo";
 
-// CNES de CAPS que pré-preenchem o cabeçalho do RAAS em ficha nova (o nome/org derivam do
-// CNES). Hoje: Ruy Barbosa/BA → 5847524 (CAPS RUY BARBOSA). Só vale se o usuário tiver vínculo.
-const CNES_RAAS_PADRAO = new Set(["5847524"]);
+// CNES de CAPS que pré-preenchem o cabeçalho do RAAS em ficha nova (CNES + nome do
+// estabelecimento). Hoje: Ruy Barbosa/BA → 5847524 (CAPS RUY BARBOSA). Só vale se o usuário
+// tiver vínculo. O nome é fixado aqui (não depende da busca por CNES); a org deriva do CNES.
+const CNES_RAAS_PADRAO: Record<string, string> = { "5847524": "CAPS RUY BARBOSA" };
 
 // "AAAAMM" -> valor do <input type="month"> ("AAAA-MM") e -> rótulo "MM/AAAA".
 const compParaInput = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(0, 4)}-${c.slice(4, 6)}` : "");
@@ -341,9 +342,9 @@ function RaasPage() {
     let cancel = false;
     carregarVinculosUsuario().then((vincs) => {
       if (cancel) return;
-      const cnes = vincs.map((v) => v.cnes).find((c) => CNES_RAAS_PADRAO.has(c)) ?? "";
+      const cnes = vincs.map((v) => v.cnes).find((c) => CNES_RAAS_PADRAO[c]) ?? "";
       cnesPadraoRef.current = cnes;
-      if (cnes) setState((p) => (p.cnes.replace(/\D/g, "") ? p : { ...p, cnes }));
+      if (cnes) setState((p) => (p.cnes.replace(/\D/g, "") ? p : { ...p, cnes, estabelecimentoNome: p.estabelecimentoNome || CNES_RAAS_PADRAO[cnes] }));
     });
     return () => { cancel = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -448,7 +449,8 @@ function RaasPage() {
   };
 
   const novaFicha = () => {
-    setState(cnesPadraoRef.current ? { ...emptyRaasState(), cnes: cnesPadraoRef.current } : emptyRaasState());
+    const c = cnesPadraoRef.current;
+    setState(c ? { ...emptyRaasState(), cnes: c, estabelecimentoNome: CNES_RAAS_PADRAO[c] ?? "" } : emptyRaasState());
     limparFichaPersistida();
   };
 
