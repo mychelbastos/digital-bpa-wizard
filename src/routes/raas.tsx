@@ -751,18 +751,7 @@ function RaasPage() {
             <Txt uppercase maxLength={4} value={state.cidCausas}
               onChange={(e) => set("cidCausas", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
           </Campo>
-          <Campo label="CID secundário 1">
-            <Txt uppercase maxLength={4} value={state.cidSec1}
-              onChange={(e) => set("cidSec1", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
-          </Campo>
-          <Campo label="CID secundário 2">
-            <Txt uppercase maxLength={4} value={state.cidSec2}
-              onChange={(e) => set("cidSec2", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
-          </Campo>
-          <Campo label="CID secundário 3">
-            <Txt uppercase maxLength={4} value={state.cidSec3}
-              onChange={(e) => set("cidSec3", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
-          </Campo>
+          {/* CID secundário 1/2/3 removidos da tela por enquanto (o modelo/estado permanece). */}
           <Campo label="Caráter do atendimento">
             <Sel value={state.carater} onChange={(v) => set("carater", v)} options={CARATERES} />
           </Campo>
