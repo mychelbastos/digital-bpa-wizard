@@ -10,9 +10,10 @@ import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { buscarProfissionais, buscarCbosVinculo } from "@/lib/bpa-i-v2/profissionais";
 import {
-  buscarPacientes, carregarPaciente, registrarLeituraPaciente, excluirPaciente, pacienteFaltando, type Paciente,
+  buscarPacientes, carregarPaciente, registrarLeituraPaciente, pacienteFaltando, type Paciente,
 } from "@/lib/pacientes";
 import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePicker";
+import { ExcluirPacienteModal } from "@/components/pacientes/ExcluirPacienteModal";
 import { campo, label, digitos, UFS, ROTULO_CAMPO, ComboField } from "@/components/pacientes/ui";
 import {
   orgDoCnes, listarDestinos, salvarDestino, atualizarDestino, excluirDestino, valoresVigentes, valoresTfdDetalhado, definirValorVigente,
@@ -668,21 +669,8 @@ function PacientesPanel(props: { orgId: string; onFechar: () => void }) {
   const [editando, setEditando] = useState(false);
   const [historico, setHistorico] = useState<TfdHistoricoItem[]>([]);
   const [carregandoHist, setCarregandoHist] = useState(false);
-  const [excluindo, setExcluindo] = useState(false);
-  const [motivo, setMotivo] = useState("");
-  const [excluindoBusy, setExcluindoBusy] = useState(false);
+  const [excluirOpen, setExcluirOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const confirmarExclusao = async () => {
-    if (!sel) return;
-    if (!motivo.trim()) { toast.error("Informe o motivo da exclusão."); return; }
-    setExcluindoBusy(true);
-    const ok = await excluirPaciente(sel.id, motivo);
-    setExcluindoBusy(false);
-    if (!ok) { toast.error("Não foi possível excluir (verifique o motivo e sua permissão)."); return; }
-    toast.success("Paciente excluído (registrado no log).");
-    setExcluindo(false); setMotivo(""); setSel(null);
-  };
 
   useEffect(() => {
     if (sel) return;
@@ -749,24 +737,14 @@ function PacientesPanel(props: { orgId: string; onFechar: () => void }) {
                   <button type="button" onClick={() => setEditando(true)} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
                     <Pencil className="size-3" /> Editar cadastro
                   </button>
-                  <button type="button" onClick={() => { setExcluindo(true); setMotivo(""); }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-destructive hover:bg-destructive/10">
+                  <button type="button" onClick={() => setExcluirOpen(true)} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-destructive hover:bg-destructive/10">
                     <Trash2 className="size-3" /> Excluir
                   </button>
                 </div>
               </div>
-              {excluindo && (
-                <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 p-2">
-                  <div className="text-xs font-medium text-destructive">Motivo da exclusão (obrigatório — fica registrado no log)</div>
-                  <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} autoFocus
-                    className="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm outline-none focus:border-destructive" />
-                  <div className="mt-1 flex justify-end gap-2">
-                    <button type="button" onClick={() => setExcluindo(false)} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">Cancelar</button>
-                    <button type="button" onClick={confirmarExclusao} disabled={excluindoBusy || !motivo.trim()}
-                      className="flex items-center gap-1 rounded-md bg-destructive px-2 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50">
-                      {excluindoBusy ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />} Confirmar exclusão
-                    </button>
-                  </div>
-                </div>
+              {excluirOpen && (
+                <ExcluirPacienteModal paciente={sel} onClose={() => setExcluirOpen(false)}
+                  onExcluido={() => { setExcluirOpen(false); setSel(null); }} />
               )}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {info("CNS", sel.cns)}
