@@ -233,6 +233,13 @@ function BpaCV3() {
   const motivosInvalidos = [...motivosSigtap, ...avisosDuplicidade];
   const temCamposInvalidos = motivosInvalidos.length > 0;
 
+  // Confirmação eletrônica do Responsável é OBRIGATÓRIA para salvar e gerar o PDF.
+  const semConfirmacao = !state.respConfirmacao;
+  const exigirConfirmacao = (): boolean => {
+    if (semConfirmacao) { toast.error("Confirme como Responsável (assinatura eletrônica) antes de salvar ou gerar o PDF."); return true; }
+    return false;
+  };
+
   useEffect(() => {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const fichaParam = params?.get("ficha") ?? null;
@@ -439,12 +446,15 @@ function BpaCV3() {
   };
   const salvarClique = async () => {
     if (congelada) { toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar."); return; }
+    if (exigirConfirmacao()) return;
     if (!fichaIdRef.current || !fichaTituloRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
     const dup = await checarDuplicidade(fichaIdRef.current);
     if (dup) { setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaFichaAtual(); } }); return; }
     await gravarNaFichaAtual();
   };
-  const salvarComoClique = () => { setSalvarComoNovo(true); setSalvarOpen(true); setSalvarMenuOpen(false); };
+  const salvarComoClique = () => { if (exigirConfirmacao()) return; setSalvarComoNovo(true); setSalvarOpen(true); setSalvarMenuOpen(false); };
+  // "Gerar PDF" interativo — exige a confirmação; o auto-print (?print=1) não passa por aqui.
+  const gerarPdfClique = () => { if (exigirConfirmacao()) return; void exportPdf(); };
   const carregarFichaSalva = async (id: string, titulo?: string) => {
     const ficha = await carregarFicha(id);
     if (!ficha) return;
@@ -632,10 +642,10 @@ function BpaCV3() {
               </div>
             </div>
             <button
-              onClick={exportPdf}
+              onClick={gerarPdfClique}
               disabled={printing}
-              title={temCamposInvalidos ? "Corrija os campos em vermelho (crivo SIGTAP) antes de gerar" : undefined}
-              className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos ? " opacity-50" : ""}`}
+              title={semConfirmacao ? "Confirme como Responsável antes de gerar" : temCamposInvalidos ? "Corrija os campos em vermelho (crivo SIGTAP) antes de gerar" : undefined}
+              className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos || semConfirmacao ? " opacity-50" : ""}`}
             >
               {printing ? "Gerando..." : "Gerar PDF"}
             </button>

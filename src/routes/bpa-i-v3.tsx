@@ -141,9 +141,16 @@ function BpaI() {
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
     toast.success("Alterações salvas na nuvem.");
   };
+  // Confirmação eletrônica do Responsável obrigatória para salvar e gerar o PDF.
+  const semConfirmacao = !state.respConfirmacao;
+  const exigirConfirmacao = (): boolean => {
+    if (semConfirmacao) { toast.error("Confirme como Responsável (assinatura eletrônica) antes de salvar ou gerar o PDF."); return true; }
+    return false;
+  };
   const salvarClique = async () => {
     if (congelada) { toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar."); return; }
     if (temCamposInvalidos) { toast.error("Corrija os campos em vermelho antes de salvar a ficha."); return; }
+    if (exigirConfirmacao()) return;
     if (!fichaIdRef.current || !fichaTituloRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
     const dup = await checarDuplicidade(fichaIdRef.current);
     if (dup) { setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaFichaAtual(); } }); return; }
@@ -151,10 +158,13 @@ function BpaI() {
   };
   const salvarComoClique = () => {
     if (temCamposInvalidos) { toast.error("Corrija os campos em vermelho antes de salvar a ficha."); return; }
+    if (exigirConfirmacao()) return;
     setSalvarComoNovo(true);
     setSalvarOpen(true);
     setSalvarMenuOpen(false);
   };
+  // "Gerar PDF" interativo — exige a confirmação; o auto-print (?print=1) não passa por aqui.
+  const gerarPdfClique = () => { if (exigirConfirmacao()) return; void exportPdf(); };
 
   // ---- Captura (iframe de /imprimir): só lê + rasteriza, sem persistir ----
   const carregarParaCaptura = async (id: string) => {
@@ -361,8 +371,8 @@ function BpaI() {
                 <button
                   onClick={salvarClique}
                   disabled={salvandoDireto || congelada}
-                  title={congelada ? "Ficha congelada — reabra a produção ou retifique" : temCamposInvalidos ? "Corrija os campos em vermelho antes de salvar" : fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
-                  className={`rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60${temCamposInvalidos || congelada ? " opacity-50" : ""}`}
+                  title={congelada ? "Ficha congelada — reabra a produção ou retifique" : semConfirmacao ? "Confirme como Responsável antes de salvar" : temCamposInvalidos ? "Corrija os campos em vermelho antes de salvar" : fichaTituloRef.current ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)"}
+                  className={`rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60${temCamposInvalidos || congelada || semConfirmacao ? " opacity-50" : ""}`}
                 >
                   {salvandoDireto ? "Salvando…" : `💾 Salvar${fichaTituloRef.current ? "" : " ficha"}`}
                 </button>
@@ -444,7 +454,7 @@ function BpaI() {
             <button onClick={() => setConfigOpen(true)} title="Configuração do estabelecimento (arquivo magnético)" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
               ⚙ Config
             </button>
-            <button onClick={exportPdf} disabled={printing} title={temCamposInvalidos ? "Corrija os campos em vermelho antes de gerar" : undefined} className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos ? " opacity-50" : ""}`}>
+            <button onClick={gerarPdfClique} disabled={printing} title={semConfirmacao ? "Confirme como Responsável antes de gerar" : temCamposInvalidos ? "Corrija os campos em vermelho antes de gerar" : undefined} className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos || semConfirmacao ? " opacity-50" : ""}`}>
               {printing ? "Gerando..." : "Gerar PDF"}
             </button>
           </div>

@@ -109,9 +109,17 @@ function BpaIV4() {
   const totalQtd = state.seqs.reduce((s, sq) => s + (Number(dig(sq.qtde)) || 0), 0);
   const nSeqsAtivas = state.seqs.filter(seqPreenchida).length;
 
+  // Confirmação eletrônica do Responsável obrigatória para salvar e gerar o PDF.
+  const semConfirmacao = !state.respConfirmacao;
+  const exigirConfirmacao = (): boolean => {
+    if (semConfirmacao) { toast.error("Confirme como Responsável (assinatura eletrônica) antes de salvar ou gerar o PDF."); return true; }
+    return false;
+  };
+
   const salvar = async (): Promise<string | null> => {
     if (congelada) { toast.error("Ficha congelada — reabra a produção ou retifique."); return null; }
     if (temCamposInvalidos) { toast.error("Corrija as pendências antes de salvar."); return null; }
+    if (exigirConfirmacao()) return null;
     setSalvando(true);
     const titulo = fichaTitulo ?? `BPA-I · ${competencia()}`;
     const id = await reconciliarESalvar(titulo, eng.fichaIdRef.current);
@@ -124,6 +132,7 @@ function BpaIV4() {
   // PDF OFICIAL: salva e imprime pela rota de captura do V3 — o papel sai LITERALMENTE do V3
   // (prova de equivalência). Não reabre/destrava congelada (a captura só lê).
   const visualizarPdf = async () => {
+    if (exigirConfirmacao()) return;
     setVisualizando(true);
     const id = eng.fichaIdRef.current ?? await salvar();
     setVisualizando(false);
