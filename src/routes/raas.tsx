@@ -15,6 +15,7 @@ import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
+import { anoAte4Digitos } from "@/lib/validacao-data";
 import {
   emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
   RAAS_ORIGEM_PACIENTE, RAAS_DESTINO_PACIENTE, RAAS_TIPO_DROGA, RAAS_LOCAL_REALIZACAO,
@@ -672,7 +673,7 @@ function RaasPage() {
             <Sel value={state.sexo} onChange={(v) => set("sexo", v)} options={[{ code: "M", label: "Masculino" }, { code: "F", label: "Feminino" }]} disabled={pt} />
           </Campo>
           <Campo label="Data de nascimento">
-            <Txt type="date" readOnly={pt} value={state.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
+            <Txt type="date" readOnly={pt} value={state.dataNascimento} onChange={(e) => { if (anoAte4Digitos(e.target.value)) set("dataNascimento", e.target.value); }} />
           </Campo>
           <Campo label="Nacionalidade">
             <Sel value={state.nacionalidade} onChange={(v) => set("nacionalidade", v)} options={RAAS_NACIONALIDADES} disabled={pt && state.nacionalidade !== ""} />
@@ -730,7 +731,7 @@ function RaasPage() {
         {/* 3. Dados do atendimento */}
         <Secao titulo="Dados do atendimento" cols={3}>
           <Campo label="Data de admissão">
-            <Txt type="date" readOnly={pt && state.validadeInicio !== ""} value={state.validadeInicio} onChange={(e) => set("validadeInicio", e.target.value)} />
+            <Txt type="date" readOnly={pt && state.validadeInicio !== ""} value={state.validadeInicio} onChange={(e) => { if (anoAte4Digitos(e.target.value)) set("validadeInicio", e.target.value); }} />
           </Campo>
           <Campo label="Mês de atendimento (competência)">
             <Txt type="month" readOnly value={compParaInput(state.competencia)} />
@@ -792,7 +793,7 @@ function RaasPage() {
             <Sel value={state.destinoPaciente} onChange={(v) => set("destinoPaciente", v)} options={RAAS_DESTINO_PACIENTE} />
           </Campo>
           <Campo label="Data de conclusão (óbito/alta)">
-            <Txt type="date" value={state.dataObitoAlta} onChange={(e) => set("dataObitoAlta", e.target.value)} />
+            <Txt type="date" value={state.dataObitoAlta} onChange={(e) => { if (anoAte4Digitos(e.target.value)) set("dataObitoAlta", e.target.value); }} />
           </Campo>
           <Campo label="Motivo saída/perm. (vem do Destino)">
             <Txt inputMode="numeric" maxLength={2} value={state.motivoSaida}
@@ -845,7 +846,7 @@ function RaasPage() {
                       onChange={(e) => updateAcao(i, { cnsExecutante: e.target.value.replace(/\D/g, "").slice(0, 15), cnsExecutanteNome: "" })} />
                   </Campo>
                   <Campo label="Data da execução">
-                    <Txt type="date" value={a.dataExec} onChange={(e) => updateAcao(i, { dataExec: e.target.value })} />
+                    <Txt type="date" value={a.dataExec} onChange={(e) => { if (anoAte4Digitos(e.target.value)) updateAcao(i, { dataExec: e.target.value }); }} />
                   </Campo>
                   <Campo label="Serviço (3 díg.)">
                     <Txt inputMode="numeric" maxLength={3} esperaLen={3} value={a.servico}

@@ -14,6 +14,7 @@ import { validarCns } from "@/lib/bpa-i-v2/validacao";
 import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
 import { emailValido } from "@/lib/validacao-email";
 import { telefoneValido, cepValido } from "@/lib/validacao-contato";
+import { anoAte4Digitos } from "@/lib/validacao-data";
 import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/nacionalidades";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
@@ -313,7 +314,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         </div>
         <div className="sm:col-span-2">
           <div className={label}>Data de entrada</div>
-          <input type="date" min="1900-01-01" max="9999-12-31" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} data-nocaps className={campo} />
+          <input type="date" min="1900-01-01" value={dataAdmissao} onChange={(e) => { if (anoAte4Digitos(e.target.value)) setDataAdmissao(e.target.value); }} data-nocaps className={campo} />
         </div>
         <div>
           <div className={label}>CNS</div>
@@ -339,7 +340,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         </div>
         <div>
           <div className={label}>Nascimento *</div>
-          <input type="date" min="1900-01-01" max="9999-12-31" value={nascimento} onChange={(e) => setNascimento(e.target.value)} className={campo + errCls("nascimento")} />
+          <input type="date" min="1900-01-01" value={nascimento} onChange={(e) => { if (anoAte4Digitos(e.target.value)) setNascimento(e.target.value); }} className={campo + errCls("nascimento")} />
         </div>
         <div>
           <div className={label}>Nacionalidade *</div>
