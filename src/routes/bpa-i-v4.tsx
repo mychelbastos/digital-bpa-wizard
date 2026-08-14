@@ -193,7 +193,7 @@ function BpaIV4() {
             <div className="grid grid-cols-3 gap-2">
               <Campo label="Mês"><input inputMode="numeric" value={dig(state.profMes)} onChange={(e) => set("profMes", cells(e.target.value.replace(/\D/g, ""), 2))} className={inputMono} maxLength={2} /></Campo>
               <Campo label="Ano"><input inputMode="numeric" value={dig(state.profAno)} onChange={(e) => set("profAno", cells(e.target.value.replace(/\D/g, ""), 4))} className={inputMono} maxLength={4} /></Campo>
-              <Campo label="Folha" hint="auto"><input value={dig(state.profFolha)} readOnly className={`${inputMono} bg-slate-50 text-slate-500`} /></Campo>
+              <Campo label="Folha" hint="auto/edit."><input inputMode="numeric" value={dig(state.profFolha)} onChange={(e) => set("profFolha", cells(e.target.value.replace(/\D/g, ""), 3))} className={inputMono} maxLength={3} /></Campo>
             </div>
           </div>
         </section>

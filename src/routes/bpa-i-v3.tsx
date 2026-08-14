@@ -583,9 +583,9 @@ function BpaI() {
             getInputs={() => inputsOf("pmes", "pano")}
             onClear={() => setState((p) => ({ ...p, profMes: Array(2).fill(""), profAno: Array(4).fill("") }))} />
           <TextField {...L.PROF_EQUIPE} value={state.profEquipe} onChange={(v) => set("profEquipe", v)} uppercase />
-          {/* Folha: automática e bloqueada. Preenchida em sequência por profissional/competência
-              (fichas novas) ou mantida como veio (fichas salvas/importadas). */}
-          <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={() => {}} rightAlign compact readOnly />
+          {/* Folha: automática (sequência por profissional/unidade + competência) e editável —
+              é organizacional (não vai para o .txt); dá pra ajustar à mão se precisar. */}
+          <DigitBoxes id="pfolha" top={L.PROF_ROW2_TOP} height={L.HEADER_DIGIT_H} boxes={L.PROF_FOLHA_BOXES} values={state.profFolha} onChange={(v) => set("profFolha", v)} rightAlign compact />
 
           {/* 3 Sequências */}
           {L.SEQ_TOPS.map((seqTop, si) => (

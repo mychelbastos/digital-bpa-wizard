@@ -283,11 +283,14 @@ export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; f
     const cnes = state.cnes.join("");
     const profCns = state.profCns.join("");
     const comp = competencia();
-    if (!/^\d{7}$/.test(cnes) || !/^\d{15}$/.test(profCns) || cnsInvalido(profCns) || !/^\d{6}$/.test(comp)) return;
-    const chave = `${cnes}:${profCns}:${comp}`;
+    // Gera já com CNES + competência (não espera o profissional). Com um CNS de profissional
+    // válido, a sequência é por profissional; senão, pela unidade — como no BPA-C.
+    if (!/^\d{7}$/.test(cnes) || !/^\d{6}$/.test(comp)) return;
+    const profOk = /^\d{15}$/.test(profCns) && !cnsInvalido(profCns);
+    const chave = `${cnes}:${profOk ? profCns : "SEM"}:${comp}`;
     if (folhaAutoChaveRef.current === chave) return;
     folhaAutoChaveRef.current = chave;
-    proximaFolhaBpaI(cnes, profCns, comp).then((n) => {
+    proximaFolhaBpaI(cnes, profOk ? profCns : "", comp).then((n) => {
       if (folhaAutoChaveRef.current !== chave) return;
       setState((p) => ({ ...p, profFolha: rjust(String(n).split(""), 3) }));
     });

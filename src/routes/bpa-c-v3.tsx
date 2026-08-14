@@ -690,8 +690,9 @@ function BpaCV3() {
             nome={state.profNome}
             onChangeNome={(v) => set("profNome", v)}
           />
-          {/* Folha: automática e bloqueada (sequencial por profissional/unidade, reinicia por competência). */}
-          <DigitBoxes id="folha" top={UF_TOP} height={UF_HEIGHT} boxes={FOLHA_BOXES} values={state.folha} onChange={() => {}} rightAlign compact readOnly />
+          {/* Folha: automática (sequencial por profissional/unidade + competência) e editável —
+              é organizacional (não vai para o .txt); dá pra ajustar à mão se precisar. */}
+          <DigitBoxes id="folha" top={UF_TOP} height={UF_HEIGHT} boxes={FOLHA_BOXES} values={state.folha} onChange={(v) => set("folha", v)} rightAlign compact />
 
           {/* 20 linhas — com Procedimento (SIGTAP) e CBO inteligentes */}
           {ROW_TOPS.map((top, i) => (

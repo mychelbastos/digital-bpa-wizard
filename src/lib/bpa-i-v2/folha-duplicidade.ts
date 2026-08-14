@@ -18,13 +18,17 @@ const folhaNum = (a: unknown): number => {
 
 // ---------------- Próxima folha ----------------
 
-// BPA-I: chave (CNES + CNS do profissional + competência). Lê só o campo folha (leve).
+// BPA-I: chave (CNES + competência) e, quando houver, o CNS do profissional (senão a unidade,
+// como no BPA-C). Assim a folha já gera com CNES+competência, sem depender do profissional.
+// Lê só o campo folha (leve).
 export async function proximaFolhaBpaI(cnes: string, profCns: string, competencia: string): Promise<number> {
-  if (!supabase || !/^\d{7}$/.test(cnes) || !/^\d{15}$/.test(profCns) || !/^\d{6}$/.test(competencia)) return 1;
+  if (!supabase || !/^\d{7}$/.test(cnes) || !/^\d{6}$/.test(competencia)) return 1;
   try {
-    const { data, error } = await supabase.from("fichas")
+    let req = supabase.from("fichas")
       .select("f:dados->profFolha").is("excluida_em", null)
-      .eq("tipo", "BPA-I").eq("cnes", cnes).eq("competencia", competencia).eq("profissional_cns", profCns);
+      .eq("tipo", "BPA-I").eq("cnes", cnes).eq("competencia", competencia);
+    if (/^\d{15}$/.test(profCns)) req = req.eq("profissional_cns", profCns); // sequência por profissional
+    const { data, error } = await req;
     if (error || !data) return 1;
     return data.reduce((m, r) => Math.max(m, folhaNum((r as { f: unknown }).f)), 0) + 1;
   } catch {
