@@ -773,7 +773,7 @@ function RaasPage() {
               onChange={(e) => set("motivoSaida", e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="derivado do Destino" />
           </Campo>
           <Campo label="Origem das informações">
-            <Sel value={state.origemInfo} onChange={(v) => set("origemInfo", v)} options={RAAS_ORIGEM_INFO} vazio="—" />
+            <Sel value={state.origemInfo} onChange={(v) => set("origemInfo", v)} options={RAAS_ORIGEM_INFO} semVazio />
           </Campo>
           <Campo label="Situação de rua?">
             <Sel value={state.situacaoRua} onChange={(v) => set("situacaoRua", v)} options={RAAS_SIM_NAO} semVazio />
@@ -834,7 +834,7 @@ function RaasPage() {
                       onChange={(e) => updateAcao(i, { quantidade: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
                   </Campo>
                   <Campo label="Local de realização">
-                    <Sel value={a.localRealizacao} onChange={(v) => updateAcao(i, { localRealizacao: v })} options={RAAS_LOCAL_REALIZACAO} vazio="—" />
+                    <Sel value={a.localRealizacao} onChange={(v) => updateAcao(i, { localRealizacao: v })} options={RAAS_LOCAL_REALIZACAO} semVazio />
                   </Campo>
                 </div>
               </div>
