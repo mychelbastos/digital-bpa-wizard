@@ -16,6 +16,12 @@ import { carregarPaciente, type Paciente } from "@/lib/pacientes";
 import type { ComboOption } from "@/lib/bpa-i-v2/racas";
 import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePicker";
 import { ExcluirPacienteModal } from "@/components/pacientes/ExcluirPacienteModal";
+import { useAuthUser } from "@/lib/bpa-i-v2/auth";
+import { salvarFicha, carregarFicha, type FichaMetadados } from "@/lib/bpa-i-v2/fichas";
+import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
+import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
+import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
+import { Save, FolderOpen } from "lucide-react";
 
 const normTxt = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 // Uma opção do autocomplete: rótulo + sublegenda + ação de aplicar (preenche os campos).
@@ -73,6 +79,17 @@ export interface IntegracaoPaciente {
   aoEscolher: (p: Paciente, api: PreenchePaciente) => void;
   aoLimpar?: (api: PreenchePaciente) => void;
 }
+
+// Integração com o cadastro de fichas na nuvem (opt-in, ex.: APAC): habilita Salvar / Salvar
+// como / Minhas fichas / Nova ficha no cabeçalho e a hidratação por ?ficha=<id>. Os `dados`
+// gravados são o próprio { txt, chk } do overlay. `meta`/`titulo`/`competencia` são derivados
+// dos valores atuais (ex.: CNES do estabelecimento e nome do paciente).
+export interface NuvemOverlay {
+  tipo: "APAC";
+  meta: (txt: Record<string, string>, chk: Record<string, boolean>) => FichaMetadados;
+  titulo: (txt: Record<string, string>, chk: Record<string, boolean>) => string;
+  competencia?: (txt: Record<string, string>, chk: Record<string, boolean>) => string;
+}
 export interface CheckForm {
   key: string;
   top: number;
@@ -98,12 +115,15 @@ function filtrar(c: CampoForm, v: string): string {
   return c.maxLen ? s.slice(0, c.maxLen) : s;
 }
 
-export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas, calibravel = false, integracaoPaciente }: {
+export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas, calibravel = false, integracaoPaciente, nuvem }: {
   titulo: string; storageKey: string; campos: CampoForm[]; checks: CheckForm[]; paginas: PaginaForm[];
   calibravel?: boolean; // mostra as ferramentas de calibração (Editar posições / Contornos)
   integracaoPaciente?: IntegracaoPaciente; // opt-in: barra + busca de paciente (ex.: APAC)
+  nuvem?: NuvemOverlay; // opt-in: salvar/editar/excluir na nuvem + Minhas fichas (ex.: APAC)
 }) {
   const rectsKey = `${storageKey}-rects`;
+  const fichaIdKey = `${storageKey}-ficha-id`;
+  const fichaTituloKey = `${storageKey}-ficha-titulo`;
   const sheetRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [txt, setTxtState] = useState<Record<string, string>>({});
   const [chk, setChkState] = useState<Record<string, boolean>>({});
@@ -122,6 +142,15 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editPaciente, setEditPaciente] = useState<Paciente | null>(null);
   const [excluirOpen, setExcluirOpen] = useState(false);
+  // Nuvem (opt-in via `nuvem`): salvar/editar na tabela `fichas` + Minhas fichas.
+  const user = useAuthUser();
+  const fichaIdRef = useRef<string | null>(null);
+  const [fichaTitulo, setFichaTitulo] = useState<string | null>(null);
+  const [salvarOpen, setSalvarOpen] = useState(false);
+  const [salvarComoNovo, setSalvarComoNovo] = useState(false);
+  const [fichasOpen, setFichasOpen] = useState(false);
+  const [novaConfirm, setNovaConfirm] = useState(false);
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     try {
@@ -133,6 +162,75 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
   }, [storageKey, rectsKey]);
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify({ txt, chk })); } catch { /* */ } }, [txt, chk, storageKey]);
   useEffect(() => { try { localStorage.setItem(rectsKey, JSON.stringify(rects)); } catch { /* */ } }, [rects, rectsKey]);
+
+  // ----- nuvem (opt-in) -----
+  const persistNuvem = (id: string, tit: string) => {
+    fichaIdRef.current = id; setFichaTitulo(tit);
+    try { localStorage.setItem(fichaIdKey, id); localStorage.setItem(fichaTituloKey, tit); } catch { /* */ }
+  };
+  const limparNuvem = () => {
+    fichaIdRef.current = null; setFichaTitulo(null);
+    try { localStorage.removeItem(fichaIdKey); localStorage.removeItem(fichaTituloKey); } catch { /* */ }
+  };
+  const aplicarDados = (dados: unknown) => {
+    const d = (dados ?? {}) as { txt?: Record<string, string>; chk?: Record<string, boolean> };
+    setTxtState(d.txt ?? {}); setChkState(d.chk ?? {});
+  };
+  const carregarNaLista = async (id: string, tit?: string) => {
+    const f = await carregarFicha(id);
+    if (!f) { toast.error("Ficha não encontrada."); return; }
+    aplicarDados(f.dados);
+    persistNuvem(id, tit ?? f.titulo);
+    setFichasOpen(false);
+  };
+  // Hidratação por ?ficha=<id> (edição da nuvem) ou id persistido (rascunho local).
+  useEffect(() => {
+    if (!nuvem) return;
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const fichaParam = params?.get("ficha") ?? null;
+    if (fichaParam) {
+      carregarFicha(fichaParam).then((f) => {
+        if (!f) { toast.error("Ficha não encontrada."); return; }
+        aplicarDados(f.dados);
+        persistNuvem(fichaParam, f.titulo);
+      });
+    } else {
+      try {
+        fichaIdRef.current = localStorage.getItem(fichaIdKey);
+        setFichaTitulo(localStorage.getItem(fichaTituloKey));
+      } catch { /* */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nuvem, storageKey]);
+
+  const nomeSugerido = (): string => {
+    if (salvarComoNovo && fichaTitulo) return `${fichaTitulo} (cópia)`;
+    if (fichaTitulo) return fichaTitulo;
+    return nuvem ? nuvem.titulo(txt, chk) : "Ficha";
+  };
+  const gravarNuvem = async (tit: string, comoNovo: boolean) => {
+    if (!nuvem) return;
+    setSalvando(true);
+    const idAlvo = comoNovo ? null : fichaIdRef.current;
+    const comp = nuvem.competencia?.(txt, chk) ?? "";
+    const id = await salvarFicha(idAlvo, tit, comp, { txt, chk }, nuvem.meta(txt, chk));
+    setSalvando(false);
+    if (!id) { toast.error("Não foi possível salvar. Verifique a conexão e tente novamente."); return; }
+    persistNuvem(id, tit);
+    setSalvarOpen(false); setSalvarComoNovo(false);
+    toast.success(idAlvo ? "Alterações salvas na nuvem." : `Ficha “${tit}” salva na nuvem.`);
+  };
+  const salvarNuvemClique = () => {
+    if (!fichaIdRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
+    void gravarNuvem(fichaTitulo!, false);
+  };
+  const novaFichaNuvem = () => {
+    setTxtState({}); setChkState({});
+    setCrivoStatus({}); setCrivoLabel({});
+    setPacienteVinc(null);
+    limparNuvem();
+    try { localStorage.removeItem(storageKey); } catch { /* */ }
+  };
 
   // Rastreia qual campo está em foco (pelo id do input: "seg-<key>-<i>" ou "f-<key>"),
   // p/ mostrar o feedback "válido" (verde) só enquanto o campo está selecionado — igual BPA-I.
@@ -334,6 +432,18 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
             ) : (
               <>
                 {calibravel && <button onClick={() => setContornos((c) => !c)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${contornos ? "border-sky-400 bg-sky-50 text-sky-700" : "border-border bg-card text-foreground hover:bg-muted"}`}><Ruler className="size-4" /> Contornos</button>}
+                {nuvem && (
+                  <button onClick={() => setFichasOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"><FolderOpen className="size-4" /> Minhas fichas</button>
+                )}
+                {nuvem && user && (
+                  <>
+                    <button onClick={salvarNuvemClique} disabled={salvando} className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-60"><Save className="size-4" /> {salvando ? "Salvando…" : `Salvar${fichaIdRef.current ? "" : " ficha"}`}</button>
+                    {fichaIdRef.current && (
+                      <button onClick={() => { setSalvarComoNovo(true); setSalvarOpen(true); }} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">Salvar como…</button>
+                    )}
+                    <button onClick={() => setNovaConfirm(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">Nova ficha</button>
+                  </>
+                )}
                 <button onClick={limpar} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"><Eraser className="size-4" /> Limpar</button>
                 <button onClick={baixarPdf} disabled={exportando} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"><FileDown className="size-4" /> {exportando ? "Gerando…" : "Baixar PDF"}</button>
               </>
@@ -506,6 +616,22 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
       {integracaoPaciente && excluirOpen && pacienteVinc && (
         <ExcluirPacienteModal paciente={pacienteVinc} onClose={() => setExcluirOpen(false)}
           onExcluido={() => { setExcluirOpen(false); limparVinculo(); }} />
+      )}
+
+      {nuvem && (
+        <>
+          <SalvarFichaModal open={salvarOpen} defaultNome={nomeSugerido()}
+            atualizando={!salvarComoNovo && Boolean(fichaIdRef.current)} comoNovo={salvarComoNovo}
+            onSalvar={(tit) => gravarNuvem(tit, salvarComoNovo)}
+            onClose={() => { setSalvarOpen(false); setSalvarComoNovo(false); }} />
+          <MinhasFichas open={fichasOpen} fichaAtualId={fichaIdRef.current} tipo={nuvem.tipo}
+            onClose={() => setFichasOpen(false)} onCarregar={carregarNaLista}
+            onNova={novaFichaNuvem} onRenomeada={persistNuvem} />
+          <ConfirmModal open={novaConfirm} title="Nova ficha" confirmLabel="Começar nova ficha"
+            onCancel={() => setNovaConfirm(false)} onConfirm={() => { setNovaConfirm(false); novaFichaNuvem(); }}>
+            <p>Isto vai limpar o formulário atual (cabeçalho e campos) para começar uma ficha em branco.</p>
+          </ConfirmModal>
+        </>
       )}
     </div>
   );

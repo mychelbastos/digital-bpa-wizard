@@ -41,7 +41,7 @@ export function montarTituloFicha(opts: {
 
 // Campos que a exibição precisa (vêm de listarFichas: coluna + subcampos do jsonb `dados`).
 export interface FichaRotulo {
-  tipo: "BPA-I" | "BPA-C" | "RAAS";
+  tipo: "BPA-I" | "BPA-C" | "RAAS" | "APAC";
   titulo: string;
   competencia: string | null;
   origem?: string | null;

@@ -59,6 +59,9 @@ function limparPaciente(api: PreenchePaciente) {
   api.check("sexo_fem", false);
 }
 
+// Dígitos "puros" de um campo de casinhas ("seg|seg|..." -> "1234567").
+const digApac = (v?: string) => (v ?? "").split("|").join("").replace(/\D/g, "");
+
 function ApacPage() {
   return (
     <FormularioOverlay
@@ -74,6 +77,16 @@ function ApacPage() {
         cnesCampo: "estab_solic_cnes",
         aoEscolher: preencherPaciente,
         aoLimpar: limparPaciente,
+      }}
+      nuvem={{
+        tipo: "APAC",
+        meta: (txt) => ({
+          tipo: "APAC",
+          cnes: digApac(txt["estab_solic_cnes"]) || null,
+          profissionalCns: digApac(txt["pac_cpf_cns"]) || null, // documento do paciente
+          profissionalNome: (txt["pac_nome"] || "").trim() || null,
+        }),
+        titulo: (txt) => `APAC ${(txt["pac_nome"] || "").trim() || digApac(txt["estab_solic_cnes"]) || "ficha"}`.trim(),
       }}
     />
   );
