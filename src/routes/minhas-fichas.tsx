@@ -170,7 +170,9 @@ function MinhasFichasPage() {
   });
   const sairSelecao = () => { setSelMode(false); setSel(new Set()); };
   const imprimirSelecionadas = () => {
-    const toks = itensFiltrados.filter((f) => sel.has(f.id)).map(tokenImpressao);
+    // Usa a lista COMPLETA (não a filtrada por mês/tipo): a seleção persiste entre os filtros,
+    // então imprimir só o que está no filtro ativo perdia as fichas dos outros meses.
+    const toks = fichas.filter((f) => sel.has(f.id) && imprimivel(f)).map(tokenImpressao);
     if (toks.length === 0) return;
     window.open(`/imprimir?itens=${toks.join(",")}`, "_blank", "noopener");
   };

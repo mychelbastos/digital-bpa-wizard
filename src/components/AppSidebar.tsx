@@ -144,7 +144,7 @@ export function AppSidebar() {
   return (
     <>
       {/* Desktop */}
-      <aside className={`sticky top-0 hidden h-screen w-60 shrink-0 flex-col px-4 py-5 ${colapsada ? "md:hidden" : "md:flex"}`} style={{ background: BG_SIDEBAR }}>
+      <aside className={`sticky top-0 hidden h-screen w-60 shrink-0 flex-col px-4 py-5 print:!hidden ${colapsada ? "md:hidden" : "md:flex"}`} style={{ background: BG_SIDEBAR }}>
         <NavConteudo onColapsar={() => alternarColapso(true)} />
       </aside>
 
@@ -157,7 +157,7 @@ export function AppSidebar() {
           onClick={() => alternarColapso(false)}
           title="Mostrar menu"
           aria-label="Mostrar menu"
-          className="fixed bottom-4 left-4 z-40 hidden items-center justify-center rounded-full border border-white/10 p-2.5 text-white shadow-lg transition-colors hover:brightness-110 md:flex"
+          className="fixed bottom-4 left-4 z-40 hidden items-center justify-center rounded-full border border-white/10 p-2.5 text-white shadow-lg transition-colors hover:brightness-110 md:flex print:!hidden"
           style={{ background: BG_SIDEBAR }}
         >
           <PanelLeftOpen className="size-5" />
@@ -165,7 +165,7 @@ export function AppSidebar() {
       )}
 
       {/* Mobile: barra superior fixa (o conteúdo das páginas ganha pt-[52px] no layout). */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-[52px] items-center gap-3 px-4 text-white shadow-md md:hidden" style={{ background: BG_SIDEBAR }}>
+      <div className="fixed inset-x-0 top-0 z-40 flex h-[52px] items-center gap-3 px-4 text-white shadow-md md:hidden print:!hidden" style={{ background: BG_SIDEBAR }}>
         <button type="button" onClick={() => setMobileOpen(true)} aria-label="Abrir menu" className="-ml-1 p-1"><Menu className="size-6" /></button>
         <span className="flex size-7 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5"><img src={spaEmblem} alt="SPA Digital" className="size-full object-contain" /></span>
         <span className="text-[15px] font-bold">SPA Digital</span>
