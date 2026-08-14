@@ -103,7 +103,12 @@ function ImprimirPage() {
         {!concluido ? (
           <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Preparando ficha {Math.min(idx + 1, itens.length)} de {itens.length}…</span>
         ) : (
-          <span className="text-sm text-foreground">{okCount} folha{okCount === 1 ? "" : "s"} pronta{okCount === 1 ? "" : "s"}{falhas > 0 ? ` · ${falhas} falhou(aram)` : ""}.</span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-foreground">
+            {okCount} folha{okCount === 1 ? "" : "s"} pronta{okCount === 1 ? "" : "s"}{falhas > 0 ? ` · ${falhas} falhou(aram)` : ""}.
+            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+              Na janela de impressão, deixe <strong>Margens: Nenhuma</strong> (senão o Chrome adiciona uma página em branco).
+            </span>
+          </span>
         )}
         <button
           onClick={() => window.print()}
