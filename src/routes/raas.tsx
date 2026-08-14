@@ -103,12 +103,12 @@ function Txt(props: React.InputHTMLAttributes<HTMLInputElement> & { uppercase?: 
   );
 }
 
-function Sel({ value, onChange, options, vazio = "—", disabled }: {
-  value: string; onChange: (v: string) => void; options: ComboOption[]; vazio?: string; disabled?: boolean;
+function Sel({ value, onChange, options, vazio = "—", semVazio, disabled }: {
+  value: string; onChange: (v: string) => void; options: ComboOption[]; vazio?: string; semVazio?: boolean; disabled?: boolean;
 }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className={`${inputCls} ${disabled ? lockedCls : ""}`}>
-      <option value="">{vazio}</option>
+      {!semVazio && <option value="">{vazio}</option>}
       {options.map((o) => (
         <option key={o.code} value={o.code}>{o.code} — {o.label}</option>
       ))}
@@ -721,7 +721,7 @@ function RaasPage() {
             <Txt maxLength={13} value={state.autorizacao} onChange={(e) => set("autorizacao", e.target.value.replace(/\D/g, "").slice(0, 13))} />
           </Campo>
           <Campo label="Usuário de álcool e/ou outras drogas?">
-            <Sel value={state.usuarioDroga} onChange={(v) => set("usuarioDroga", v)} options={RAAS_SIM_NAO} vazio="—" />
+            <Sel value={state.usuarioDroga} onChange={(v) => set("usuarioDroga", v)} options={RAAS_SIM_NAO} semVazio />
           </Campo>
           <Campo label="Tipos de droga (se usuário)">
             <div className="flex flex-wrap gap-3 py-2">
@@ -756,7 +756,7 @@ function RaasPage() {
             <Sel value={state.carater} onChange={(v) => set("carater", v)} options={CARATERES} />
           </Campo>
           <Campo label="Existe cobertura de ESF?">
-            <Sel value={state.coberturaEsf} onChange={(v) => set("coberturaEsf", v)} options={RAAS_SIM_NAO} vazio="—" />
+            <Sel value={state.coberturaEsf} onChange={(v) => set("coberturaEsf", v)} options={RAAS_SIM_NAO} semVazio />
           </Campo>
           <Campo label="CNES da ESF (se cobertura = Sim)">
             <Txt inputMode="numeric" maxLength={7} esperaLen={7} value={state.cnesEsf}
@@ -776,7 +776,7 @@ function RaasPage() {
             <Sel value={state.origemInfo} onChange={(v) => set("origemInfo", v)} options={RAAS_ORIGEM_INFO} vazio="—" />
           </Campo>
           <Campo label="Situação de rua?">
-            <Sel value={state.situacaoRua} onChange={(v) => set("situacaoRua", v)} options={RAAS_SIM_NAO} vazio="—" />
+            <Sel value={state.situacaoRua} onChange={(v) => set("situacaoRua", v)} options={RAAS_SIM_NAO} semVazio />
           </Campo>
         </Secao>
 
