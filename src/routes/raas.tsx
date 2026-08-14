@@ -87,13 +87,17 @@ const inputCls =
 
 const lockedCls = "bg-muted/60 text-muted-foreground cursor-not-allowed";
 
-function Txt(props: React.InputHTMLAttributes<HTMLInputElement> & { uppercase?: boolean }) {
-  const { uppercase, className, style, ...rest } = props;
+// `esperaLen`: quando o campo tem tamanho fixo (CNS, CPF, CBO, CNES, CEP, IBGE…), acende a
+// borda vermelha se o valor está PARCIALMENTE preenchido (1..len-1 dígitos = faltou dígito).
+function Txt(props: React.InputHTMLAttributes<HTMLInputElement> & { uppercase?: boolean; esperaLen?: number }) {
+  const { uppercase, esperaLen, className, style, ...rest } = props;
   const locked = rest.readOnly || rest.disabled;
+  const d = esperaLen ? String(rest.value ?? "").replace(/\D/g, "").length : 0;
+  const incompleto = !!esperaLen && !locked && d > 0 && d < esperaLen;
   return (
     <input
       {...rest}
-      className={`${inputCls} ${locked ? lockedCls : ""} ${className ?? ""}`}
+      className={`${inputCls} ${locked ? lockedCls : ""} ${incompleto ? " !border-destructive" : ""} ${className ?? ""}`}
       style={uppercase ? { textTransform: "uppercase", ...style } : style}
     />
   );
@@ -603,7 +607,7 @@ function RaasPage() {
               onPick={(e) => setState((p) => ({ ...p, estabelecimentoNome: e.nome, cnes: e.cnes }))} />
           </Campo>
           <Campo label="CNES (7 dígitos)">
-            <Txt inputMode="numeric" maxLength={7} value={state.cnes}
+            <Txt inputMode="numeric" maxLength={7} esperaLen={7} value={state.cnes}
               onChange={(e) => set("cnes", e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder="0000000" />
           </Campo>
         </Secao>
@@ -631,11 +635,11 @@ function RaasPage() {
             <Txt uppercase readOnly={pt} value={state.nomePaciente} onChange={(e) => set("nomePaciente", e.target.value)} />
           </Campo>
           <Campo label="Cartão Nacional de Saúde (CNS)">
-            <Txt inputMode="numeric" maxLength={15} readOnly={pt} value={state.cnsPaciente}
+            <Txt inputMode="numeric" maxLength={15} esperaLen={15} readOnly={pt} value={state.cnsPaciente}
               onChange={(e) => set("cnsPaciente", e.target.value.replace(/\D/g, "").slice(0, 15))} />
           </Campo>
           <Campo label="CPF do paciente">
-            <Txt inputMode="numeric" maxLength={11} readOnly={pt} value={state.cpfPaciente}
+            <Txt inputMode="numeric" maxLength={11} esperaLen={11} readOnly={pt} value={state.cpfPaciente}
               onChange={(e) => set("cpfPaciente", e.target.value.replace(/\D/g, "").slice(0, 11))} />
           </Campo>
           <Campo label="Sexo">
@@ -661,7 +665,7 @@ function RaasPage() {
             <Txt uppercase readOnly={pt} value={state.nomeResponsavel} onChange={(e) => set("nomeResponsavel", e.target.value)} />
           </Campo>
           <Campo label="Cód. IBGE município (7 díg.)">
-            <Txt inputMode="numeric" maxLength={7} readOnly={pt} value={state.municipioIbge}
+            <Txt inputMode="numeric" maxLength={7} esperaLen={7} readOnly={pt} value={state.municipioIbge}
               onChange={(e) => setState((p) => { const m = e.target.value.replace(/\D/g, "").slice(0, 7); return { ...p, municipioIbge: m, coduf: m ? ufDeMunicipio(m) : p.coduf }; })} />
           </Campo>
           <Campo label="UF (IBGE 2 díg.)">
@@ -669,7 +673,7 @@ function RaasPage() {
               onChange={(e) => set("coduf", e.target.value.replace(/\D/g, "").slice(0, 2))} />
           </Campo>
           <Campo label="CEP de residência">
-            <Txt inputMode="numeric" maxLength={8} readOnly={pt} value={state.cep}
+            <Txt inputMode="numeric" maxLength={8} esperaLen={8} readOnly={pt} value={state.cep}
               onChange={(e) => set("cep", e.target.value.replace(/\D/g, "").slice(0, 8))} />
           </Campo>
           <Campo label="Endereço (logradouro)" span>
@@ -766,7 +770,7 @@ function RaasPage() {
             <Sel value={state.coberturaEsf} onChange={(v) => set("coberturaEsf", v)} options={RAAS_SIM_NAO} vazio="—" />
           </Campo>
           <Campo label="CNES da ESF (se cobertura = Sim)">
-            <Txt inputMode="numeric" maxLength={7} value={state.cnesEsf}
+            <Txt inputMode="numeric" maxLength={7} esperaLen={7} value={state.cnesEsf}
               onChange={(e) => set("cnesEsf", e.target.value.replace(/\D/g, "").slice(0, 7))} disabled={state.coberturaEsf !== "S"} />
           </Campo>
           <Campo label="Encaminhamento (destino do paciente)">
@@ -818,22 +822,22 @@ function RaasPage() {
                       onPatch={(patch) => updateAcao(i, patch)} />
                   </div>
                   <Campo label="CBO executante">
-                    <Txt inputMode="numeric" maxLength={6} value={a.cbo}
+                    <Txt inputMode="numeric" maxLength={6} esperaLen={6} value={a.cbo}
                       onChange={(e) => updateAcao(i, { cbo: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
                   </Campo>
                   <Campo label="CNS executante">
-                    <Txt inputMode="numeric" maxLength={15} value={a.cnsExecutante}
+                    <Txt inputMode="numeric" maxLength={15} esperaLen={15} value={a.cnsExecutante}
                       onChange={(e) => updateAcao(i, { cnsExecutante: e.target.value.replace(/\D/g, "").slice(0, 15), cnsExecutanteNome: "" })} />
                   </Campo>
                   <Campo label="Data da execução">
                     <Txt type="date" value={a.dataExec} onChange={(e) => updateAcao(i, { dataExec: e.target.value })} />
                   </Campo>
                   <Campo label="Serviço (3 díg.)">
-                    <Txt inputMode="numeric" maxLength={3} value={a.servico}
+                    <Txt inputMode="numeric" maxLength={3} esperaLen={3} value={a.servico}
                       onChange={(e) => updateAcao(i, { servico: e.target.value.replace(/\D/g, "").slice(0, 3) })} />
                   </Campo>
                   <Campo label="Classificação (3 díg.)">
-                    <Txt inputMode="numeric" maxLength={3} value={a.classificacao}
+                    <Txt inputMode="numeric" maxLength={3} esperaLen={3} value={a.classificacao}
                       onChange={(e) => updateAcao(i, { classificacao: e.target.value.replace(/\D/g, "").slice(0, 3) })} />
                   </Campo>
                   <Campo label="Quantidade">

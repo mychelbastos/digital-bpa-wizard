@@ -312,23 +312,23 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
           <input value={prontuario} onChange={(e) => setProntuario(e.target.value.replace(/[^\d/]/g, ""))} data-nocaps inputMode="numeric" className={campo} />
         </div>
         <div className="sm:col-span-2">
-          <div className={label}>Data de admissão (CAPS)</div>
+          <div className={label}>Data de entrada</div>
           <input type="date" min="1900-01-01" max="9999-12-31" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} data-nocaps className={campo} />
         </div>
         <div>
           <div className={label}>CNS</div>
           <input value={cns} onChange={(e) => setCns(digitos(e.target.value).slice(0, 15))} data-nocaps inputMode="numeric"
-            className={campo + errCls("documento (CNS/CPF)") + (cnsInvalido ? " !border-destructive" : cnsOk ? " !border-emerald-500" : "")} />
+            className={campo + errCls("documento (CNS/CPF)") + (cnsInvalido || cnsCurto ? " !border-destructive" : cnsOk ? " !border-emerald-500" : "")} />
           {cnsInvalido && <div className="mt-0.5 text-[11px] text-destructive">CNS inválido</div>}
-          {cnsCurto && <div className="mt-0.5 text-[11px] text-muted-foreground">{cnsDig.length}/15 dígitos</div>}
+          {cnsCurto && <div className="mt-0.5 text-[11px] text-destructive">Falta{cnsDig.length === 14 ? "" : "m"} {15 - cnsDig.length} dígito{15 - cnsDig.length === 1 ? "" : "s"} ({cnsDig.length}/15)</div>}
           {cnsOk && <div className="mt-0.5 text-[11px] text-emerald-600">CNS válido ✓</div>}
         </div>
         <div>
           <div className={label}>CPF</div>
           <input value={cpf} onChange={(e) => setCpf(digitos(e.target.value).slice(0, 11))} data-nocaps inputMode="numeric"
-            className={campo + errCls("documento (CNS/CPF)") + (cpfInvalido ? " !border-destructive" : cpfOk ? " !border-emerald-500" : "")} />
+            className={campo + errCls("documento (CNS/CPF)") + (cpfInvalido || cpfCurto ? " !border-destructive" : cpfOk ? " !border-emerald-500" : "")} />
           {cpfInvalido && <div className="mt-0.5 text-[11px] text-destructive">CPF inválido</div>}
-          {cpfCurto && <div className="mt-0.5 text-[11px] text-muted-foreground">{cpfDig.length}/11 dígitos</div>}
+          {cpfCurto && <div className="mt-0.5 text-[11px] text-destructive">Falta{cpfDig.length === 10 ? "" : "m"} {11 - cpfDig.length} dígito{11 - cpfDig.length === 1 ? "" : "s"} ({cpfDig.length}/11)</div>}
           {cpfOk && <div className="mt-0.5 text-[11px] text-emerald-600">CPF válido ✓</div>}
         </div>
         <div>
