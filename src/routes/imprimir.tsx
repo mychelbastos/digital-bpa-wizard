@@ -7,17 +7,21 @@ export const Route = createFileRoute("/imprimir")({
   component: ImprimirPage,
 });
 
-interface Item { tipo: "BPA-C" | "BPA-I"; id: string }
+interface Item { tipo: "BPA-C" | "BPA-I" | "RAAS"; id: string }
 
-// itens = "I~<id>,C~<id>,…" (I = BPA-I, C = BPA-C). Passado por "Minhas fichas".
+// itens = "I~<id>,C~<id>,R~<id>,…" (I = BPA-I, C = BPA-C, R = RAAS). Passado por "Minhas fichas".
 function parseItens(): Item[] {
   const raw = new URLSearchParams(window.location.search).get("itens") ?? "";
   return raw
     .split(",")
-    .map((tok) => { const [t, id] = tok.split("~"); return { tipo: t === "C" ? "BPA-C" : "BPA-I", id } as Item; })
+    .map((tok) => {
+      const [t, id] = tok.split("~");
+      const tipo: Item["tipo"] = t === "C" ? "BPA-C" : t === "R" ? "RAAS" : "BPA-I";
+      return { tipo, id } as Item;
+    })
     .filter((x) => x.id);
 }
-const rotaEditor = (it: Item) => (it.tipo === "BPA-C" ? "/bpa-c-v3" : "/bpa-i-v3");
+const rotaEditor = (it: Item) => (it.tipo === "BPA-C" ? "/bpa-c-v3" : it.tipo === "RAAS" ? "/raas-folha" : "/bpa-i-v3");
 
 const TIMEOUT_MS = 30000; // trava de segurança por ficha
 

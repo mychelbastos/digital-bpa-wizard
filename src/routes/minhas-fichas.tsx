@@ -25,7 +25,7 @@ const rotaDoTipo = (tipo: FichaResumo["tipo"], id: string) =>
   tipo === "BPA-C" ? `/bpa-c-v3?ficha=${id}` : tipo === "RAAS" ? `/raas?ficha=${id}` : `/bpa-i-v3?ficha=${id}`;
 // Token de uma ficha para a página /imprimir ("I~<id>" ou "C~<id>"). RAAS ainda não tem
 // impressão/overlay — não gera token (é filtrado antes de entrar na seleção de impressão).
-const tokenImpressao = (f: FichaResumo) => `${f.tipo === "BPA-C" ? "C" : "I"}~${f.id}`;
+const tokenImpressao = (f: FichaResumo) => `${f.tipo === "BPA-C" ? "C" : f.tipo === "RAAS" ? "R" : "I"}~${f.id}`;
 
 type TipoFiltro = "todos" | "BPA-C" | "BPA-I" | "RAAS";
 
@@ -156,9 +156,9 @@ function MinhasFichasPage() {
 
   const rolar = (dir: -1 | 1) => stripRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
 
-  // Seleção p/ impressão em lote. RAAS ainda não tem impressão (sem PDF/overlay) — fica
-  // fora da seleção para não gerar token quebrado no /imprimir.
-  const imprimivel = (f: FichaResumo) => f.tipo !== "RAAS";
+  // Seleção p/ impressão em lote. BPA-I e BPA-C capturam a folha do próprio editor; o RAAS
+  // captura pela folha oficial (/raas-folha). Os três são imprimíveis.
+  const imprimivel = (f: FichaResumo) => f.tipo === "BPA-I" || f.tipo === "BPA-C" || f.tipo === "RAAS";
   const idsPagina = itensPagina.filter(imprimivel).map((f) => f.id);
   const todasPaginaSel = idsPagina.length > 0 && idsPagina.every((id) => sel.has(id));
   const toggleSel = (id: string) => setSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
