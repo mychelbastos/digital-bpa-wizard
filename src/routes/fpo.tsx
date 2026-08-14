@@ -471,7 +471,8 @@ function Card({ titulo, qtd, valor, saldo }: { titulo: string; qtd: number; valo
 function Badges({ r }: { r: FpoComparacaoRow }) {
   return (
     <>
-      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{r.codigoFpo ?? r.procedimento}</span>
+      {/* Código SIGTAP de 10 díg. (o `codigoFpo` do arquivo "limpo" vem com 9 — sem o DV). */}
+      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{r.procedimento}</span>
       {!r.resolvido && <span className="shrink-0 rounded bg-amber-200 px-1 text-[9px] font-semibold text-amber-800">revisar</span>}
       {r.resolvido && !r.temTeto && <span className="shrink-0 rounded bg-sky-200 px-1 text-[9px] font-semibold text-sky-800">sem teto</span>}
       {r.herdado && r.tetoCompetencia && <span className="shrink-0 rounded bg-muted px-1 text-[9px] font-semibold text-muted-foreground" title="Teto herdado de uma competência anterior (base). Edite para criar uma nova vigência a partir deste mês.">base {compLabel(r.tetoCompetencia)}</span>}
