@@ -82,19 +82,18 @@ function ImprimirPage() {
           .imprimir-root { min-height: 0 !important; background: #fff !important; }
           .no-print { display: none !important; }
           .folhas-wrap { max-width: none !important; margin: 0 !important; padding: 0 !important; }
-          /* Cada folha = EXATAMENTE uma página A4. A imagem (aspecto ~A4) é CONTIDA por altura
-             (max-height !important vence o w-full do <img>). O container tem 296mm (não os 297mm
-             cheios): 1mm a menos evita o estouro por arredondamento do Chrome — que jogava ~0,1mm
-             para a página seguinte, gerando páginas em branco/fragmentos. */
+          /* Uma ficha por página A4. A proporção da ficha (1653:2339) dá 297,15mm de ALTURA a
+             210mm de largura — sempre um tico maior que a A4 —, então NUNCA dimensionar pela
+             largura: a imagem é fixada pela ALTURA em 296mm (1mm a menos que a página, sem
+             estouro). A quebra é BEFORE entre folhas (o seletor ~ ignora placeholders de falha),
+             assim não há página em branco no começo nem folha extra no fim. */
           .folha-print {
             margin: 0 !important; padding: 0 !important; box-shadow: none !important; border: 0 !important;
-            width: 210mm; height: 296mm; line-height: 0;
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden; page-break-after: always; break-after: page;
-            page-break-inside: avoid; break-inside: avoid;
+            line-height: 0; text-align: center;
+            break-inside: avoid; page-break-inside: avoid;
           }
-          .folha-print:last-child { page-break-after: auto; break-after: auto; }
-          .folha-print img { display: block !important; width: auto !important; height: auto !important; max-width: 100% !important; max-height: 100% !important; }
+          .folha-print ~ .folha-print { break-before: page; page-break-before: always; }
+          .folha-print img { display: block; margin: 0 auto; width: auto !important; height: 296mm !important; max-width: 100% !important; }
         }
       `}</style>
 
