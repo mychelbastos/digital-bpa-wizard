@@ -64,7 +64,8 @@ async function errosProducaoSigtap(rows: ProducaoBpaRow[]): Promise<ErroItem[]> 
     // procedimento/CBO/idade/quantidade — não há esses campos). Só cobramos no individualizado.
     if (r.tipo !== "BPA-C" && servCache.get(r.procedimento) === true && (!r.servico || !r.classificacao))
       out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "Serviço/Classificação obrigatório para o procedimento (SIGTAP) e está ausente." });
-    if (cidCache.get(r.procedimento) === true && (!r.cid || r.cid.trim().length < 3))
+    // CID também não se aplica ao BPA Consolidado (o formulário não registra CID).
+    if (r.tipo !== "BPA-C" && cidCache.get(r.procedimento) === true && (!r.cid || r.cid.trim().length < 3))
       out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "CID obrigatório para o procedimento (SIGTAP) e está ausente." });
     // Competência de atendimento muito anterior ao mês de produção (retroatividade).
     if (r.mes_producao && r.competencia && mesesDiff(r.mes_producao, r.competencia) > 3)
