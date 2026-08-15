@@ -60,7 +60,9 @@ async function errosProducaoSigtap(rows: ProducaoBpaRow[]): Promise<ErroItem[]> 
       continue; // sem SIGTAP não dá p/ checar as demais regras
     }
     if (r.quantidade <= 0) out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "Quantidade inválida (0)." });
-    if (servCache.get(r.procedimento) === true && (!r.servico || !r.classificacao))
+    // Serviço/Classificação NÃO se aplica ao BPA Consolidado (o formulário só registra
+    // procedimento/CBO/idade/quantidade — não há esses campos). Só cobramos no individualizado.
+    if (r.tipo !== "BPA-C" && servCache.get(r.procedimento) === true && (!r.servico || !r.classificacao))
       out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "Serviço/Classificação obrigatório para o procedimento (SIGTAP) e está ausente." });
     if (cidCache.get(r.procedimento) === true && (!r.cid || r.cid.trim().length < 3))
       out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "CID obrigatório para o procedimento (SIGTAP) e está ausente." });
