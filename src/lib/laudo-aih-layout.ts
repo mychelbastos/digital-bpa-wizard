@@ -15,7 +15,7 @@ export const CAMPOS: Campo[] = [
   { key: "estab_solicitante_cnes", top: 6.3, left: 73.6, width: 25, num: true, maxLen: 7, crivo: "cnes", alvo: "estab_solicitante_nome" },
   { key: "estab_executante_nome", top: 8.9, left: 1, width: 71, upper: true, autocomplete: "estabelecimento", cnesAlvo: "estab_executante_cnes" },
   { key: "estab_executante_cnes", top: 8.9, left: 74, width: 24, num: true, maxLen: 7, crivo: "cnes", alvo: "estab_executante_nome" },
-  { key: "pac_nome", top: 12.3, left: 1, width: 60, upper: true },
+  { key: "pac_nome", top: 12.3, left: 1, width: 60, upper: true, autocomplete: "paciente" },
   { key: "pac_apelido", top: 12.3, left: 61.4, width: 19.8, upper: true },
   { key: "pac_prontuario", top: 12.4, left: 81.9, width: 16.9, height: 1.2, num: true },
   { key: "pac_cns", top: 14.9, left: 1, width: 30.5, height: 1.1, num: true, maxLen: 15 },

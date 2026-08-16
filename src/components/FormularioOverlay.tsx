@@ -6,13 +6,13 @@ import { exportSheetsPdf } from "@/lib/export-pdf";
 import { focarProximoCampo } from "@/lib/foco-campos";
 import { carregarNomesProcedimentos, carregarDescricoesCid } from "@/lib/dashboard-producao";
 import { buscarEstabelecimento, buscarEstabelecimentosPorNome } from "@/lib/bpa-i-v2/estabelecimentos";
-import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { buscarProcedimentosPorNome, buscarServClassDoProcedimento } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { buscarProfissionais, sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
 import { orgDoCnes } from "@/lib/tfd/tfd";
-import { carregarPaciente, type Paciente } from "@/lib/pacientes";
+import { carregarPaciente, buscarPacientes, type Paciente } from "@/lib/pacientes";
 import type { ComboOption } from "@/lib/bpa-i-v2/racas";
 import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePicker";
 import { ExcluirPacienteModal } from "@/components/pacientes/ExcluirPacienteModal";
@@ -54,9 +54,11 @@ export interface CampoForm {
   alvo?: string; // key do campo a preencher com o nome/descrição encontrado
   alvos?: Record<string, string>; // vários alvos (ex.: CEP → { ibge, uf, municipio })
   // Autocomplete por NOME → sugere e preenche o código/CNES + campos relacionados:
-  autocomplete?: "estabelecimento" | "procedimento" | "municipio" | "profissional";
+  autocomplete?: "estabelecimento" | "procedimento" | "municipio" | "profissional" | "paciente";
   codAlvo?: string; // key do campo de código (celulas) a preencher ao escolher
   cnesAlvo?: string; // idem, para estabelecimento (compat)
+  servicoAlvo?: string; // procedimento: preenche Serviço quando há uma só combinação (SIGTAP)
+  classAlvo?: string;   // procedimento: preenche Classificação quando há uma só combinação
   // Autocomplete de profissional (por nome, no cache do CNES):
   cnsAlvo?: string; // key do campo de CNS (celulas) a preencher ao escolher
   cnesCampo?: string; // key do campo CNES que define a base de profissionais
@@ -258,6 +260,13 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
     const alvo = campos.find((c) => c.key === key);
     if (alvo?.celulas) preencherCelulas(key, s); else setTxt(key, s);
   };
+  // Serviço/Classificação do procedimento (SIGTAP): preenche quando há UMA só combinação.
+  // Com várias, deixa manual (não temos os serviços habilitados do CNES p/ escolher aqui).
+  const preencherServClass = async (codigo: string, servicoAlvo?: string, classAlvo?: string) => {
+    if (!servicoAlvo || !classAlvo || codigo.length !== 10) return;
+    const combos = await buscarServClassDoProcedimento(codigo);
+    if (combos.length === 1) { preencherCod(servicoAlvo, combos[0].servico); preencherCod(classAlvo, combos[0].classificacao); }
+  };
   // Dígitos "puros" de um campo (útil p/ ler o CNES atual, que é guardado como "seg|seg|...").
   const digitosCampo = (key: string) => (txt[key] ?? "").split("|").join("").replace(/\D/g, "");
 
@@ -322,6 +331,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
     } catch { ok = false; }
     setCrivoStatus((s) => ({ ...s, [c.key]: ok ? "ok" : "erro" }));
     if (ok && c.alvo && nome) setTxt(c.alvo, nome.toUpperCase());
+    if (ok && c.crivo === "procedimento") void preencherServClass(valor, c.servicoAlvo, c.classAlvo);
   };
 
   // Mudança de valor de um campo (dispara o crivo quando o valor fica "completo").
@@ -518,7 +528,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
                   const buscarOpcoes = async (termo: string): Promise<OpcaoAuto[]> => {
                     if (c.autocomplete === "procedimento") {
                       const rs = await buscarProcedimentosPorNome(termo);
-                      return rs.map((p) => ({ label: p.nome, sub: p.codigo, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.codAlvo) { preencherCod(c.codAlvo, p.codigo); setCrivoStatus((s) => ({ ...s, [c.codAlvo!]: "ok" })); } } }));
+                      return rs.map((p) => ({ label: p.nome, sub: p.codigo, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.codAlvo) { preencherCod(c.codAlvo, p.codigo); setCrivoStatus((s) => ({ ...s, [c.codAlvo!]: "ok" })); } void preencherServClass(p.codigo, c.servicoAlvo, c.classAlvo); } }));
                     }
                     if (c.autocomplete === "profissional") {
                       const cnes = c.cnesCampo ? digitosCampo(c.cnesCampo) : "";
@@ -526,6 +536,13 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
                       let rs = await buscarProfissionais(cnes, termo);
                       if (rs.length === 0) { await sincronizarProfissionais(cnes); rs = await buscarProfissionais(cnes, termo); }
                       return rs.map((p) => ({ label: p.nome, sub: `CNS ${p.cns}`, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.cnsAlvo) preencherCod(c.cnsAlvo, p.cns); } }));
+                    }
+                    if (c.autocomplete === "paciente") {
+                      // Busca direto no campo Nome do paciente: ao escolher, espalha o cadastro
+                      // pelos campos (mesma ação da barra "Buscar paciente"). Precisa do org (CNES).
+                      if (!integracaoPaciente || !orgId) return [];
+                      const rs = await buscarPacientes(orgId, termo);
+                      return rs.map((p) => ({ label: p.nome, sub: p.cns ? `CNS ${p.cns}` : p.cpf ? `CPF ${p.cpf}` : "", aplicar: () => aoEscolherPaciente(p) }));
                     }
                     if (c.autocomplete === "municipio") {
                       const t = normTxt(termo);
