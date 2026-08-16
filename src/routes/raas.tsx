@@ -6,7 +6,7 @@ import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePic
 import { carregarPaciente, type Paciente } from "@/lib/pacientes";
 import { orgDoCnes } from "@/lib/tfd/tfd";
 import { buscarEstabelecimento, buscarEstabelecimentosPorNome, type EstabelecimentoSug } from "@/lib/bpa-i-v2/estabelecimentos";
-import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { buscarProcedimentosPorNome, buscarServClassDoProcedimento, type ServClassOpcao } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { buscarNomeCid, buscarCidPorTermo } from "@/lib/bpa-i-v2/nomes-sigtap";
 import { buscarProfissionais, buscarCbosVinculo, sincronizarProfissionais, type ProfissionalCache, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
@@ -556,11 +556,27 @@ function RaasPage() {
     });
   };
   const addAcao = () => setState((prev) => ({ ...prev, acoes: [...prev.acoes, emptyAcao()] }));
-  const removeAcao = (i: number) =>
+  const removeAcao = (i: number) => {
+    setServClassOpcoes({}); // índices mudam ao remover — evita seletor apontar p/ ação errada
     setState((prev) => {
       const next = prev.acoes.filter((_, idx) => idx !== i);
       return { ...prev, acoes: next.length ? next : [emptyAcao()] };
     });
+  };
+
+  // Serviço/Classificação por procedimento (SIGTAP): ao escolher o procedimento, preenche
+  // automático quando há uma só combinação; oferece a escolha quando há mais de uma (não
+  // temos os serviços habilitados do CNES p/ filtrar). Opções por índice de ação.
+  const [servClassOpcoes, setServClassOpcoes] = useState<Record<number, ServClassOpcao[]>>({});
+  const aoEscolherProcedimento = (i: number, codigo: string, nome: string) => {
+    updateAcao(i, { procedimento: codigo, procedimentoNome: nome, servico: "", classificacao: "" });
+    setServClassOpcoes((p) => { const n = { ...p }; delete n[i]; return n; });
+    const comp = /^\d{6}$/.test(state.competencia) ? state.competencia : null;
+    buscarServClassDoProcedimento(codigo, comp).then((combos) => {
+      if (combos.length === 1) updateAcao(i, { servico: combos[0].servico, classificacao: combos[0].classificacao });
+      else if (combos.length > 1) setServClassOpcoes((p) => ({ ...p, [i]: combos }));
+    });
+  };
 
   // ----- validação leve (não bloqueia salvar; só orienta) -----
   const faltando: string[] = [];
@@ -879,7 +895,7 @@ function RaasPage() {
                   <div className="md:col-span-3">
                     <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Procedimento (SIGTAP)</span>
                     <ProcedimentoInput codigo={a.procedimento} nome={a.procedimentoNome}
-                      onPick={(codigo, nome) => updateAcao(i, { procedimento: codigo, procedimentoNome: nome })} />
+                      onPick={(codigo, nome) => aoEscolherProcedimento(i, codigo, nome)} />
                   </div>
                   <div className="md:col-span-3">
                     <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Profissional executante</span>
@@ -905,6 +921,21 @@ function RaasPage() {
                     <Txt inputMode="numeric" maxLength={3} esperaLen={3} value={a.classificacao}
                       onChange={(e) => updateAcao(i, { classificacao: e.target.value.replace(/\D/g, "").slice(0, 3) })} />
                   </Campo>
+                  {(servClassOpcoes[i]?.length ?? 0) > 1 && (
+                    <div className="md:col-span-3">
+                      <div className="mb-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                        Este procedimento tem mais de um Serviço/Classificação — escolha o da unidade:
+                      </div>
+                      <select
+                        value={servClassOpcoes[i].findIndex((o) => o.servico === a.servico && o.classificacao === a.classificacao)}
+                        onChange={(e) => { const o = servClassOpcoes[i][Number(e.target.value)]; if (o) updateAcao(i, { servico: o.servico, classificacao: o.classificacao }); }}
+                        className={`${inputCls} w-full`}
+                      >
+                        <option value={-1}>Escolha o Serviço/Classificação…</option>
+                        {servClassOpcoes[i].map((o, k) => <option key={k} value={k}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <Campo label="Quantidade">
                     <Txt inputMode="numeric" maxLength={6} value={a.quantidade}
                       onChange={(e) => updateAcao(i, { quantidade: e.target.value.replace(/\D/g, "").slice(0, 6) })} />

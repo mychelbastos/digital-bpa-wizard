@@ -155,6 +155,54 @@ export async function cboValidoParaProcedimento(procedimento: string, cbo: strin
   }
 }
 
+export interface ServClassOpcao {
+  servico: string;        // 3 díg.
+  classificacao: string;  // 3 díg.
+  label: string;          // "servico nome · classificacao nome" (para o seletor)
+}
+
+// Combinações de Serviço/Classificação de um procedimento no SIGTAP (com nomes p/ exibir).
+// Uma combinação -> preenche automático; várias -> o chamador oferece a escolha (não temos os
+// serviços HABILITADOS do CNES no banco p/ filtrar). Dedup por (servico, classificacao).
+export async function buscarServClassDoProcedimento(procedimento: string, competencia?: string | null): Promise<ServClassOpcao[]> {
+  if (!supabase || procedimento.length !== 10) return [];
+  try {
+    const comp = await resolverCompetencia(competencia);
+    const consulta = (c: string | null) => {
+      let q = supabase!.from("procedimento_servico").select("servico, classificacao").eq("procedimento", procedimento);
+      if (c) q = q.eq("competencia", c);
+      return q;
+    };
+    let { data, error } = await consulta(comp);
+    if (!error && (!data || data.length === 0) && comp) ({ data, error } = await consulta(null)); // fallback sem competência
+    if (error || !data) return [];
+    const combos = new Map<string, { servico: string; classificacao: string }>();
+    for (const r of data as { servico: string; classificacao: string }[]) {
+      if (r.servico && r.classificacao) combos.set(`${r.servico}|${r.classificacao}`, { servico: r.servico, classificacao: r.classificacao });
+    }
+    const lista = [...combos.values()];
+    if (lista.length === 0) return [];
+    const servicos = [...new Set(lista.map((c) => c.servico))];
+    const [{ data: sc }, { data: srv }] = await Promise.all([
+      supabase.from("servico_classificacao_sigtap").select("servico, classificacao, nome").in("servico", servicos),
+      supabase.from("servicos_sigtap").select("codigo, nome").in("codigo", servicos),
+    ]);
+    const nomeCls = new Map<string, string>();
+    for (const r of (sc ?? []) as { servico: string; classificacao: string; nome: string }[]) nomeCls.set(`${r.servico}|${r.classificacao}`, r.nome);
+    const nomeSrv = new Map<string, string>();
+    for (const r of (srv ?? []) as { codigo: string; nome: string }[]) nomeSrv.set(r.codigo, r.nome);
+    return lista
+      .map((c) => {
+        const ns = nomeSrv.get(c.servico), nc = nomeCls.get(`${c.servico}|${c.classificacao}`);
+        const label = `${ns ? `${c.servico} ${ns}` : c.servico} · ${nc ? `${c.classificacao} ${nc}` : c.classificacao}`;
+        return { servico: c.servico, classificacao: c.classificacao, label };
+      })
+      .sort((a, b) => a.servico.localeCompare(b.servico) || a.classificacao.localeCompare(b.classificacao));
+  } catch {
+    return [];
+  }
+}
+
 // CID é compatível com este procedimento?
 export async function cidValidoParaProcedimento(procedimento: string, cid: string, competencia?: string | null): Promise<boolean | null> {
   if (!supabase || procedimento.length !== 10 || !cid) return null;
