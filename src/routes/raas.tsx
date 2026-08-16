@@ -467,12 +467,13 @@ function RaasPage() {
   const nomeSugerido = (): string => {
     if (salvarComoNovo && fichaTituloRef.current) return `${fichaTituloRef.current} (cópia)`;
     if (fichaTituloRef.current) return fichaTituloRef.current;
+    // Padrão das demais fichas (sem prefixo "RAAS" — o tipo já é o selo): CNES · paciente · MM/AAAA.
     const auto = montarTituloFicha({
       cnes: cnesEstab,
       profNome: state.nomePaciente,
       competencia: /^\d{6}$/.test(state.competencia) ? state.competencia : null,
     });
-    return `RAAS ${auto || state.nomePaciente || cnesEstab || "ficha"}`.trim();
+    return auto || state.nomePaciente || cnesEstab || "Ficha RAAS";
   };
 
   const metaFicha = () => ({

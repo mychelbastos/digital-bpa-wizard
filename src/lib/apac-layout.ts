@@ -8,7 +8,7 @@ export const CAMPOS: Campo[] = [
   { key: "estab_solic_nome", top: 10.2, left: 5.5, width: 70.8, height: 1.9, upper: true, autocomplete: "estabelecimento", cnesAlvo: "estab_solic_cnes" },
   { key: "estab_solic_cnes", top: 10.4, left: 77.5, width: 16.8, height: 1.7, celulas: 7, crivo: "cnes", alvo: "estab_solic_nome" },
   { key: "pac_nome", top: 15.8, left: 5.8, width: 58.8, height: 1.5, upper: true },
-  { key: "pac_prontuario", top: 15.8, left: 65.4, width: 14.2, height: 1.4, num: true },
+  { key: "pac_prontuario", top: 15.8, left: 65.4, width: 14.2, height: 1.4, upper: true },
   { key: "pac_cpf_cns", top: 18.6, left: 5.6, width: 44, height: 1.5, celulas: 15, crivo: "cpfcns" },
   { key: "pac_nascimento", top: 18.6, left: 50.9, width: 13.7, height: 1.5, data: true },
   { key: "pac_raca", top: 18.4, left: 76.9, width: 7.2, height: 1.7, opcoes: RACAS },

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { FormularioOverlay, type PreenchePaciente } from "@/components/FormularioOverlay";
 import { CAMPOS, CHECKS } from "@/lib/apac-layout";
+import { nomeCurto } from "@/lib/bpa-i-v2/titulo-ficha";
 import type { Paciente } from "@/lib/pacientes";
 import apac1 from "@/assets/apac-1.png";
 import apac2 from "@/assets/apac-2.png";
@@ -61,6 +62,12 @@ function limparPaciente(api: PreenchePaciente) {
 
 // Dígitos "puros" de um campo de casinhas ("seg|seg|..." -> "1234567").
 const digApac = (v?: string) => (v ?? "").split("|").join("").replace(/\D/g, "");
+// Competência (AAAAMM) a partir de um campo de data do overlay ("DD|MM|AAAA"). "" se inválido.
+const compDeData = (v?: string) => {
+  const p = (v ?? "").split("|"); // [DD, MM, AAAA]
+  return p.length === 3 && /^\d{2}$/.test(p[1]) && /^\d{4}$/.test(p[2]) ? `${p[2]}${p[1]}` : "";
+};
+const compLabel = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : "");
 
 function ApacPage() {
   return (
@@ -80,13 +87,23 @@ function ApacPage() {
       }}
       nuvem={{
         tipo: "APAC",
+        // Padrão: CNES · profissional solicitante · competência · PACIENTE (1º+último). Sem folha.
         meta: (txt) => ({
           tipo: "APAC",
           cnes: digApac(txt["estab_solic_cnes"]) || null,
-          profissionalCns: digApac(txt["pac_cpf_cns"]) || null, // documento do paciente
-          profissionalNome: (txt["pac_nome"] || "").trim() || null,
+          profissionalNome: nomeCurto(txt["prof_solic_nome"]) || null,
+          profissionalCns: digApac(txt["prof_solic_cns"]) || null,
         }),
-        titulo: (txt) => `APAC ${(txt["pac_nome"] || "").trim() || digApac(txt["estab_solic_cnes"]) || "ficha"}`.trim(),
+        competencia: (txt) => compDeData(txt["data_solicitacao"]),
+        titulo: (txt) => {
+          const partes = [
+            digApac(txt["estab_solic_cnes"]),
+            nomeCurto(txt["prof_solic_nome"]),
+            compLabel(compDeData(txt["data_solicitacao"])),
+            nomeCurto(txt["pac_nome"]),
+          ].filter(Boolean);
+          return partes.join(" · ") || "Ficha APAC";
+        },
       }}
     />
   );
