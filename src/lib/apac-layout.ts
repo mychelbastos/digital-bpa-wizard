@@ -3,6 +3,7 @@
 // Muitos campos têm casinhas de 1 dígito (celulas), datas (data) e códigos numéricos (num).
 import type { CampoForm as Campo, CheckForm as Check } from "@/components/FormularioOverlay";
 import { RACAS } from "@/lib/bpa-i-v2/racas";
+import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
 
 export const CAMPOS: Campo[] = [
   { key: "estab_solic_nome", top: 10.2, left: 5.5, width: 70.8, height: 1.9, upper: true, autocomplete: "estabelecimento", cnesAlvo: "estab_solic_cnes" },
@@ -12,7 +13,7 @@ export const CAMPOS: Campo[] = [
   { key: "pac_cpf_cns", top: 18.6, left: 5.6, width: 44, height: 1.5, celulas: 15, crivo: "cpfcns" },
   { key: "pac_nascimento", top: 18.6, left: 50.9, width: 13.7, height: 1.5, data: true },
   { key: "pac_raca", top: 18.4, left: 76.9, width: 7.2, height: 1.7, opcoes: RACAS },
-  { key: "pac_etnia", top: 18.5, left: 86.1, width: 8.1, height: 1.7, num: true, maxLen: 4 },
+  { key: "pac_etnia", top: 18.5, left: 86.1, width: 8.1, height: 1.7, opcoes: ETNIAS },
   { key: "pac_mae", top: 21.4, left: 5.7, width: 61.5, height: 1.5, upper: true },
   { key: "pac_ddd_cel", top: 21.8, left: 68.1, width: 5.1, height: 1.2, celulas: 2 },
   { key: "pac_tel_cel", top: 21.8, left: 73.5, width: 20.8, height: 1.1, celulas: 8 },

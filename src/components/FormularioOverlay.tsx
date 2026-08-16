@@ -818,17 +818,29 @@ function CampoOpcoes({ id, rect, value, contornoCls, opcoes, onEscolhe }: {
   id: string; rect: Rect; value: string; contornoCls: string; opcoes: ComboOption[]; onEscolhe: (code: string) => void;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [termo, setTermo] = useState("");
+  // Filtro por CÓDIGO (prefixo) ou NOME/sinônimos (contém, sem acento). Lista longa (ex.: 264
+  // etnias) fica pesquisável; lista curta (raça) simplesmente mostra tudo. O CAMPO guarda o
+  // CÓDIGO (o que vai para a folha); o nome aparece só na lista.
+  const q = termo.trim();
+  const nq = q.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const lista = (!q
+    ? opcoes
+    : opcoes.filter((o) => o.code.startsWith(q) || `${o.label} ${o.search ?? ""}`.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(nq))
+  ).slice(0, 40);
   return (
     <>
-      <input id={id} value={value} readOnly autoComplete="off"
-        onFocus={() => setAberto(true)} onClick={() => setAberto(true)}
+      <input id={id} value={aberto ? termo : value} autoComplete="off"
+        onChange={(e) => { setTermo(e.target.value); setAberto(true); }}
+        onFocus={() => { setTermo(""); setAberto(true); }}
         onKeyDown={aoTeclarEnter} onBlur={() => setTimeout(() => setAberto(false), 150)}
-        className={`form-text absolute cursor-pointer ${contornoCls}`}
+        placeholder={value || "Código ou nome"}
+        className={`form-text absolute ${contornoCls}`}
         style={{ top: pctS(rect.top), left: pctS(rect.left), width: pctS(rect.width), height: pctS(rect.height) }} />
-      {aberto && (
+      {aberto && lista.length > 0 && (
         <ul className="absolute z-30 max-h-44 overflow-auto rounded-md border border-border bg-white shadow-lg"
           style={{ top: `${rect.top + rect.height + 0.2}%`, left: pctS(rect.left), minWidth: pctS(Math.max(rect.width, 30)) }}>
-          {opcoes.map((o) => (
+          {lista.map((o) => (
             <li key={o.code}>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); onEscolhe(o.code); setAberto(false); }}
                 className="block w-full px-2 py-1 text-left text-[11px] leading-tight hover:bg-muted">
