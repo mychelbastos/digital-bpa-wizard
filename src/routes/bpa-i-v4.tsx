@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useBpaIEngine, cells, loadState, type State } from "@/lib/bpa-i-v3/engine";
 import { buscarEstabelecimentosPorNome } from "@/lib/bpa-i-v2/estabelecimentos";
 import { buscarProfissionais, buscarCbosVinculo, type ProfissionalCache } from "@/lib/bpa-i-v2/profissionais";
-import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { buscarProcedimentosPorNome, buscarServClassDoProcedimento, type ServClassOpcao } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { PacienteSeqCard } from "@/components/bpa-i-v3/PacienteSeqCard";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
@@ -291,6 +291,28 @@ function SeqCardV4(props: {
     let cancel = false; buscarNomeServicoClasse(sv, cl).then((n) => { if (!cancel) setNomeSC(n); });
     return () => { cancel = true; };
   }, [s.servico, s.classProc]);
+
+  // Auto-preenche Serviço/Classificação pelo procedimento (SIGTAP): uma combinação →
+  // preenche; várias → seletor. Respeita serviço já preenchido (ficha carregada).
+  const codProcSC = dig(s.codProc);
+  const [servClassOpcoes, setServClassOpcoes] = useState<ServClassOpcao[]>([]);
+  const servClassProcRef = useRef("");
+  useEffect(() => {
+    if (codProcSC.length !== 10) { setServClassOpcoes([]); return; }
+    const anterior = servClassProcRef.current;
+    if (anterior === codProcSC) return;
+    const eraTroca = anterior.length === 10;
+    servClassProcRef.current = codProcSC;
+    setServClassOpcoes([]);
+    buscarServClassDoProcedimento(codProcSC).then((combos) => {
+      if (servClassProcRef.current !== codProcSC) return;
+      const vazio = !dig(s.servico) && !dig(s.classProc);
+      if (!vazio && !eraTroca) return;
+      if (combos.length === 1) { u("servico", cells(combos[0].servico, 3)); u("classProc", cells(combos[0].classificacao, 3)); }
+      else if (combos.length > 1) setServClassOpcoes(combos);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codProcSC]);
   const [nomeCid, setNomeCid] = useState<string | null>(null);
   useEffect(() => {
     const c = dig(s.cid).trim();
@@ -337,6 +359,18 @@ function SeqCardV4(props: {
           <div className="grid grid-cols-2 gap-2">
             <Campo label={`Serviço${exig.exigeServico ? " *" : ""}`} erro={val.servicoInvalido}><input inputMode="numeric" value={dig(s.servico)} onChange={(e) => u("servico", cells(e.target.value.replace(/\D/g, ""), 3))} className={inputMono} maxLength={3} /></Campo>
             <Campo label="Classificação" erro={val.servicoInvalido}><input inputMode="numeric" value={dig(s.classProc)} onChange={(e) => u("classProc", cells(e.target.value.replace(/\D/g, ""), 3))} className={inputMono} maxLength={3} /></Campo>
+            {servClassOpcoes.length > 1 && (
+              <Campo label="Serviço/Classificação (escolha)">
+                <select
+                  value={servClassOpcoes.findIndex((o) => o.servico === dig(s.servico) && o.classificacao === dig(s.classProc))}
+                  onChange={(e) => { const o = servClassOpcoes[Number(e.target.value)]; if (o) { u("servico", cells(o.servico, 3)); u("classProc", cells(o.classificacao, 3)); } }}
+                  className={input}
+                >
+                  <option value={-1}>Escolha o da unidade…</option>
+                  {servClassOpcoes.map((o, k) => <option key={k} value={k}>{o.label}</option>)}
+                </select>
+              </Campo>
+            )}
           </div>
           {nomeSC && <div className="-mt-1 text-[11px] text-slate-500 sm:col-span-2">Serviço/Classe: {nomeSC}</div>}
           <Campo label={`CID${exig.exigeCid ? " *" : ""}`} hint={nomeCid ?? undefined} erro={val.cidInvalido}>

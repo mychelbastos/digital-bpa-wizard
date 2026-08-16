@@ -6,6 +6,7 @@ import { ComboField } from "@/components/bpa-i-v2/ComboField";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
 import { AtendimentoAntigoAviso } from "@/components/bpa-i-v2/AtendimentoAntigoAviso";
 import { ProcedimentoField } from "@/components/bpa-i-v2/ProcedimentoField";
+import { buscarServClassDoProcedimento, type ServClassOpcao } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
 import { NACIONALIDADES } from "@/lib/bpa-i-v2/nacionalidades";
@@ -175,6 +176,29 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     buscarNomeServicoClasse(servico, classProc).then((nome) => { if (!cancel) setNomeServicoClasse(nome); });
     return () => { cancel = true; };
   }, [servico, classProc]);
+
+  // Auto-preenche Serviço/Classificação a partir do procedimento (SIGTAP): uma combinação →
+  // preenche; várias → seletor. Respeita ficha carregada (não sobrescreve serviço já salvo).
+  const codProc = s.codProc.join("");
+  const [servClassOpcoes, setServClassOpcoes] = useState<ServClassOpcao[]>([]);
+  const servClassProcRef = useRef("");
+  useEffect(() => {
+    if (codProc.length !== 10) { setServClassOpcoes([]); return; }
+    const anterior = servClassProcRef.current;
+    if (anterior === codProc) return;
+    const eraTroca = anterior.length === 10; // já havia OUTRO procedimento completo antes
+    servClassProcRef.current = codProc;
+    setServClassOpcoes([]);
+    const comp = `${profAno.join("")}${profMes.join("")}`;
+    buscarServClassDoProcedimento(codProc, /^\d{6}$/.test(comp) ? comp : null).then((combos) => {
+      if (servClassProcRef.current !== codProc) return;
+      const vazio = !s.servico.some(Boolean) && !s.classProc.some(Boolean);
+      if (!vazio && !eraTroca) return; // respeita serviço já preenchido (ficha carregada)
+      if (combos.length === 1) { u("servico", combos[0].servico.split("")); u("classProc", combos[0].classificacao.split("")); }
+      else if (combos.length > 1) setServClassOpcoes(combos);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codProc]);
 
   // Nome/descrição do CID — só existe se o código estiver na tabela CID-10 (SIGTAP) importada.
   // Quando o código digitado (>=3) NÃO consta na tabela, marca cidNaoEncontrado = aviso
@@ -379,6 +403,18 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         values={s.classProc} onChange={(v) => u("classProc", v)} registerRefs={regBox(`s${si}-cls`)} invalid={hydrated && val.servicoInvalido} title={val.servicoMotivo} compact />
       <NomeAoFocarPopover top={seqTop + R.procRow2} left={R.servico[0].left} height={L.DIGIT_H}
         getInputs={() => inputsOf(`s${si}-srv`, `s${si}-cls`)} texto={val.servicoMotivo ?? nomeServicoClasse} />
+      {servClassOpcoes.length > 1 && (
+        <select
+          className="absolute z-[60] rounded border border-amber-400 bg-white px-1 py-0.5 text-[10px] text-amber-900 shadow"
+          style={{ top: `calc(${seqTop + R.procRow2 + L.DIGIT_H}% + 1px)`, left: `${R.servico[0].left}%`, minWidth: "240px", maxWidth: "48%" }}
+          value={servClassOpcoes.findIndex((o) => o.servico === servico && o.classificacao === classProc)}
+          onChange={(e) => { const o = servClassOpcoes[Number(e.target.value)]; if (o) { u("servico", o.servico.split("")); u("classProc", o.classificacao.split("")); } }}
+          title="Este procedimento tem mais de um Serviço/Classificação — escolha o da unidade"
+        >
+          <option value={-1}>Serviço/Classificação — escolha…</option>
+          {servClassOpcoes.map((o, k) => <option key={k} value={k}>{o.label}</option>)}
+        </select>
+      )}
       <DigitBoxes id={`s${si}-cid`} top={seqTop + R.procRow2} height={L.DIGIT_H} boxes={R.cid}
         values={s.cid} onChange={(v) => u("cid", v)} numeric={false} uppercase registerRefs={regBox(`s${si}-cid`)}
         invalid={hydrated && val.cidInvalido}
