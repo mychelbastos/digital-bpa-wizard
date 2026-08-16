@@ -22,12 +22,12 @@ function labelComp(comp: string | null): string {
 }
 
 const rotaDoTipo = (tipo: FichaResumo["tipo"], id: string) =>
-  tipo === "BPA-C" ? `/bpa-c-v3?ficha=${id}` : tipo === "RAAS" ? `/raas?ficha=${id}` : tipo === "APAC" ? `/apac?ficha=${id}` : `/bpa-i-v3?ficha=${id}`;
+  tipo === "BPA-C" ? `/bpa-c-v3?ficha=${id}` : tipo === "RAAS" ? `/raas?ficha=${id}` : tipo === "APAC" ? `/apac?ficha=${id}` : tipo === "AIH" ? `/laudo-aih?ficha=${id}` : `/bpa-i-v3?ficha=${id}`;
 // Token de uma ficha para a página /imprimir ("I~<id>" ou "C~<id>"). RAAS ainda não tem
 // impressão/overlay — não gera token (é filtrado antes de entrar na seleção de impressão).
 const tokenImpressao = (f: FichaResumo) => `${f.tipo === "BPA-C" ? "C" : f.tipo === "RAAS" ? "R" : "I"}~${f.id}`;
 
-type TipoFiltro = "todos" | "BPA-C" | "BPA-I" | "RAAS" | "APAC";
+type TipoFiltro = "todos" | "BPA-C" | "BPA-I" | "RAAS" | "APAC" | "AIH";
 
 function MinhasFichasPage() {
   const [fichas, setFichas] = useState<FichaResumo[]>([]);
@@ -226,7 +226,7 @@ function MinhasFichasPage() {
             {/* Filtro por tipo de formulário + ação de imprimir várias (linha de cima). */}
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Tipo:</span>
-              {(["todos", "BPA-C", "BPA-I", "RAAS", "APAC"] as TipoFiltro[]).map((t) => (
+              {(["todos", "BPA-C", "BPA-I", "RAAS", "APAC", "AIH"] as TipoFiltro[]).map((t) => (
                 <button key={t} onClick={() => setTipoSel(t)} className={pill(tipoSel === t)}>
                   {t === "todos" ? "Todos" : t}
                 </button>
@@ -324,7 +324,7 @@ function MinhasFichasPage() {
                                 ? <CheckSquare className="size-4 shrink-0 text-primary" />
                                 : <Square className="size-4 shrink-0 text-muted-foreground" />
                           )}
-                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${f.tipo === "BPA-C" ? "bg-teal-100 text-teal-700" : f.tipo === "RAAS" ? "bg-violet-100 text-violet-700" : f.tipo === "APAC" ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"}`}>{f.tipo}</span>
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${f.tipo === "BPA-C" ? "bg-teal-100 text-teal-700" : f.tipo === "RAAS" ? "bg-violet-100 text-violet-700" : f.tipo === "APAC" ? "bg-amber-100 text-amber-700" : f.tipo === "AIH" ? "bg-rose-100 text-rose-700" : "bg-sky-100 text-sky-700"}`}>{f.tipo}</span>
                           {f.competencia && f.competencia !== mesProd(f) && (
                             <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium capitalize text-amber-800" title="Atendimento retroativo — apresentado neste mês de produção">
                               atend. {labelComp(f.competencia)}

@@ -4,37 +4,17 @@
 // Calibradas sobre a imagem (linhas horizontais detectadas + arestas dos quadradinhos +
 // verificação por overlay). Campos "area" são textarea (blocos grandes da Justificativa).
 
-export interface Campo {
-  key: string;
-  top: number;
-  left: number;
-  width: number;
-  height?: number; // % — default 1.3 (linha única)
-  area?: boolean;  // textarea (multi-linha)
-  upper?: boolean; // exibe em MAIÚSCULAS
-  // Campos inteligentes:
-  num?: boolean;    // aceita só dígitos
-  letras?: boolean; // aceita só letras (UF) — sempre MAIÚSCULAS
-  maxLen?: number;  // limite de caracteres/dígitos
-  data?: boolean;   // dd/mm/aaaa — 3 sub-caixas numéricas com auto-avanço
-  hora?: boolean;   // hh:mm — 2 sub-caixas numéricas
-  celulas?: number; // N casinhas de 1 dígito (ex.: código do caráter = 2), auto-avanço
-}
-
-export interface Check {
-  key: string;
-  top: number;
-  left: number;
-  grupo?: string; // checkboxes do mesmo grupo são de EXCLUSÃO MÚTUA (marcar um desmarca os outros)
-}
+// Usa os tipos do FormularioOverlay (mesma estrutura + busca/crivo/autocomplete).
+import type { CampoForm as Campo, CheckForm as Check } from "@/components/FormularioOverlay";
+export type { Campo, Check };
 
 export const CAMPOS: Campo[] = [
   { key: "data_emissao", top: 3.3, left: 21.9, width: 9.5, height: 1, data: true },
   { key: "hora_emissao", top: 3.2, left: 85.5, width: 4.6, height: 1, hora: true },
-  { key: "estab_solicitante_nome", top: 6.4, left: 1, width: 71, height: 1.2, upper: true },
-  { key: "estab_solicitante_cnes", top: 6.3, left: 73.6, width: 25, num: true, maxLen: 7 },
-  { key: "estab_executante_nome", top: 8.9, left: 1, width: 71, upper: true },
-  { key: "estab_executante_cnes", top: 8.9, left: 74, width: 24, num: true, maxLen: 7 },
+  { key: "estab_solicitante_nome", top: 6.4, left: 1, width: 71, height: 1.2, upper: true, autocomplete: "estabelecimento", cnesAlvo: "estab_solicitante_cnes" },
+  { key: "estab_solicitante_cnes", top: 6.3, left: 73.6, width: 25, num: true, maxLen: 7, crivo: "cnes", alvo: "estab_solicitante_nome" },
+  { key: "estab_executante_nome", top: 8.9, left: 1, width: 71, upper: true, autocomplete: "estabelecimento", cnesAlvo: "estab_executante_cnes" },
+  { key: "estab_executante_cnes", top: 8.9, left: 74, width: 24, num: true, maxLen: 7, crivo: "cnes", alvo: "estab_executante_nome" },
   { key: "pac_nome", top: 12.3, left: 1, width: 60, upper: true },
   { key: "pac_apelido", top: 12.3, left: 61.4, width: 19.8, upper: true },
   { key: "pac_prontuario", top: 12.4, left: 81.9, width: 16.9, height: 1.2, num: true },
@@ -49,10 +29,10 @@ export const CAMPOS: Campo[] = [
   { key: "endereco", top: 19.7, left: 32.3, width: 66.4, height: 1.1, upper: true },
   { key: "numero", top: 22.1, left: 1.2, width: 7.5, height: 1.1, num: true },
   { key: "bairro", top: 22.1, left: 9.1, width: 18.4, height: 1.1, upper: true },
-  { key: "mun_residencia", top: 22.1, left: 28, width: 19.4, height: 1.1, upper: true },
+  { key: "mun_residencia", top: 22.1, left: 28, width: 19.4, height: 1.1, upper: true, autocomplete: "municipio", alvos: { ibge: "ibge", uf: "uf_residencia" } },
   { key: "ibge", top: 22.2, left: 48, width: 24.7, height: 1, num: true, maxLen: 7 },
   { key: "uf_residencia", top: 22.2, left: 73.3, width: 4, height: 1, letras: true, maxLen: 2 },
-  { key: "cep", top: 22.1, left: 77.8, width: 21, height: 1.2, num: true, maxLen: 8 },
+  { key: "cep", top: 22.1, left: 77.8, width: 21, height: 1.2, num: true, maxLen: 8, crivo: "cep", alvos: { ibge: "ibge", uf: "uf_residencia", municipio: "mun_residencia" } },
   { key: "ponto_referencia", top: 24.4, left: 1.3, width: 34.3, upper: true },
   { key: "documento_numero", top: 24.8, left: 45.4, width: 53.3, height: 1, num: true },
   { key: "diretor_nome", top: 28, left: 1.2, width: 26.3, upper: true },
@@ -62,17 +42,17 @@ export const CAMPOS: Campo[] = [
   { key: "resultados_provas", top: 39.1, left: 1.6, width: 96.5, height: 6.3, area: true, upper: true },
   { key: "condicoes", top: 46.9, left: 1.1, width: 97.7, height: 5.7, area: true, upper: true },
   { key: "diagnostico_inicial", top: 53.9, left: 1, width: 28, upper: true },
-  { key: "cid_principal", top: 53.9, left: 30.1, width: 9, upper: true, maxLen: 4 },
-  { key: "cid_secundario", top: 53.9, left: 39.7, width: 21, upper: true },
-  { key: "cid_causas", top: 53.9, left: 61.3, width: 16, upper: true },
+  { key: "cid_principal", top: 53.9, left: 30.1, width: 9, upper: true, maxLen: 4, crivo: "cid" },
+  { key: "cid_secundario", top: 53.9, left: 39.7, width: 21, upper: true, maxLen: 4, crivo: "cid" },
+  { key: "cid_causas", top: 53.9, left: 61.3, width: 16, upper: true, maxLen: 4, crivo: "cid" },
   { key: "notif_compulsoria", top: 53.9, left: 77.7, width: 21, num: true },
-  { key: "proc_descricao", top: 56.9, left: 1, width: 69.8, height: 1.5, upper: true },
-  { key: "proc_codigo", top: 57, left: 71.4, width: 27.4, height: 1.4, num: true, maxLen: 10 },
+  { key: "proc_descricao", top: 56.9, left: 1, width: 69.8, height: 1.5, upper: true, autocomplete: "procedimento", codAlvo: "proc_codigo" },
+  { key: "proc_codigo", top: 57, left: 71.4, width: 27.4, height: 1.4, num: true, maxLen: 10, crivo: "procedimento", alvo: "proc_descricao" },
   { key: "carater_codigo", top: 59.4, left: 1.5, width: 3.4, celulas: 2 },
   { key: "clinica", top: 59.4, left: 21.5, width: 45.3, upper: true },
   { key: "leito_complementar", top: 59.4, left: 67.4, width: 31.3, height: 1.2, upper: true },
   { key: "equipamentos", top: 61.8, left: 1.1, width: 98, height: 1.5, upper: true },
-  { key: "prof_nome", top: 65, left: 1, width: 98, height: 1.5, upper: true },
+  { key: "prof_nome", top: 65, left: 1, width: 98, height: 1.5, upper: true, autocomplete: "profissional", cnsAlvo: "prof_num_documento", cnesCampo: "estab_solicitante_cnes" },
   { key: "prof_num_documento", top: 67.5, left: 25.7, width: 49.6, num: true, maxLen: 15 },
   { key: "prof_conselho", top: 67.5, left: 75.8, width: 22.9, num: true },
   { key: "data_solicitacao", top: 69.6, left: 1.3, width: 14, height: 1.8, data: true },

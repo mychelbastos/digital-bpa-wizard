@@ -14,7 +14,7 @@ interface Props {
   /** Chamado quando a ficha renomeada é a que está aberta no formulário agora. */
   onRenomeada?: (id: string, titulo: string) => void;
   /** Filtra as fichas por tipo (omitido = todas). */
-  tipo?: "BPA-C" | "BPA-I" | "RAAS" | "APAC";
+  tipo?: "BPA-C" | "BPA-I" | "RAAS" | "APAC" | "AIH";
 }
 
 // Lista de fichas salvas no Supabase (do usuário logado). Abrir / nova / excluir.

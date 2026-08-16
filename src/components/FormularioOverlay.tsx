@@ -85,7 +85,7 @@ export interface IntegracaoPaciente {
 // gravados são o próprio { txt, chk } do overlay. `meta`/`titulo`/`competencia` são derivados
 // dos valores atuais (ex.: CNES do estabelecimento e nome do paciente).
 export interface NuvemOverlay {
-  tipo: "APAC";
+  tipo: "APAC" | "AIH";
   meta: (txt: Record<string, string>, chk: Record<string, boolean>) => FichaMetadados;
   titulo: (txt: Record<string, string>, chk: Record<string, boolean>) => string;
   competencia?: (txt: Record<string, string>, chk: Record<string, boolean>) => string;
@@ -252,6 +252,12 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
   const digitos = (c: CampoForm, v: string) => (c.celulas || c.data || c.hora ? v.split("|").join("") : v).trim();
   // Preenche um campo de casinhas (celulas) a partir de uma string ("2510332" -> "2|5|1|0|3|3|2").
   const preencherCelulas = (key: string, s: string) => setTxt(key, s.split("").join("|"));
+  // Preenche um alvo de CÓDIGO agnóstico ao tipo: campo de casinhas ("2|5|1|…") ou input
+  // simples num/texto ("251…"). Usado pelos autocompletes/crivos (CNES, IBGE, procedimento…).
+  const preencherCod = (key: string, s: string) => {
+    const alvo = campos.find((c) => c.key === key);
+    if (alvo?.celulas) preencherCelulas(key, s); else setTxt(key, s);
+  };
   // Dígitos "puros" de um campo (útil p/ ler o CNES atual, que é guardado como "seg|seg|...").
   const digitosCampo = (key: string) => (txt[key] ?? "").split("|").join("").replace(/\D/g, "");
 
@@ -306,10 +312,10 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
       else if (c.crivo === "cid") { const r = await carregarDescricoesCid([valor.toUpperCase()]); nome = r[valor.toUpperCase()] ?? null; ok = !!nome; }
       else if (c.crivo === "cep") {
         const info = await buscarInfoCep(valor); ok = !!info.ibge;
-        if (info.ibge && c.alvos?.ibge) preencherCelulas(c.alvos.ibge, info.ibge);
+        if (info.ibge && c.alvos?.ibge) preencherCod(c.alvos.ibge, info.ibge);
         if (info.cidadeUf) {
           const [cidade, uf] = info.cidadeUf.split(" - ");
-          if (uf && c.alvos?.uf) preencherCelulas(c.alvos.uf, uf.trim());
+          if (uf && c.alvos?.uf) preencherCod(c.alvos.uf, uf.trim());
           if (cidade && c.alvos?.municipio) setTxt(c.alvos.municipio, cidade.trim().toUpperCase());
         }
       }
@@ -512,24 +518,24 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
                   const buscarOpcoes = async (termo: string): Promise<OpcaoAuto[]> => {
                     if (c.autocomplete === "procedimento") {
                       const rs = await buscarProcedimentosPorNome(termo);
-                      return rs.map((p) => ({ label: p.nome, sub: p.codigo, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.codAlvo) { preencherCelulas(c.codAlvo, p.codigo); setCrivoStatus((s) => ({ ...s, [c.codAlvo!]: "ok" })); } } }));
+                      return rs.map((p) => ({ label: p.nome, sub: p.codigo, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.codAlvo) { preencherCod(c.codAlvo, p.codigo); setCrivoStatus((s) => ({ ...s, [c.codAlvo!]: "ok" })); } } }));
                     }
                     if (c.autocomplete === "profissional") {
                       const cnes = c.cnesCampo ? digitosCampo(c.cnesCampo) : "";
                       if (cnes.length !== 7) return [];
                       let rs = await buscarProfissionais(cnes, termo);
                       if (rs.length === 0) { await sincronizarProfissionais(cnes); rs = await buscarProfissionais(cnes, termo); }
-                      return rs.map((p) => ({ label: p.nome, sub: `CNS ${p.cns}`, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.cnsAlvo) preencherCelulas(c.cnsAlvo, p.cns); } }));
+                      return rs.map((p) => ({ label: p.nome, sub: `CNS ${p.cns}`, aplicar: () => { setTxt(c.key, p.nome.toUpperCase()); if (c.cnsAlvo) preencherCod(c.cnsAlvo, p.cns); } }));
                     }
                     if (c.autocomplete === "municipio") {
                       const t = normTxt(termo);
                       return MUNICIPIOS_IBGE.filter((m) => normTxt(m.label).includes(t)).slice(0, 8).map((m) => {
                         const [cidade, uf] = m.label.split(" - ");
-                        return { label: m.label, aplicar: () => { setTxt(c.key, cidade.trim().toUpperCase()); if (c.alvos?.ibge) preencherCelulas(c.alvos.ibge, m.code); if (c.alvos?.uf && uf) preencherCelulas(c.alvos.uf, uf.trim()); } };
+                        return { label: m.label, aplicar: () => { setTxt(c.key, cidade.trim().toUpperCase()); if (c.alvos?.ibge) preencherCod(c.alvos.ibge, m.code); if (c.alvos?.uf && uf) preencherCod(c.alvos.uf, uf.trim()); } };
                       });
                     }
                     const rs = await buscarEstabelecimentosPorNome(termo);
-                    return rs.map((e) => ({ label: e.nome, sub: `CNES ${e.cnes}`, aplicar: () => { setTxt(c.key, e.nome.toUpperCase()); if (c.cnesAlvo) { preencherCelulas(c.cnesAlvo, e.cnes); setCrivoStatus((s) => ({ ...s, [c.cnesAlvo!]: "ok" })); } } }));
+                    return rs.map((e) => ({ label: e.nome, sub: `CNES ${e.cnes}`, aplicar: () => { setTxt(c.key, e.nome.toUpperCase()); if (c.cnesAlvo) { preencherCod(c.cnesAlvo, e.cnes); setCrivoStatus((s) => ({ ...s, [c.cnesAlvo!]: "ok" })); } } }));
                   };
                   return <CampoAutocomplete key={c.key} id={`f-${c.key}`} rect={r} value={val} contornoCls={cls} onChangeNome={(v) => setTxt(c.key, filtrar(c, v))} buscar={buscarOpcoes} />;
                 }
