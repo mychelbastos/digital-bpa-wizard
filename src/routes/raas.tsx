@@ -7,6 +7,7 @@ import { carregarPaciente, type Paciente } from "@/lib/pacientes";
 import { orgDoCnes } from "@/lib/tfd/tfd";
 import { buscarEstabelecimento, buscarEstabelecimentosPorNome, type EstabelecimentoSug } from "@/lib/bpa-i-v2/estabelecimentos";
 import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
+import { buscarNomeCid, buscarCidPorTermo } from "@/lib/bpa-i-v2/nomes-sigtap";
 import { buscarProfissionais, buscarCbosVinculo, sincronizarProfissionais, type ProfissionalCache, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
@@ -209,6 +210,56 @@ function ProcedimentoInput({ codigo, nome, onPick }: {
             <button key={p.codigo} type="button" onMouseDown={(e) => { e.preventDefault(); onPick(p.codigo, p.nome); setAberto(false); }}
               className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">
               <span className="font-mono text-xs text-muted-foreground">{p.codigo}</span> — {p.nome}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Autocomplete de CID (CID-10 / SIGTAP): busca por código ou nome; guarda o CÓDIGO no campo e
+// exibe "código — nome". Busca o nome do código atual p/ mostrar mesmo em ficha reaberta.
+function CidInput({ codigo, onPick, placeholder }: {
+  codigo: string; onPick: (codigo: string) => void; placeholder?: string;
+}) {
+  const [termo, setTermo] = useState("");
+  const [sug, setSug] = useState<{ codigo: string; nome: string }[]>([]);
+  const [aberto, setAberto] = useState(false);
+  const [nome, setNome] = useState("");
+  useEffect(() => {
+    let cancel = false;
+    if (!codigo) { setNome(""); return; }
+    buscarNomeCid(codigo).then((n) => { if (!cancel) setNome(n ?? ""); });
+    return () => { cancel = true; };
+  }, [codigo]);
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      if (termo.trim().length < 2) { setSug([]); return; }
+      setSug(await buscarCidPorTermo(termo.trim()));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [termo]);
+  const rotulo = codigo ? `${codigo}${nome ? ` — ${nome}` : ""}` : "";
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-1">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          value={aberto ? termo : rotulo}
+          onChange={(e) => { setTermo(e.target.value); setAberto(true); }}
+          onFocus={() => { setTermo(""); setAberto(true); }}
+          onBlur={() => setTimeout(() => setAberto(false), 150)}
+          placeholder={placeholder ?? "Código ou nome do CID"}
+          className={`${inputCls} w-full`}
+        />
+      </div>
+      {aberto && sug.length > 0 && (
+        <div className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-popover shadow-lg">
+          {sug.map((c) => (
+            <button key={c.codigo} type="button" onMouseDown={(e) => { e.preventDefault(); onPick(c.codigo); setAberto(false); }}
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">
+              <span className="font-mono text-xs text-muted-foreground">{c.codigo}</span> — {c.nome}
             </button>
           ))}
         </div>
@@ -771,12 +822,10 @@ function RaasPage() {
             <Sel value={state.origemPaciente} onChange={(v) => set("origemPaciente", v)} options={RAAS_ORIGEM_PACIENTE} />
           </Campo>
           <Campo label="CID10 principal">
-            <Txt uppercase maxLength={4} value={state.cidPrincipal}
-              onChange={(e) => set("cidPrincipal", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+            <CidInput codigo={state.cidPrincipal} onPick={(c) => set("cidPrincipal", c)} placeholder="Código ou nome do CID principal" />
           </Campo>
           <Campo label="CID10 causas associadas">
-            <Txt uppercase maxLength={4} value={state.cidCausas}
-              onChange={(e) => set("cidCausas", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} />
+            <CidInput codigo={state.cidCausas} onPick={(c) => set("cidCausas", c)} placeholder="Código ou nome do CID de causas associadas" />
           </Campo>
           {/* CID secundário 1/2/3 removidos da tela por enquanto (o modelo/estado permanece). */}
           <Campo label="Caráter do atendimento">

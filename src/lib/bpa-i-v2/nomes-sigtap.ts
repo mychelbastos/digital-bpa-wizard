@@ -30,3 +30,21 @@ export async function buscarNomeCid(cid: string): Promise<string | null> {
     return null;
   }
 }
+
+// Autocomplete de CID por CÓDIGO (prefixo, ex.: "F41") ou NOME (contém, ex.: "esquizofrenia").
+// Heurística: começa por letra+dígito -> busca por código; senão, por nome. Devolve até 10.
+export async function buscarCidPorTermo(termo: string): Promise<{ codigo: string; nome: string }[]> {
+  const q = termo.trim();
+  if (!supabase || q.length < 2) return [];
+  const ehCodigo = /^[a-z]\d/i.test(q); // "F41", "A00", "Z00"…
+  if (!ehCodigo && q.length < 3) return []; // busca por nome precisa de 3+ letras
+  try {
+    let req = supabase.from("cid_sigtap").select("codigo, nome").limit(20);
+    req = ehCodigo ? req.ilike("codigo", `${q.toUpperCase()}%`) : req.ilike("nome", `%${q}%`);
+    const { data, error } = await req.order("codigo");
+    if (error || !data) return [];
+    return (data as { codigo: string; nome: string }[]).slice(0, 10);
+  } catch {
+    return [];
+  }
+}
