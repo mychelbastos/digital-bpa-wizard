@@ -191,8 +191,10 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
     y += 16;
   });
 
-  // Linha de total
-  if (y + 20 > rodapeLimite) { y = desenharCabecalhoPagina(); y = desenharCabecalhoTabela(y); }
+  // Linha de total — fecho como bloco único (TOTAL + notas + assinatura). Se não couber no
+  // que resta da página, leva tudo junto p/ a próxima (evita assinatura sozinha numa folha).
+  const alturaFecho = 28 /*total*/ + 16 /*notas*/ + 80 /*assinatura*/;
+  if (y + alturaFecho > H - 20) { y = desenharCabecalhoPagina(); y = desenharCabecalhoTabela(y); }
   pdf.setFillColor(...VERDE_CLARO);
   pdf.rect(x0, y, totalW, 18, "F");
   pdf.setFont("helvetica", "bold");
@@ -402,6 +404,9 @@ export function construirPdfFpoPorUnidade({ unidades, competencia, logo, respons
     pdf.setDrawColor(230, 232, 236); pdf.line(x0, yr + 16, x0 + rTotalW, yr + 16);
     yr += 16;
   });
+  // Total geral + assinatura como bloco único: se não couber, vão juntos p/ a próxima página
+  // (evita a assinatura sozinha numa folha, sem conteúdo acima).
+  if (yr + 28 + 80 > H - 20) { faixaTopo(); yr = 60; }
   // Total geral na tabela por unidade
   pdf.setFillColor(...VERDE_CLARO); pdf.rect(x0, yr, rTotalW, 18, "F");
   pdf.setFont("helvetica", "bold"); pdf.setTextColor(...ESCURO);

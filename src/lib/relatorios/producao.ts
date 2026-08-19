@@ -187,8 +187,11 @@ export function construirPdfProducao(d: DadosRelatorioProducao): jsPDF {
     y += 16;
   });
 
-  // Total
-  if (y + 20 > rodapeLimite) { y = cabecalhoPagina(); y = cabecalhoTabela(y); }
+  // Total — mantém o fecho junto: TOTAL + nota + assinatura formam um bloco único. Se ele
+  // não couber no que resta da página, leva tudo para a próxima (evita a assinatura sozinha
+  // numa folha, sem nenhum conteúdo acima dela).
+  const alturaFecho = 28 /*total*/ + 12 /*nota*/ + 80 /*assinatura*/;
+  if (y + alturaFecho > H - 20) { y = cabecalhoPagina(); y = cabecalhoTabela(y); }
   pdf.setFillColor(...VERDE_CLARO); pdf.rect(x0, y, totalW, 18, "F");
   pdf.setFont("helvetica", "bold"); pdf.setTextColor(...ESCURO);
   const totVals = ["TOTAL", "", int(totalAtend), int(totalQtd)];
