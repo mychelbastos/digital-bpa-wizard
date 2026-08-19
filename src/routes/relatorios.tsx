@@ -307,7 +307,7 @@ function RelatoriosPage() {
             </button>
             <button onClick={baixarPdfProd} disabled={filtradas.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              <FileText className="size-4" /> Baixar PDF (timbre)
+              <FileText className="size-4" /> Gerar PDF (timbre)
             </button>
             <button onClick={imprimirFichas} disabled={filtradas.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50">
