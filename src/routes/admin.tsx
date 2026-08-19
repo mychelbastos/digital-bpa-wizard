@@ -318,6 +318,7 @@ function Admin() {
         cab_orgao_destino: o.cab_orgao_destino ?? "",
         cab_destino_tipo: o.cab_destino_tipo,
         cab_versao: o.cab_versao,
+        cor_relatorio: o.cor_relatorio ?? null,
       });
       await recarregar();
       toast.success("Organização salva.");
@@ -794,6 +795,26 @@ function OrgCard({
               onChange={(e) => set("uf", e.target.value.toUpperCase())}
             />
           </label>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-[11px] font-medium text-muted-foreground">Cor de destaque dos relatórios</div>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          Usada nos cabeçalhos e totais dos PDFs (Produção e FPO). Cada gestão pode adotar a sua cor;
+          o padrão do sistema é verde.
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <input type="color" value={o.cor_relatorio ?? "#107A57"}
+            onChange={(e) => set("cor_relatorio", e.target.value.toUpperCase())}
+            data-nocaps className="h-8 w-12 cursor-pointer rounded border border-border bg-background p-0.5" />
+          <span className="font-mono text-[11px] text-muted-foreground">{o.cor_relatorio ?? "padrão (verde)"}</span>
+          {o.cor_relatorio && (
+            <button type="button" onClick={() => set("cor_relatorio", null)}
+              className="rounded border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted">
+              Usar padrão
+            </button>
+          )}
         </div>
       </div>
 

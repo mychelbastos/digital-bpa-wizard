@@ -8,7 +8,7 @@ import {
   carregarVinculosUsuario, type ProducaoBpaRow,
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
-import { carregarLogoOrg } from "@/lib/org-logo";
+import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { CNES_TFD, carregarRelatorioTfd, type TfdStatus, type TfdRelatorioRow } from "@/lib/tfd/tfd";
@@ -58,6 +58,7 @@ function RelatoriosPage() {
   const [nomesCid, setNomesCid] = useState<Record<string, string>>({});
   const [nomesCbo, setNomesCbo] = useState<Record<string, string>>({});
   const [logo, setLogo] = useState<string | null>(null);
+  const [cor, setCor] = useState<string | null>(null);
   const [podeTfd, setPodeTfd] = useState(false);
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
   const [fpoOpen, setFpoOpen] = useState(false);
@@ -96,6 +97,7 @@ function RelatoriosPage() {
   useEffect(() => { setCnes("todos"); setProf("todos"); setProc("todos"); setTipo("todos"); setCid("todos"); setCarater("todos"); setInativos(null); }, [competencia]);
   useEffect(() => {
     carregarLogoOrg().then(setLogo);
+    carregarCorOrg().then(setCor);
     carregarVinculosUsuario().then(async (v) => {
       const unicos = [...new Set(v.map((x) => x.cnes).filter(Boolean))];
       setPodeTfd(unicos.some((c) => CNES_TFD.includes(c)));
@@ -202,7 +204,7 @@ function RelatoriosPage() {
   };
   const baixarPdfProd = () => {
     if (filtradas.length === 0) return;
-    const pdf = construirPdfProducao({ rows: filtradas, mapas, competenciaMes: competencia, filtros: filtrosLabel(), logo, responsavel: user?.nome ?? null });
+    const pdf = construirPdfProducao({ rows: filtradas, mapas, competenciaMes: competencia, filtros: filtrosLabel(), logo, cor, responsavel: user?.nome ?? null });
     abrirPreview(pdf, `${nomeArq()}.pdf`, "Relatório de Produção");
   };
   const imprimirFichas = () => {
@@ -475,7 +477,7 @@ function RelatoriosPage() {
         </div>
       </div>
 
-      {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
+      {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} cor={cor} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
       {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} onClose={() => setTfdOpen(false)} />}
       {previewNode}
     </div>
@@ -545,7 +547,7 @@ function agregarFpo(rows: FpoComparacaoRow[]): FpoComparacaoRow[] {
 }
 
 // ---- FPO: unidade (ou todas) + competência → PDF (timbre) gerado aqui ----
-function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; responsavel: string | null; onClose: () => void }) {
+function FpoModal({ unidades, logo, cor, responsavel, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; cor: string | null; responsavel: string | null; onClose: () => void }) {
   const { abrirPreview, previewNode } = usePreviewPdf();
   const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
   const [competencia, setCompetencia] = useState(competenciaAtual());
@@ -560,17 +562,17 @@ function FpoModal({ unidades, logo, responsavel, onClose }: { unidades: { cnes: 
         if (formato === "porUnidade") {
           const comRows = unidades.map((u, i) => ({ nome: u.nome, cnes: u.cnes, rows: todas[i] })).filter((x) => x.rows.length > 0);
           if (comRows.length === 0) { toast.error("Sem dados de FPO/produção nesta competência."); return; }
-          abrirPreview(construirPdfFpoPorUnidade({ unidades: comRows, competencia, logo, responsavel }), `relatorio-fpo-todas-${competencia}.pdf`, "FPO × Produção — todas as unidades");
+          abrirPreview(construirPdfFpoPorUnidade({ unidades: comRows, competencia, logo, cor, responsavel }), `relatorio-fpo-todas-${competencia}.pdf`, "FPO × Produção — todas as unidades");
           return;
         }
         const rows = agregarFpo(todas.flat());
         if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta competência."); return; }
-        abrirPreview(construirPdfFpo({ nomeUnidade: `Todas as unidades (${unidades.length})`, cnes: "TODAS", competencia, rows, responsavel, logo }), `relatorio-fpo-todas-${competencia}.pdf`, "FPO × Produção — consolidado");
+        abrirPreview(construirPdfFpo({ nomeUnidade: `Todas as unidades (${unidades.length})`, cnes: "TODAS", competencia, rows, responsavel, logo, cor }), `relatorio-fpo-todas-${competencia}.pdf`, "FPO × Produção — consolidado");
       } else {
         const rows = await carregarComparacaoFpo(cnes, competencia);
         if (rows.length === 0) { toast.error("Sem dados de FPO/produção nesta unidade/competência."); return; }
         const nomeUnidade = unidades.find((u) => u.cnes === cnes)?.nome ?? cnes;
-        abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel, logo }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção");
+        abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel, logo, cor }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção");
       }
     } finally { setGerando(false); }
   };

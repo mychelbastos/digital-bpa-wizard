@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
+import { paletaRelatorio } from "@/lib/relatorio-cor";
 import type { ProducaoBpaRow } from "@/lib/dashboard-producao";
 
 // Relatórios de PRODUÇÃO (BPA-I/BPA-C) a partir das linhas achatadas do dashboard
@@ -50,8 +51,6 @@ export function baixarCsv(nome: string, conteudo: string) {
 }
 
 // ---------------- PDF (timbre) ----------------
-const VERDE: [number, number, number] = [16, 122, 87];
-const VERDE_CLARO: [number, number, number] = [232, 245, 240];
 const CINZA: [number, number, number] = [107, 114, 128];
 const ESCURO: [number, number, number] = [31, 41, 55];
 
@@ -61,6 +60,7 @@ export interface DadosRelatorioProducao {
   competenciaMes: string;      // mês de produção selecionado (AAAAMM)
   filtros: string;             // resumo dos filtros ativos (subtítulo)
   logo?: string | null;
+  cor?: string | null;         // cor de destaque da org (hex); null = verde padrão
   responsavel?: string | null;
   geradoEm?: Date;
 }
@@ -75,6 +75,7 @@ const COLS: Col[] = [
 
 export function construirPdfProducao(d: DadosRelatorioProducao): jsPDF {
   const { rows, mapas } = d;
+  const { accent: VERDE, accentClaro: VERDE_CLARO } = paletaRelatorio(d.cor);
   const geradoEm = d.geradoEm ?? new Date();
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const W = pdf.internal.pageSize.getWidth();

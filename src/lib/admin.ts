@@ -49,6 +49,7 @@ export interface OrganizacaoAdmin {
   cab_orgao_destino: string | null;
   cab_destino_tipo: string;
   cab_versao: string;
+  cor_relatorio: string | null;
   gestao_id: string | null;
   gestao_nome: string | null;
   gestao_inicio: string | null;
@@ -105,6 +106,7 @@ export async function salvarOrganizacao(o: {
   cab_orgao_destino: string;
   cab_destino_tipo: string;
   cab_versao: string;
+  cor_relatorio: string | null;
 }): Promise<void> {
   if (!supabase) throw new Error("Sem conexão.");
   const { error } = await supabase.rpc("admin_salvar_organizacao", {
@@ -112,6 +114,7 @@ export async function salvarOrganizacao(o: {
     _nome: o.nome,
     _ibge: o.municipio_ibge,
     _uf: o.uf,
+    _cor: o.cor_relatorio,
     _orig: o.cab_orgao_origem,
     _sigla: o.cab_sigla,
     _cgc: o.cab_cgc_cpf,

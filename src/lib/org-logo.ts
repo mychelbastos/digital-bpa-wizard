@@ -19,3 +19,22 @@ export async function carregarLogoOrg(): Promise<string | null> {
 export function limparCacheLogoOrg(): void {
   cache = undefined;
 }
+
+// Cor de destaque dos relatórios (hex "#RRGGBB") da organização do usuário. null = verde padrão.
+let cacheCor: string | null | undefined;
+
+export async function carregarCorOrg(): Promise<string | null> {
+  if (cacheCor !== undefined) return cacheCor;
+  if (!supabase) { cacheCor = null; return null; }
+  try {
+    const { data, error } = await supabase.rpc("org_cor_do_usuario");
+    cacheCor = error ? null : ((data as string | null) ?? null);
+  } catch {
+    cacheCor = null;
+  }
+  return cacheCor;
+}
+
+export function limparCacheCorOrg(): void {
+  cacheCor = undefined;
+}

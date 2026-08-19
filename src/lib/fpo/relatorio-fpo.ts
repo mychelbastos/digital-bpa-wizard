@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
+import { paletaRelatorio } from "@/lib/relatorio-cor";
 import type { FpoComparacaoRow } from "./fpo";
 
 // Relatório PDF do FPO × Produção de uma unidade/competência. jsPDF nativo (texto/retângulos),
@@ -9,8 +10,6 @@ const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", curren
 const int = (n: number) => n.toLocaleString("pt-BR");
 const compLabel = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c);
 
-const VERDE: [number, number, number] = [16, 122, 87];
-const VERDE_CLARO: [number, number, number] = [232, 245, 240];
 const CINZA: [number, number, number] = [107, 114, 128];
 const ROSA: [number, number, number] = [190, 40, 60];
 const ESCURO: [number, number, number] = [31, 41, 55];
@@ -36,6 +35,7 @@ export interface DadosRelatorioFpo {
   geradoEm?: Date;
   responsavel?: string | null; // nome impresso sob a linha de assinatura (ex.: usuário logado)
   logo?: string | null;        // timbre da prefeitura (data URI PNG) no cabeçalho
+  cor?: string | null;         // cor de destaque da org (hex); null = verde padrão
 }
 
 export function gerarRelatorioFpo(dados: DadosRelatorioFpo) {
@@ -44,7 +44,8 @@ export function gerarRelatorioFpo(dados: DadosRelatorioFpo) {
 }
 
 // Constrói o PDF (sem salvar) — separado p/ ser testável (contar páginas, etc.).
-export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date(), responsavel, logo }: DadosRelatorioFpo): jsPDF {
+export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm = new Date(), responsavel, logo, cor }: DadosRelatorioFpo): jsPDF {
+  const { accent: VERDE, accentClaro: VERDE_CLARO } = paletaRelatorio(cor);
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
@@ -246,14 +247,15 @@ const somaFpo = (rows: FpoComparacaoRow[]): TotaisFpo => rows.reduce((a, r) => (
   tetoRS: a.tetoRS + r.tetoRS, prodRS: a.prodRS + r.produzidoRS, saldoRS: a.saldoRS + r.saldoRS,
 }), { teto: 0, prod: 0, saldo: 0, tetoRS: 0, prodRS: 0, saldoRS: 0 });
 
-export function gerarRelatorioFpoPorUnidade(d: { unidades: UnidadeFpo[]; competencia: string; logo?: string | null; responsavel?: string | null }) {
+export function gerarRelatorioFpoPorUnidade(d: { unidades: UnidadeFpo[]; competencia: string; logo?: string | null; responsavel?: string | null; cor?: string | null }) {
   const pdf = construirPdfFpoPorUnidade(d);
   pdf.save(`relatorio-fpo-todas-${d.competencia}.pdf`);
 }
 
-export function construirPdfFpoPorUnidade({ unidades, competencia, logo, responsavel, geradoEm = new Date() }: {
-  unidades: UnidadeFpo[]; competencia: string; logo?: string | null; responsavel?: string | null; geradoEm?: Date;
+export function construirPdfFpoPorUnidade({ unidades, competencia, logo, responsavel, cor, geradoEm = new Date() }: {
+  unidades: UnidadeFpo[]; competencia: string; logo?: string | null; responsavel?: string | null; cor?: string | null; geradoEm?: Date;
 }): jsPDF {
+  const { accent: VERDE, accentClaro: VERDE_CLARO } = paletaRelatorio(cor);
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();

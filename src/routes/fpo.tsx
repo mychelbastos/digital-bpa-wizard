@@ -14,7 +14,7 @@ import {
 } from "@/lib/fpo/fpo";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { construirPdfFpo } from "@/lib/fpo/relatorio-fpo";
-import { carregarLogoOrg } from "@/lib/org-logo";
+import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 
 export const Route = createFileRoute("/fpo")({
@@ -145,7 +145,7 @@ function FpoPage() {
           descricao="Ficha de Programação Orçamentária — tetos e saldos por procedimento."
           right={
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={async () => abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome, logo: await carregarLogoOrg() }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção")}
+              <button onClick={async () => abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome, logo: await carregarLogoOrg(), cor: await carregarCorOrg() }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção")}
                 disabled={rows.length === 0}
                 className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
                 <FileDown className="size-4" /> Gerar relatório
