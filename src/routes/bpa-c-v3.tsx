@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/PageHeader";
+import { FormIdentity } from "@/components/PageHeader";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { exportSheetPdf, rasterizarFolhaJpeg } from "@/lib/export-pdf";
 import bpacBg from "@/assets/bpa-c (profissional).png";
@@ -572,17 +572,10 @@ function BpaCV3() {
         onRenomeada={persistFicha}
       />
 
-      <div className="mx-auto max-w-[1100px] px-4 pt-5">
-        <PageHeader icon={Files} titulo="BPA-C"
-          descricao="Boletim de Produção Ambulatorial Consolidado." />
-      </div>
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
-              {fichaTitulo || "Nova ficha"}
-            </h1>
-          </div>
+          <FormIdentity icon={Files} nome="BPA-C"
+            descricao="Boletim de Produção Ambulatorial Consolidado." fichaTitulo={fichaTitulo} />
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-teal-100 px-2 py-1 text-xs font-bold tracking-wide text-teal-700">BPA-C</span>
             {user && (

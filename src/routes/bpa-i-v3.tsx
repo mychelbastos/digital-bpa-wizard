@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/PageHeader";
+import { FormIdentity } from "@/components/PageHeader";
 import { FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { registrarLeituraFicha } from "@/lib/producoes";
@@ -358,17 +358,10 @@ function BpaI() {
         )}
       </ConfirmModal>
 
-      <div className="mx-auto max-w-[1100px] px-4 pt-5">
-        <PageHeader icon={FileText} titulo="BPA-I"
-          descricao="Boletim de Produção Ambulatorial Individualizado." />
-      </div>
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
-              {fichaTitulo || "Nova ficha"}
-            </h1>
-          </div>
+          <FormIdentity icon={FileText} nome="BPA-I"
+            descricao="Boletim de Produção Ambulatorial Individualizado." fichaTitulo={fichaTitulo} />
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-bold tracking-wide text-sky-700">BPA-I</span>
             {user && (

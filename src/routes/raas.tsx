@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/PageHeader";
+import { FormIdentity } from "@/components/PageHeader";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { UserRound, X, Plus, Trash2, Search, FileDown, Pencil, HeartPulse, Undo2 } from "lucide-react";
@@ -670,18 +670,11 @@ function RaasPage() {
         onRenomeada={persistFicha}
       />
 
-      <div className="mx-auto max-w-[1100px] px-4 pt-5">
-        <PageHeader icon={HeartPulse} titulo="RAAS"
-          descricao="Registro das Ações Ambulatoriais de Saúde — Psicossocial (CAPS)." />
-      </div>
       {/* Cabeçalho fixo */}
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
-              {fichaTitulo || "Nova ficha RAAS"}
-            </h1>
-          </div>
+          <FormIdentity icon={HeartPulse} nome="RAAS"
+            descricao="Registro das Ações Ambulatoriais de Saúde — Psicossocial (CAPS)." fichaTitulo={fichaTitulo} />
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-violet-100 px-2 py-1 text-xs font-bold tracking-wide text-violet-700">RAAS</span>
             {/* Abre a folha oficial (overlay) numa nova aba: preenchida com o que está na tela

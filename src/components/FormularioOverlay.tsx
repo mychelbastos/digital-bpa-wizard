@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject, type KeyboardEvent as RKeyboardEvent } from "react";
-import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2, UserRound, Undo2, type LucideIcon } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
+import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2, UserRound, Undo2, FileText, type LucideIcon } from "lucide-react";
+import { FormIdentity } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
 import { focarProximoCampo } from "@/lib/foco-campos";
@@ -453,16 +453,9 @@ export function FormularioOverlay({ titulo, descricao, icone, storageKey, campos
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      {icone && (
-        <div className="mx-auto max-w-[1100px] px-4 pt-5">
-          <PageHeader icon={icone} titulo={titulo} descricao={descricao} />
-        </div>
-      )}
       <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3">
-          <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
-            {fichaTitulo || "Nova ficha"}
-          </h1>
+          <FormIdentity icon={icone ?? FileText} nome={titulo} descricao={descricao} fichaTitulo={fichaTitulo} />
           <div className="flex flex-wrap items-center gap-2">
             {calibravel && (
               <button onClick={() => setEditar((e) => !e)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${editar ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border bg-card text-foreground hover:bg-muted"}`}>

@@ -32,3 +32,37 @@ export function PageHeader({ icon: Icon, titulo, descricao, right }: {
     </header>
   );
 }
+
+// Versão COMPACTA para os formulários (editores de folha): mesma identidade (ícone + nome +
+// descrição), mas numa única linha ao lado dos botões — economiza altura na tela de edição.
+// `fichaTitulo` mostra o nome da ficha atual (ex.: "Nova ficha") junto do nome do formulário.
+// A seta de voltar continua só no mobile.
+export function FormIdentity({ icon: Icon, nome, descricao, fichaTitulo }: {
+  icon: LucideIcon;
+  nome: string;
+  descricao?: string;
+  fichaTitulo?: string | null;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <Link to="/" aria-label="Voltar ao início"
+        className="-ml-1 rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground md:hidden">
+        <ArrowLeft className="size-5" />
+      </Link>
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="size-[18px]" />
+      </span>
+      <div className="min-w-0">
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-sm font-bold text-foreground">{nome}</h1>
+          {fichaTitulo !== undefined && (
+            <span className="max-w-[40vw] truncate text-xs text-muted-foreground" title={fichaTitulo ?? undefined}>
+              · {fichaTitulo || "Nova ficha"}
+            </span>
+          )}
+        </div>
+        {descricao && <p className="truncate text-[11px] leading-tight text-muted-foreground">{descricao}</p>}
+      </div>
+    </div>
+  );
+}
