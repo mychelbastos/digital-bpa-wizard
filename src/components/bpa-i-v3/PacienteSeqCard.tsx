@@ -5,7 +5,7 @@
 // - Com vínculo: mostra o paciente + EDITAR PACIENTE (modal) + Remover da seq + o botão
 //   "Utilizar o mesmo procedimento da última vez?" (quando há atendimento anterior).
 import { useEffect, useState } from "react";
-import { UserRound, Pencil, X, Repeat } from "lucide-react";
+import { UserRound, Pencil, X, Repeat, ArrowLeftRight } from "lucide-react";
 import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePicker";
 import { carregarPaciente, type Paciente } from "@/lib/pacientes";
 import { ultimoAtendimentoBpai, type UltimoProcedimento } from "@/lib/bpa-i-v3/paciente-seq";
@@ -102,14 +102,20 @@ export function PacienteSeqCard(props: {
             ) : null
           )}
           {!props.travado && (
-            <div className="flex gap-2">
-              <button type="button" onClick={abrirEdicao}
-                className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
-                <Pencil className="size-3.5" /> Editar paciente
-              </button>
+            <div className="space-y-1.5">
+              <div className="flex gap-2">
+                <button type="button" onClick={abrirEdicao}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
+                  <Pencil className="size-3.5" /> Editar paciente
+                </button>
+                <button type="button" onClick={() => setBuscando(true)}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
+                  <ArrowLeftRight className="size-3.5" /> Trocar paciente
+                </button>
+              </div>
               <button type="button" onClick={props.onDesvincular}
-                className="flex items-center justify-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100">
-                <X className="size-3.5" /> Remover
+                className="flex w-full items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-rose-50 hover:text-rose-600">
+                <X className="size-3" /> Remover da sequência
               </button>
             </div>
           )}
