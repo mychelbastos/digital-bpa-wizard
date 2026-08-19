@@ -21,7 +21,7 @@ import { anoAte4Digitos } from "@/lib/validacao-data";
 import {
   emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
   RAAS_ORIGEM_PACIENTE, RAAS_DESTINO_PACIENTE, RAAS_TIPO_DROGA, RAAS_LOCAL_REALIZACAO,
-  RAAS_ORIGEM_INFO, RAAS_SIM_NAO, RAAS_NACIONALIDADES, situacaoParaNacionalidadeRaas,
+  RAAS_SIM_NAO, RAAS_NACIONALIDADES, situacaoParaNacionalidadeRaas,
   type RaasState, type RaasAcao, type ComboOption,
 } from "@/lib/raas/raas-layout";
 import { RACAS } from "@/lib/bpa-i-v2/racas";
@@ -895,9 +895,9 @@ function RaasPage() {
             <Txt inputMode="numeric" maxLength={2} value={state.motivoSaida}
               onChange={(e) => set("motivoSaida", e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="derivado do Destino" />
           </Campo>
-          <Campo label="Origem das informações">
-            <Sel value={state.origemInfo} onChange={(v) => set("origemInfo", v)} options={RAAS_ORIGEM_INFO} semVazio />
-          </Campo>
+          {/* "Origem das informações" (ras_org) é fixo "RAS" na digitação manual (a ficha
+              nasce no SIA/SUS). "EXT" só existe em dados importados de outro sistema, e nesse
+              caso vem no próprio .AAS. Escondido da tela; o valor default "RAS" segue no export. */}
           <Campo label="Situação de rua?">
             <Sel value={state.situacaoRua} onChange={(v) => set("situacaoRua", v)} options={RAAS_SIM_NAO} semVazio />
           </Campo>
