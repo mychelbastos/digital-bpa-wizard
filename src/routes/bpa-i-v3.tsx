@@ -12,7 +12,6 @@ import { ProfissionalAutocomplete } from "@/components/bpa-i-v2/ProfissionalAuto
 import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/EstabelecimentoAutocomplete";
 import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
 import { SequenciaFields } from "@/components/bpa-i-v3/SequenciaFields";
-import { ConfigModal } from "@/components/bpa-i-v2/ConfigModal";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { carregarFicha } from "@/lib/bpa-i-v2/fichas";
@@ -70,7 +69,6 @@ function BpaI() {
   const [zerarTudoOpen, setZerarTudoOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<State | null>(null);
   const [undoOpen, setUndoOpen] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false);
   const [fichasOpen, setFichasOpen] = useState(false);
   const [salvarOpen, setSalvarOpen] = useState(false);
   const [salvarComoNovo, setSalvarComoNovo] = useState(false);
@@ -449,9 +447,6 @@ function BpaI() {
                 )}
               </div>
             )}
-            <button onClick={() => setConfigOpen(true)} title="Configuração do estabelecimento (arquivo magnético)" className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
-              ⚙ Config
-            </button>
             <button onClick={gerarPdfClique} disabled={printing} title={semConfirmacao ? "Confirme como Responsável antes de gerar" : temCamposInvalidos ? "Corrija os campos em vermelho antes de gerar" : undefined} className={`rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60${temCamposInvalidos || semConfirmacao ? " opacity-50" : ""}`}>
               {printing ? "Gerando..." : "Gerar PDF"}
             </button>
@@ -470,11 +465,6 @@ function BpaI() {
           </div>
         )}
       </header>
-
-      <ConfigModal
-        open={configOpen}
-        onClose={() => setConfigOpen(false)}
-      />
 
       <SalvarFichaModal
         open={salvarOpen}
