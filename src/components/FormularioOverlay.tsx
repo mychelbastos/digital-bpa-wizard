@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject, type KeyboardEvent as RKeyboardEvent } from "react";
-import { Link } from "@tanstack/react-router";
-import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2, UserRound } from "lucide-react";
+import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2, UserRound, Undo2, type LucideIcon } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { exportSheetsPdf } from "@/lib/export-pdf";
 import { focarProximoCampo } from "@/lib/foco-campos";
@@ -21,7 +21,7 @@ import { salvarFicha, carregarFicha, type FichaMetadados } from "@/lib/bpa-i-v2/
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
-import { Save, FolderOpen } from "lucide-react";
+import { Save } from "lucide-react";
 
 const normTxt = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 // Uma opção do autocomplete: rótulo + sublegenda + ação de aplicar (preenche os campos).
@@ -117,11 +117,12 @@ function filtrar(c: CampoForm, v: string): string {
   return c.maxLen ? s.slice(0, c.maxLen) : s;
 }
 
-export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas, calibravel = false, integracaoPaciente, nuvem }: {
+export function FormularioOverlay({ titulo, descricao, icone, storageKey, campos, checks, paginas, calibravel = false, integracaoPaciente, nuvem }: {
   titulo: string; storageKey: string; campos: CampoForm[]; checks: CheckForm[]; paginas: PaginaForm[];
+  descricao?: string; icone?: LucideIcon; // cabeçalho padrão (ícone + nome + descrição)
   calibravel?: boolean; // mostra as ferramentas de calibração (Editar posições / Contornos)
   integracaoPaciente?: IntegracaoPaciente; // opt-in: barra + busca de paciente (ex.: APAC)
-  nuvem?: NuvemOverlay; // opt-in: salvar/editar/excluir na nuvem + Minhas fichas (ex.: APAC)
+  nuvem?: NuvemOverlay; // opt-in: salvar/editar/excluir na nuvem (ex.: APAC)
 }) {
   const rectsKey = `${storageKey}-rects`;
   const fichaIdKey = `${storageKey}-ficha-id`;
@@ -153,6 +154,28 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
   const [fichasOpen, setFichasOpen] = useState(false);
   const [novaConfirm, setNovaConfirm] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  // ----- Desfazer (undo): reverte a última alteração do formulário. Empilha snapshots de
+  // {txt,chk}; `skipHist` marca transições que NÃO viram ponto de undo (o próprio desfazer,
+  // carregar ficha, nova ficha, hidratação). Limite de 60 passos.
+  const undoStack = useRef<{ txt: Record<string, string>; chk: Record<string, boolean> }[]>([]);
+  const skipHist = useRef(true); // pula a hidratação inicial
+  const prevSnap = useRef<{ txt: Record<string, string>; chk: Record<string, boolean> }>({ txt: {}, chk: {} });
+  const [podeDesfazer, setPodeDesfazer] = useState(false);
+  const resetHistorico = () => { undoStack.current = []; skipHist.current = true; setPodeDesfazer(false); };
+  useEffect(() => {
+    if (skipHist.current) { skipHist.current = false; prevSnap.current = { txt, chk }; return; }
+    undoStack.current.push(prevSnap.current);
+    if (undoStack.current.length > 60) undoStack.current.shift();
+    prevSnap.current = { txt, chk };
+    setPodeDesfazer(true);
+  }, [txt, chk]);
+  const desfazer = () => {
+    const ant = undoStack.current.pop();
+    if (!ant) return;
+    skipHist.current = true;
+    setTxtState(ant.txt); setChkState(ant.chk);
+    setPodeDesfazer(undoStack.current.length > 0);
+  };
 
   useEffect(() => {
     try {
@@ -161,6 +184,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
       const rr = localStorage.getItem(rectsKey);
       if (rr) setRects(JSON.parse(rr));
     } catch { /* ignora */ }
+    resetHistorico();
   }, [storageKey, rectsKey]);
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify({ txt, chk })); } catch { /* */ } }, [txt, chk, storageKey]);
   useEffect(() => { try { localStorage.setItem(rectsKey, JSON.stringify(rects)); } catch { /* */ } }, [rects, rectsKey]);
@@ -177,6 +201,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
   const aplicarDados = (dados: unknown) => {
     const d = (dados ?? {}) as { txt?: Record<string, string>; chk?: Record<string, boolean> };
     setTxtState(d.txt ?? {}); setChkState(d.chk ?? {});
+    resetHistorico(); // trocar de ficha zera o histórico de desfazer
   };
   const carregarNaLista = async (id: string, tit?: string) => {
     const f = await carregarFicha(id);
@@ -230,6 +255,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
     setTxtState({}); setChkState({});
     setCrivoStatus({}); setCrivoLabel({});
     setPacienteVinc(null);
+    resetHistorico();
     limparNuvem();
     try { localStorage.removeItem(storageKey); } catch { /* */ }
   };
@@ -427,12 +453,13 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
+      {icone && (
+        <div className="mx-auto max-w-[1100px] px-4 pt-5">
+          <PageHeader icon={icone} titulo={titulo} descricao={descricao} />
+        </div>
+      )}
       <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-            <h1 className="text-base font-semibold">{titulo}</h1>
-          </div>
+        <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-end gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {calibravel && (
               <button onClick={() => setEditar((e) => !e)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${editar ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border bg-card text-foreground hover:bg-muted"}`}>
@@ -448,9 +475,6 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
             ) : (
               <>
                 {calibravel && <button onClick={() => setContornos((c) => !c)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${contornos ? "border-sky-400 bg-sky-50 text-sky-700" : "border-border bg-card text-foreground hover:bg-muted"}`}><Ruler className="size-4" /> Contornos</button>}
-                {nuvem && (
-                  <button onClick={() => setFichasOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"><FolderOpen className="size-4" /> Minhas fichas</button>
-                )}
                 {nuvem && user && (
                   <>
                     <button onClick={salvarNuvemClique} disabled={salvando} className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-60"><Save className="size-4" /> {salvando ? "Salvando…" : `Salvar${fichaIdRef.current ? "" : " ficha"}`}</button>
@@ -460,6 +484,7 @@ export function FormularioOverlay({ titulo, storageKey, campos, checks, paginas,
                     <button onClick={() => setNovaConfirm(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">Nova ficha</button>
                   </>
                 )}
+                <button onClick={desfazer} disabled={!podeDesfazer} title="Desfazer a última alteração" className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"><Undo2 className="size-4" /> Desfazer</button>
                 <button onClick={limpar} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"><Eraser className="size-4" /> Limpar</button>
                 <button onClick={baixarPdf} disabled={exportando} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"><FileDown className="size-4" /> {exportando ? "Gerando…" : "Baixar PDF"}</button>
               </>

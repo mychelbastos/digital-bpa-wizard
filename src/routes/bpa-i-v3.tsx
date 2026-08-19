@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
+import { FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { registrarLeituraFicha } from "@/lib/producoes";
 import { Snowflake, GitBranch } from "lucide-react";
@@ -323,8 +325,8 @@ function BpaI() {
 
       <ConfirmModal
         open={zerarSeqsOpen}
-        title="Zerar sequências"
-        confirmLabel="Zerar sequências"
+        title="Limpar sequências"
+        confirmLabel="Limpar sequências"
         onCancel={() => setZerarSeqsOpen(false)}
         onConfirm={confirmarZerarSeqs}
       >
@@ -342,8 +344,8 @@ function BpaI() {
 
       <ConfirmModal
         open={zerarTudoOpen}
-        title="Zerar tudo"
-        confirmLabel="Zerar tudo"
+        title="Limpar tudo"
+        confirmLabel="Limpar tudo"
         danger
         onCancel={() => setZerarTudoOpen(false)}
         onConfirm={confirmarZerarTudo}
@@ -351,15 +353,18 @@ function BpaI() {
         <p>Isto vai apagar <strong>todas</strong> as informações do formulário (estabelecimento, profissional e as 3 sequências).</p>
         {avisarPdf && (
           <p className="mt-3 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 font-medium text-amber-900">
-            ⚠️ Você ainda <strong>não gerou o PDF</strong> desta ficha. Se zerar agora, os dados serão perdidos sem o PDF. Deseja continuar mesmo assim?
+            ⚠️ Você ainda <strong>não gerou o PDF</strong> desta ficha. Se limpar agora, os dados serão perdidos sem o PDF. Deseja continuar mesmo assim?
           </p>
         )}
       </ConfirmModal>
 
+      <div className="mx-auto max-w-[1100px] px-4 pt-5">
+        <PageHeader icon={FileText} titulo="BPA-I"
+          descricao="Boletim de Produção Ambulatorial Individualizado." />
+      </div>
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
             <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
               {fichaTitulo || "Nova ficha"}
             </h1>
@@ -412,16 +417,16 @@ function BpaI() {
                 title="Opções de limpeza"
                 className="flex items-center gap-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 group-focus-within:bg-destructive/10"
               >
-                🗑 Zerar <span aria-hidden className="text-[10px]">▾</span>
+                🗑 Limpar <span aria-hidden className="text-[10px]">▾</span>
               </button>
               {/* pt-1 faz "ponte" p/ o hover não cair no vão entre botão e menu */}
               <div className="invisible absolute right-0 top-full z-50 pt-1 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
                 <div className="w-56 overflow-hidden rounded-md border border-border bg-background py-1 text-xs shadow-lg">
                   <button type="button" onClick={clearSeqs} className="block w-full px-3 py-2 text-left hover:bg-muted">
-                    Zerar sequências <span className="text-muted-foreground">(mantém o cabeçalho)</span>
+                    Limpar sequências <span className="text-muted-foreground">(mantém o cabeçalho)</span>
                   </button>
                   <button type="button" onClick={clearAll} className="block w-full px-3 py-2 text-left text-destructive hover:bg-destructive/10">
-                    Zerar tudo <span className="opacity-70">(apaga o formulário inteiro)</span>
+                    Limpar tudo <span className="opacity-70">(apaga o formulário inteiro)</span>
                   </button>
                 </div>
               </div>

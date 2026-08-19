@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { exportSheetPdf, rasterizarFolhaJpeg } from "@/lib/export-pdf";
 import bpacBg from "@/assets/bpa-c (profissional).png";
@@ -20,7 +21,7 @@ import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { statusDaFicha, retificarFicha, type FichaStatus } from "@/lib/producoes";
-import { Snowflake, GitBranch, Undo2 } from "lucide-react";
+import { Snowflake, GitBranch, Undo2, Files } from "lucide-react";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   NOME_PROFISSIONAL_FIELD,
@@ -539,13 +540,13 @@ function BpaCV3() {
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      <ConfirmModal open={zerarAtendOpen} title="Zerar atendimentos" confirmLabel="Zerar atendimentos" onCancel={() => setZerarAtendOpen(false)} onConfirm={confirmarZerarAtend}>
+      <ConfirmModal open={zerarAtendOpen} title="Limpar atendimentos" confirmLabel="Limpar atendimentos" onCancel={() => setZerarAtendOpen(false)} onConfirm={confirmarZerarAtend}>
         <p>Isto vai apagar as 20 linhas de Atendimento Realizado (mantém o cabeçalho).</p>
       </ConfirmModal>
       <ConfirmModal open={novaFichaOpen} title="Nova ficha" confirmLabel="Começar nova ficha" onCancel={() => setNovaFichaOpen(false)} onConfirm={() => { setNovaFichaOpen(false); novaFicha(); }}>
         Começar uma nova ficha em branco? Alterações não salvas serão perdidas.
       </ConfirmModal>
-      <ConfirmModal open={zerarTudoOpen} title="Zerar tudo" confirmLabel="Zerar tudo" danger onCancel={() => setZerarTudoOpen(false)} onConfirm={confirmarZerarTudo}>
+      <ConfirmModal open={zerarTudoOpen} title="Limpar tudo" confirmLabel="Limpar tudo" danger onCancel={() => setZerarTudoOpen(false)} onConfirm={confirmarZerarTudo}>
         <p>Isto vai apagar <strong>todas</strong> as informações do formulário (cabeçalho e as 20 linhas).</p>
       </ConfirmModal>
       <ConfirmModal open={Boolean(dupModal)} title="Ficha duplicada" confirmLabel="Salvar mesmo assim" onCancel={() => setDupModal(null)} onConfirm={() => dupModal?.prosseguir()}>
@@ -571,10 +572,13 @@ function BpaCV3() {
         onRenomeada={persistFicha}
       />
 
+      <div className="mx-auto max-w-[1100px] px-4 pt-5">
+        <PageHeader icon={Files} titulo="BPA-C"
+          descricao="Boletim de Produção Ambulatorial Consolidado." />
+      </div>
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
             <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
               {fichaTitulo || "Nova ficha"}
             </h1>
@@ -628,15 +632,15 @@ function BpaCV3() {
                 title="Opções de limpeza"
                 className="flex items-center gap-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 group-focus-within:bg-destructive/10"
               >
-                🗑 Zerar <span aria-hidden className="text-[10px]">▾</span>
+                🗑 Limpar <span aria-hidden className="text-[10px]">▾</span>
               </button>
               <div className="invisible absolute right-0 top-full z-50 pt-1 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
                 <div className="w-56 overflow-hidden rounded-md border border-border bg-background py-1 text-xs shadow-lg">
                   <button type="button" onClick={() => setZerarAtendOpen(true)} className="block w-full px-3 py-2 text-left hover:bg-muted">
-                    Zerar atendimentos <span className="text-muted-foreground">(mantém o cabeçalho)</span>
+                    Limpar atendimentos <span className="text-muted-foreground">(mantém o cabeçalho)</span>
                   </button>
                   <button type="button" onClick={() => setZerarTudoOpen(true)} className="block w-full px-3 py-2 text-left text-destructive hover:bg-destructive/10">
-                    Zerar tudo <span className="opacity-70">(apaga o formulário inteiro)</span>
+                    Limpar tudo <span className="opacity-70">(apaga o formulário inteiro)</span>
                   </button>
                 </div>
               </div>

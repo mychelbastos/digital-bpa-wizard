@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { UserRound, X, Plus, Trash2, Search, FolderOpen, FileDown, Pencil } from "lucide-react";
+import { UserRound, X, Plus, Trash2, Search, FileDown, Pencil, HeartPulse, Undo2 } from "lucide-react";
 import { PacientePicker, PacienteForm } from "@/components/pacientes/PacientePicker";
 import { carregarPaciente, type Paciente } from "@/lib/pacientes";
 import { orgDoCnes } from "@/lib/tfd/tfd";
@@ -368,6 +369,29 @@ function RaasPage() {
 
   const set = <K extends keyof RaasState>(key: K, value: RaasState[K]) => setState((p) => ({ ...p, [key]: value }));
 
+  // ----- Desfazer (undo): reverte a última alteração. Empilha snapshots do state; `skipHist`
+  // marca transições que não viram ponto de undo (o próprio desfazer, carregar/nova ficha). -----
+  const undoStack = useRef<RaasState[]>([]);
+  const skipHist = useRef(false);
+  const prevStateRef = useRef<RaasState>(state);
+  const [podeDesfazer, setPodeDesfazer] = useState(false);
+  const resetHistorico = () => { undoStack.current = []; skipHist.current = true; setPodeDesfazer(false); };
+  useEffect(() => {
+    if (!hydrated) { prevStateRef.current = state; return; }
+    if (skipHist.current) { skipHist.current = false; prevStateRef.current = state; return; }
+    undoStack.current.push(prevStateRef.current);
+    if (undoStack.current.length > 60) undoStack.current.shift();
+    prevStateRef.current = state;
+    setPodeDesfazer(true);
+  }, [state, hydrated]);
+  const desfazer = () => {
+    const ant = undoStack.current.pop();
+    if (!ant) return;
+    skipHist.current = true;
+    setState(ant);
+    setPodeDesfazer(undoStack.current.length > 0);
+  };
+
   // Hidratação: ?ficha=<id> carrega da nuvem; senão, rascunho local.
   useEffect(() => {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
@@ -453,6 +477,7 @@ function RaasPage() {
     if (!Array.isArray(base.acoes) || base.acoes.length === 0) base.acoes = [emptyAcao()];
     base.acoes = base.acoes.map((a) => ({ ...emptyAcao(), ...a }));
     setState(base);
+    resetHistorico(); // trocar de ficha zera o histórico de desfazer
     persistFicha(id, titulo ?? ficha.titulo ?? "Ficha RAAS");
   };
 
@@ -504,6 +529,7 @@ function RaasPage() {
   const novaFicha = () => {
     const c = cnesPadraoRef.current;
     setState(c ? { ...emptyRaasState(), cnes: c, estabelecimentoNome: CNES_RAAS_PADRAO[c] ?? "" } : emptyRaasState());
+    resetHistorico();
     limparFichaPersistida();
   };
 
@@ -644,11 +670,14 @@ function RaasPage() {
         onRenomeada={persistFicha}
       />
 
+      <div className="mx-auto max-w-[1100px] px-4 pt-5">
+        <PageHeader icon={HeartPulse} titulo="RAAS"
+          descricao="Registro das Ações Ambulatoriais de Saúde — Psicossocial (CAPS)." />
+      </div>
       {/* Cabeçalho fixo */}
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
             <h1 className="max-w-[46vw] truncate text-base font-semibold" title={fichaTitulo ?? undefined}>
               {fichaTitulo || "Nova ficha RAAS"}
             </h1>
@@ -661,8 +690,9 @@ function RaasPage() {
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
               <FileDown className="size-3.5" /> Folha oficial (PDF)
             </a>
-            <button onClick={() => setFichasOpen(true)} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
-              <FolderOpen className="size-3.5" /> Minhas fichas
+            <button onClick={desfazer} disabled={!podeDesfazer} title="Desfazer a última alteração"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted disabled:opacity-50">
+              <Undo2 className="size-3.5" /> Desfazer
             </button>
             {user && (
               <>

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ClipboardCheck } from "lucide-react";
 import { FormularioOverlay, type PreenchePaciente } from "@/components/FormularioOverlay";
 import { CAMPOS, CHECKS } from "@/lib/apac-layout";
 import { nomeCurto } from "@/lib/bpa-i-v2/titulo-ficha";
@@ -72,7 +73,9 @@ const compLabel = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slic
 function ApacPage() {
   return (
     <FormularioOverlay
-      titulo="APAC — Laudo de Solicitação / Autorização"
+      titulo="APAC"
+      descricao="Laudo de Solicitação/Autorização de Procedimentos Ambulatoriais."
+      icone={ClipboardCheck}
       storageKey="apac"
       campos={CAMPOS}
       checks={CHECKS}

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { BedDouble } from "lucide-react";
 import { FormularioOverlay, type PreenchePaciente } from "@/components/FormularioOverlay";
 import { CAMPOS, CHECKS } from "@/lib/laudo-aih-layout";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
@@ -58,7 +59,9 @@ function limparPaciente(api: PreenchePaciente) {
 function LaudoAihPage() {
   return (
     <FormularioOverlay
-      titulo="Laudo AIH — Solicitação de Internação Hospitalar"
+      titulo="Laudo AIH"
+      descricao="Solicitação de Autorização de Internação Hospitalar."
+      icone={BedDouble}
       storageKey="laudo-aih"
       campos={CAMPOS}
       checks={CHECKS}
