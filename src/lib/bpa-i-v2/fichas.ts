@@ -175,6 +175,20 @@ export async function fichasDoMes(mesProducao: string, cnes?: string): Promise<F
   }
 }
 
+// Busca fichas por CONTEÚDO (nome do paciente, código de procedimento/CNS/CPF) — para a lupa
+// da tela "Minhas fichas". Vai ao servidor porque a lista não carrega o `dados` inteiro.
+// Respeita a RLS (só volta o que o usuário pode ver). Retorna os ids que casaram.
+export async function buscarFichasConteudo(termo: string): Promise<string[]> {
+  if (!supabase || termo.trim().length < 2) return [];
+  try {
+    const { data, error } = await supabase.rpc("buscar_fichas_conteudo", { termo: termo.trim() });
+    if (error || !data) return [];
+    return (data as { id: string }[]).map((r) => r.id).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export async function carregarFicha(id: string): Promise<{ dados: unknown; titulo: string } | null> {
   if (!supabase) return null;
   try {

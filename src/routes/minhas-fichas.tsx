@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X, Trash2 } from "lucide-react";
-import { listarFichas, renomearFicha, excluirFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
+import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X, Trash2, Search } from "lucide-react";
+import { listarFichas, renomearFicha, excluirFicha, buscarFichasConteudo, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { toast } from "sonner";
 import { buscarNomesPorCns } from "@/lib/bpa-i-v2/profissionais";
@@ -14,6 +14,9 @@ export const Route = createFileRoute("/minhas-fichas")({
 });
 
 const PAGE_SIZE = 25;
+
+// Normaliza p/ busca: minúsculo, sem acento. Usado no filtro instantâneo (metadados).
+const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 // Rótulo do mês (AAAAMM -> "julho/2026").
 function labelComp(comp: string | null): string {
@@ -48,6 +51,25 @@ function MinhasFichasPage() {
   // Exclusão (soft-delete) de ficha não exportada — com confirmação.
   const [excluirAlvo, setExcluirAlvo] = useState<FichaResumo | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  // Busca (lupa): filtro instantâneo nos metadados + busca no servidor dentro do conteúdo
+  // (paciente/procedimento). `idsConteudo` = ids que casaram no conteúdo (null = ainda não veio).
+  const [busca, setBusca] = useState("");
+  const [idsConteudo, setIdsConteudo] = useState<Set<string> | null>(null);
+  const [buscandoConteudo, setBuscandoConteudo] = useState(false);
+  const buscaTermo = busca.trim();
+  const buscaAtiva = buscaTermo.length >= 2;
+
+  // Busca no conteúdo (paciente/procedimento) — debounced; respeita a RLS no servidor.
+  useEffect(() => {
+    if (!buscaAtiva) { setIdsConteudo(null); setBuscandoConteudo(false); return; }
+    let cancelado = false;
+    setBuscandoConteudo(true);
+    const t = setTimeout(async () => {
+      const ids = await buscarFichasConteudo(buscaTermo);
+      if (!cancelado) { setIdsConteudo(new Set(ids)); setBuscandoConteudo(false); }
+    }, 300);
+    return () => { cancelado = true; clearTimeout(t); };
+  }, [buscaTermo, buscaAtiva]);
 
   useEffect(() => {
     listarFichas().then(async (f) => {
@@ -117,6 +139,23 @@ function MinhasFichasPage() {
   // competência de ATENDIMENTO desc e, em seguida, pelo título com ordenação NUMÉRICA
   // (numeric:true) — assim "folha 2" vem antes de "folha 10" (antes saía 1,10,11…,2,20).
   const itensFiltrados = useMemo(() => {
+    // Modo BUSCA: varre TODAS as fichas (ignora o mês selecionado) por metadados (instantâneo)
+    // OU pelo conteúdo casado no servidor (paciente/procedimento). Mantém o filtro de tipo.
+    if (buscaAtiva) {
+      const t = norm(buscaTermo);
+      const tDig = buscaTermo.replace(/\D/g, "");
+      const casaMeta = (f: FichaResumo) => {
+        const campos = [f.titulo, f.profNome, f.profCns, f.cnes, f.tipo,
+          labelComp(f.competencia), labelComp(mesProd(f))];
+        if (campos.some((c) => c && norm(String(c)).includes(t))) return true;
+        if (tDig.length >= 3 && [f.profCns, f.cnes].some((c) => c && c.includes(tDig))) return true;
+        return false;
+      };
+      return fichas
+        .filter((f) => tipoSel === "todos" || f.tipo === tipoSel)
+        .filter((f) => casaMeta(f) || (idsConteudo?.has(f.id) ?? false))
+        .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+    }
     const visiveis = mesAtivo === "todos" ? grupos : grupos.filter((g) => chaveMes(g.comp) === mesAtivo);
     const flat: FichaResumo[] = [];
     for (const g of visiveis) {
@@ -129,10 +168,10 @@ function MinhasFichasPage() {
     }
     return flat;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [grupos, mesAtivo, tipoSel]);
+  }, [grupos, mesAtivo, tipoSel, buscaAtiva, buscaTermo, idsConteudo, fichas]);
 
-  // Volta pra página 1 sempre que muda o filtro (mês/tipo).
-  useEffect(() => { setPagina(1); }, [mesAtivo, tipoSel]);
+  // Volta pra página 1 sempre que muda o filtro (mês/tipo/busca).
+  useEffect(() => { setPagina(1); }, [mesAtivo, tipoSel, buscaTermo]);
 
   const totalPaginas = Math.max(1, Math.ceil(itensFiltrados.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -219,6 +258,33 @@ function MinhasFichasPage() {
           <p className="py-16 text-center text-sm text-muted-foreground">Nenhuma ficha salva ainda. Preencha um formulário e clique em “Salvar ficha”.</p>
         ) : (
           <>
+            {/* Busca global: paciente, procedimento, nome da ficha, profissional, CNES… O que
+                não está nos metadados (paciente/procedimento) é procurado no servidor. */}
+            <div className="mb-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar por paciente, procedimento, nome da ficha, profissional…"
+                  className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-9 text-sm outline-none ring-primary/30 focus:border-primary focus:ring-2"
+                  data-nocaps />
+                {busca && (
+                  <button onClick={() => setBusca("")} aria-label="Limpar busca"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+              {buscaAtiva && (
+                <p className="mt-1 flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+                  {buscandoConteudo && <Loader2 className="size-3 animate-spin" />}
+                  Buscando em todas as fichas · {itensFiltrados.length} resultado{itensFiltrados.length === 1 ? "" : "s"}
+                  {buscandoConteudo ? " · procurando no conteúdo…" : ""}
+                </p>
+              )}
+            </div>
+
             {/* Filtro por tipo de formulário + ação de imprimir várias (linha de cima). */}
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Tipo:</span>
@@ -258,8 +324,9 @@ function MinhasFichasPage() {
             </div>
 
             {/* Menu por mês/ano — carrossel em linha própria (largura total). "Geral" fixo à
-                esquerda, setas nas pontas; o "Meses" (dropdown) fica na linha de cima. */}
-            <div className="mb-5 flex items-center gap-1.5">
+                esquerda, setas nas pontas; o "Meses" (dropdown) fica na linha de cima.
+                Escondido durante a busca (que varre todos os meses). */}
+            <div className={`mb-5 flex items-center gap-1.5 ${buscaAtiva ? "hidden" : ""}`}>
               <button onClick={() => setMesSel("todos")} className={pill(mesAtivo === "todos")}>
                 Geral <span className="opacity-70">({fichas.length})</span>
               </button>
@@ -295,7 +362,11 @@ function MinhasFichasPage() {
             )}
 
             {itensFiltrados.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">Nenhuma ficha para este filtro.</p>
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                {buscaAtiva
+                  ? (buscandoConteudo ? "Procurando…" : `Nenhuma ficha encontrada para “${buscaTermo}”.`)
+                  : "Nenhuma ficha para este filtro."}
+              </p>
             ) : (
               <>
                 {barraPaginacao && <div className="mb-4">{barraPaginacao}</div>}
