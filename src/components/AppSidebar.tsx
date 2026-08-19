@@ -11,7 +11,7 @@ import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { CNES_TFD } from "@/lib/tfd/tfd";
 
 const formularios = [
-  { to: "/laudo-aih", label: "Laudo AIH" },
+  { to: "/laudo-aih", label: "AIH" },
   { to: "/apac", label: "APAC" },
   { to: "/bpa-c-v3", label: "BPA-C" },
   { to: "/bpa-i-v3", label: "BPA-I" },
