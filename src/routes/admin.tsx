@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { souSuperAdmin } from "@/lib/permissoes";
@@ -380,18 +381,9 @@ function Admin() {
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      <header className="border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-[1000px] items-center gap-3">
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Início
-          </Link>
-          <h1 className="flex items-center gap-2 text-base font-semibold">
-            <ShieldCheck className="size-4" /> Administração de vínculos e acessos
-          </h1>
-        </div>
-      </header>
-
       <main className="mx-auto mt-6 max-w-[1000px] px-4">
+        <PageHeader icon={ShieldCheck} titulo="Administração"
+          descricao="Vínculos, permissões e acessos de usuários e unidades." />
         {carregando ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Carregando…

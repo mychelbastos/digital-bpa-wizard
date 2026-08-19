@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X, Trash2 } from "lucide-react";
 import { listarFichas, renomearFicha, excluirFicha, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
@@ -207,14 +208,9 @@ function MinhasFichasPage() {
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      <header className="border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-[900px] items-center gap-3">
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-          <h1 className="flex items-center gap-2 text-base font-semibold"><FolderOpen className="size-4" /> Minhas fichas</h1>
-        </div>
-      </header>
-
       <main className="mx-auto mt-6 max-w-[900px] px-4">
+        <PageHeader icon={FolderOpen} titulo="Minhas fichas"
+          descricao="Abra, edite, imprima e gerencie as fichas salvas." />
         {carregando ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Carregando…

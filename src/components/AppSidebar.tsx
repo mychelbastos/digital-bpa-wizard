@@ -91,12 +91,13 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
           )}
         </div>
 
+        {podeTfd && <Link to="/tfd" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/tfd"))} style={styleAtivo(pathname.startsWith("/tfd"))}><Ambulance className="size-4 shrink-0" /> TFD</Link>}
+
         <div className="mt-3 space-y-0.5 border-t border-white/10 pt-3">
           <Link to="/minhas-fichas" onClick={onNavegar} className={item(pathname.startsWith("/minhas-fichas"))} style={styleAtivo(pathname.startsWith("/minhas-fichas"))}><FolderOpen className="size-4 shrink-0" /> Minhas fichas</Link>
-          <Link to="/fechamento" onClick={onNavegar} className={item(pathname.startsWith("/fechamento"))} style={styleAtivo(pathname.startsWith("/fechamento"))}><CalendarCheck className="size-4 shrink-0" /> Fechamento do mês</Link>
-          <Link to="/fpo" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/fpo"))} style={styleAtivo(pathname.startsWith("/fpo"))}><FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)</Link>
           <Link to="/relatorios" onClick={onNavegar} className={item(pathname.startsWith("/relatorios"))} style={styleAtivo(pathname.startsWith("/relatorios"))}><FileBarChart className="size-4 shrink-0" /> Relatórios</Link>
-          {podeTfd && <Link to="/tfd" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/tfd"))} style={styleAtivo(pathname.startsWith("/tfd"))}><Ambulance className="size-4 shrink-0" /> TFD</Link>}
+          <Link to="/fpo" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/fpo"))} style={styleAtivo(pathname.startsWith("/fpo"))}><FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)</Link>
+          <Link to="/fechamento" onClick={onNavegar} className={item(pathname.startsWith("/fechamento"))} style={styleAtivo(pathname.startsWith("/fechamento"))}><CalendarCheck className="size-4 shrink-0" /> Exportar produção</Link>
           <Link to="/importar" onClick={onNavegar} className={item(pathname.startsWith("/importar"))} style={styleAtivo(pathname.startsWith("/importar"))}><Database className="size-4 shrink-0" /> Importar produção</Link>
           {podeAdmin && <Link to="/admin" onClick={onNavegar} className={item(pathname.startsWith("/admin"))} style={styleAtivo(pathname.startsWith("/admin"))}><ShieldCheck className="size-4 shrink-0" /> Administração</Link>}
         </div>

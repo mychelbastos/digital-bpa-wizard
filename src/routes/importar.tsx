@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useMemo, useRef, useState } from "react";
 import { Upload, FileText, AlertTriangle, Loader2, Save, CheckCircle2, Database } from "lucide-react";
 import { toast } from "sonner";
@@ -124,14 +125,9 @@ function ImportarPage() {
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      <header className="border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-          <h1 className="flex items-center gap-2 text-base font-semibold"><Database className="size-4" /> Importar produção</h1>
-        </div>
-      </header>
-
       <main className="mx-auto mt-5 max-w-3xl space-y-4 px-4">
+        <PageHeader icon={Database} titulo="Importar produção"
+          descricao="Importe arquivos .MAR/.JUN e planilhas de produção." />
         <p className="text-sm text-muted-foreground">
           Importe um arquivo de produção do BPA Magnético (<span className="font-mono">.MAR</span>, <span className="font-mono">.JUN</span>, <span className="font-mono">.txt</span>) — BPA-C e BPA-I —
           ou do RAAS (<span className="font-mono">.AAS</span>) — Atenção Psicossocial. O tipo é detectado automaticamente.

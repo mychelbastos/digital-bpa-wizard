@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Download, CalendarCheck, Loader2, Lock, Snowflake, LockOpen } from "lucide-react";
@@ -146,18 +147,9 @@ function Fechamento() {
         </p>
       </ConfirmModal>
 
-      <header className="border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-[900px] items-center gap-3">
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Início
-          </Link>
-          <h1 className="flex items-center gap-2 text-base font-semibold">
-            <CalendarCheck className="size-4" /> Fechamento do mês
-          </h1>
-        </div>
-      </header>
-
       <main className="mx-auto mt-6 max-w-[900px] px-4">
+        <PageHeader icon={CalendarCheck} titulo="Exportar produção"
+          descricao="Feche a produção do mês e gere o arquivo magnético para transmissão." />
         <p className="text-sm text-muted-foreground">
           Gera <strong>um único arquivo magnético</strong> (.txt) com toda a produção do
           <strong> mês de produção</strong> — BPA-C (registro 02) e BPA-I (registro 03) juntos, das

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2, Pencil, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -139,34 +140,29 @@ function FpoPage() {
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      <header className="border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-            <h1 className="flex items-center gap-2 text-base font-semibold"><FileSpreadsheet className="size-4" /> FPO — Ficha de Programação Orçamentária</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={async () => abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome, logo: await carregarLogoOrg() }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção")}
-              disabled={rows.length === 0}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
-              <FileDown className="size-4" /> Gerar relatório
-            </button>
-            {podeEditar && (
-              <button onClick={() => setAddOpen(true)} disabled={!cnes}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
-                <Plus className="size-4" /> Adicionar procedimento
-              </button>
-            )}
-            {podeEditar && (
-              <button onClick={() => setImportOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-                <Upload className="size-4" /> Importar arquivo
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
       <main className="mx-auto mt-5 max-w-[1200px] px-4">
+        <PageHeader icon={FileSpreadsheet} titulo="FPO (Orçamento)"
+          descricao="Ficha de Programação Orçamentária — tetos e saldos por procedimento."
+          right={
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={async () => abrirPreview(construirPdfFpo({ nomeUnidade, cnes, competencia, rows, responsavel: user?.nome, logo: await carregarLogoOrg() }), `relatorio-fpo-${cnes}-${competencia}.pdf`, "FPO × Produção")}
+                disabled={rows.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
+                <FileDown className="size-4" /> Gerar relatório
+              </button>
+              {podeEditar && (
+                <button onClick={() => setAddOpen(true)} disabled={!cnes}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
+                  <Plus className="size-4" /> Adicionar procedimento
+                </button>
+              )}
+              {podeEditar && (
+                <button onClick={() => setImportOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+                  <Upload className="size-4" /> Importar arquivo
+                </button>
+              )}
+            </div>
+          } />
         {/* Filtros */}
         <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_auto]">
           <label className="text-sm">

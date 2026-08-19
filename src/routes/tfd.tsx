@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Ambulance, Plus, Search, X, Loader2, Save, MapPin, Receipt, ChevronDown, Users, Pencil, Trash2, FileBarChart, Download, FileText, Lock,
@@ -235,10 +236,7 @@ function TfdPage() {
   if (semAcesso) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-6">
-        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-        <h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-foreground">
-          <Ambulance className="size-5 text-primary" /> TFD — Tratamento Fora de Domicílio
-        </h1>
+        <PageHeader icon={Ambulance} titulo="TFD" descricao="Tratamento Fora de Domicílio — gera a produção da Central de Regulação." />
         <div className="mt-6 rounded-lg border border-border bg-card p-6 text-center text-sm font-semibold text-muted-foreground">
           SEM PERMISSÃO DE ACESSO
         </div>
@@ -249,14 +247,8 @@ function TfdPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       {/* Cabeçalho */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Início</Link>
-          <h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-foreground">
-            <Ambulance className="size-5 text-primary" /> TFD — Tratamento Fora de Domicílio
-          </h1>
-        </div>
-        {podeGerir && (
+      <PageHeader icon={Ambulance} titulo="TFD" descricao="Tratamento Fora de Domicílio — gera a produção da Central de Regulação."
+        right={podeGerir ? (
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => setPacientesAberto(true)}
               className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
@@ -280,8 +272,7 @@ function TfdPage() {
               <Plus className="size-4" /> Novo TFD
             </button>
           </div>
-        )}
-      </div>
+        ) : undefined} />
 
       {pacientesAberto && orgId && (
         <PacientesPanel orgId={orgId} onFechar={() => setPacientesAberto(false)} />

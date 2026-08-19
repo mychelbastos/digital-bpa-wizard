@@ -220,7 +220,6 @@ function Home() {
           <div className="flex items-center gap-3">
             <img src={spaEmblem} alt="SPA Digital" className="size-10 shrink-0 object-contain" />
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">SIA / SUS</p>
               <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard SPA Digital</h1>
             </div>
           </div>
