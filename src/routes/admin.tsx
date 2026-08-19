@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { souSuperAdmin } from "@/lib/permissoes";
+import { limparCacheLogoOrg } from "@/lib/org-logo";
 import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
 import {
   ShieldCheck,
@@ -319,7 +320,9 @@ function Admin() {
         cab_destino_tipo: o.cab_destino_tipo,
         cab_versao: o.cab_versao,
         cor_relatorio: o.cor_relatorio ?? null,
+        logo_relatorio: o.logo_relatorio ?? null,
       });
+      limparCacheLogoOrg();
       await recarregar();
       toast.success("Organização salva.");
     } catch (err) {
@@ -809,6 +812,40 @@ function OrgCard({
             onChange={(e) => set("cor_relatorio", e.target.value.toUpperCase())}
             data-nocaps className="h-8 w-12 cursor-pointer rounded border border-border bg-background p-0.5" />
           <span className="font-mono text-[11px] text-muted-foreground">{o.cor_relatorio ?? "padrão (verde)"}</span>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-[11px] font-medium text-muted-foreground">Logo / timbre dos relatórios</div>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          Imagem no topo dos PDFs. Ideal um timbre horizontal (proporção ~3:1, ex.: 1400×436, PNG).
+          Lembre de clicar em <strong>Salvar organização</strong> depois de trocar.
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          {o.logo_relatorio ? (
+            <img src={o.logo_relatorio} alt="Logo atual" className="h-10 w-auto rounded border border-border bg-white object-contain px-1" />
+          ) : (
+            <span className="text-[11px] text-muted-foreground">Nenhuma logo definida.</span>
+          )}
+          <label className="cursor-pointer rounded border border-border px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted">
+            {o.logo_relatorio ? "Trocar imagem" : "Enviar imagem"}
+            <input type="file" accept="image/png,image/jpeg" className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                if (f.size > 1_500_000) { toast.error("Imagem muito grande (máx. 1,5 MB). Reduza o arquivo."); return; }
+                const r = new FileReader();
+                r.onload = () => set("logo_relatorio", typeof r.result === "string" ? r.result : null);
+                r.readAsDataURL(f);
+              }} />
+          </label>
+          {o.logo_relatorio && (
+            <button type="button" onClick={() => set("logo_relatorio", null)}
+              className="rounded border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted">
+              Remover
+            </button>
+          )}
         </div>
       </div>
 
