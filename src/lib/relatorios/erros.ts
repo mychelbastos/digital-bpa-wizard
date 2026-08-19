@@ -29,6 +29,7 @@ export interface ErroItem {
   profissional: string;
   procedimento: string;  // código, quando aplicável
   descricao: string;
+  pacienteId?: string | null; // preenchido em "paciente-revisao" p/ resolver a marca
 }
 
 const jc = (a: unknown): string => (Array.isArray(a) ? a.join("") : String(a ?? ""));
@@ -107,10 +108,20 @@ async function errosPacientesRevisao(): Promise<ErroItem[]> {
     if (error || !data) return [];
     return (data as { id: string; nome: string; cns: string | null; cpf: string | null }[]).map((p) => ({
       categoria: "paciente-revisao" as const, gravidade: "aviso" as const, fichaId: null, tipo: "—",
-      competencia: "", cnes: "", profissional: "—", procedimento: "",
+      competencia: "", cnes: "", profissional: "—", procedimento: "", pacienteId: p.id,
       descricao: `Paciente ${p.nome}${p.cns ? ` (CNS ${p.cns})` : p.cpf ? ` (CPF ${p.cpf})` : ""} marcado para revisão — possível conflito de documento (nome/nascimento divergente).`,
     }));
   } catch { return []; }
+}
+
+// Dá baixa na revisão de um paciente (zera flag_revisao). Usado no botão "Resolver"
+// do relatório de erros. Retorna true se atualizou.
+export async function resolverRevisaoPaciente(id: string): Promise<boolean> {
+  if (!supabase || !id) return false;
+  try {
+    const { error } = await supabase.from("pacientes").update({ flag_revisao: false }).eq("id", id);
+    return !error;
+  } catch { return false; }
 }
 
 // ---- D) Duplicidade de fichas (mesma chave + mesmo conteúdo) ----

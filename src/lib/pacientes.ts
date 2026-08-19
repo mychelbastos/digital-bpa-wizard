@@ -165,8 +165,9 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
 
   try {
     // Atualização explícita por id (edição/complemento de um paciente já selecionado).
+    // Editar pelo cadastro = revisão feita → dá baixa na marca de conflito.
     if (input.id) {
-      const { data, error } = await supabase.from("pacientes").update(row).eq("id", input.id).select(COLS).single();
+      const { data, error } = await supabase.from("pacientes").update({ ...row, flag_revisao: false }).eq("id", input.id).select(COLS).single();
       return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
     }
     // Dedup SEGURA. CNS é o identificador forte.

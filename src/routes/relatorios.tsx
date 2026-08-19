@@ -16,7 +16,7 @@ import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
 import { construirPdfFpo, construirPdfFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
 import { construirPdfTfd, construirPdfTfdPorUnidade } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
-import { coletarErros, ROTULO_CATEGORIA, type CategoriaErro, type ErroItem } from "@/lib/relatorios/erros";
+import { coletarErros, resolverRevisaoPaciente, ROTULO_CATEGORIA, type CategoriaErro, type ErroItem } from "@/lib/relatorios/erros";
 import { csvErros, construirPdfErros } from "@/lib/relatorios/erros-pdf";
 import { carregarInativos, type InativosResultado } from "@/lib/relatorios/inativos";
 import { csvInativos, construirPdfInativos } from "@/lib/relatorios/inativos-pdf";
@@ -160,6 +160,15 @@ function RelatoriosPage() {
     setVerificando(true);
     try { setErros(await coletarErros({ mesProducao: competencia, categorias: categoriasErro })); }
     finally { setVerificando(false); }
+  };
+  const [resolvendo, setResolvendo] = useState<string | null>(null);
+  const resolverRevisao = async (pacienteId: string) => {
+    setResolvendo(pacienteId);
+    const ok = await resolverRevisaoPaciente(pacienteId);
+    setResolvendo(null);
+    if (!ok) { toast.error("Não foi possível resolver a revisão."); return; }
+    setErros((prev) => (prev ?? []).filter((e) => !(e.categoria === "paciente-revisao" && e.pacienteId === pacienteId)));
+    toast.success("Revisão resolvida.");
   };
   const errosFiltrados = (erros ?? []).filter((e) => filtroGrav === "todas" || e.gravidade === filtroGrav);
   const nErros = (erros ?? []).filter((e) => e.gravidade === "erro").length;
@@ -359,7 +368,7 @@ function RelatoriosPage() {
                       <td className="px-2 py-1.5 whitespace-nowrap">{e.tipo}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap font-mono text-[11px]">{e.cnes}</td>
                       <td className="px-2 py-1.5">{e.profissional}</td>
-                      <td className="px-2 py-1.5 text-foreground">{e.descricao}{e.fichaId ? <a href={`${e.tipo === "BPA-C" ? "/bpa-c-v3" : "/bpa-i-v3"}?ficha=${e.fichaId}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir ficha</a> : null}</td>
+                      <td className="px-2 py-1.5 text-foreground">{e.descricao}{e.fichaId ? <a href={`${e.tipo === "BPA-C" ? "/bpa-c-v3" : "/bpa-i-v3"}?ficha=${e.fichaId}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir ficha</a> : null}{e.categoria === "paciente-revisao" && e.pacienteId ? <button onClick={() => resolverRevisao(e.pacienteId!)} disabled={resolvendo === e.pacienteId} className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">{resolvendo === e.pacienteId ? "Resolvendo…" : "Resolver revisão"}</button> : null}</td>
                     </tr>
                   ))}
                 </tbody>
