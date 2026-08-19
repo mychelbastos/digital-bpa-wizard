@@ -573,11 +573,10 @@ function BpaCV3() {
       />
 
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
-        <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-3">
           <FormIdentity icon={Files} nome="BPA-C"
             descricao="Boletim de Produção Ambulatorial Consolidado." fichaTitulo={fichaTitulo} />
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-teal-100 px-2 py-1 text-xs font-bold tracking-wide text-teal-700">BPA-C</span>
             {user && (
               <div className="group relative flex">
                 <button

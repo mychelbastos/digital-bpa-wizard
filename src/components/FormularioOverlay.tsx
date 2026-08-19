@@ -454,7 +454,7 @@ export function FormularioOverlay({ titulo, descricao, icone, storageKey, campos
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
       <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2">
           <FormIdentity icon={icone ?? FileText} nome={titulo} descricao={descricao} fichaTitulo={fichaTitulo} />
           <div className="flex flex-wrap items-center gap-2">
             {calibravel && (

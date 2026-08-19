@@ -357,11 +357,10 @@ function BpaI() {
       </ConfirmModal>
 
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
-        <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-3">
           <FormIdentity icon={FileText} nome="BPA-I"
             descricao="Boletim de Produção Ambulatorial Individualizado." fichaTitulo={fichaTitulo} />
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-bold tracking-wide text-sky-700">BPA-I</span>
             {user && (
               <div className="group relative flex">
                 <button
