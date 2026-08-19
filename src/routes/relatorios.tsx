@@ -176,7 +176,7 @@ function RelatoriosPage() {
   const nErros = (erros ?? []).filter((e) => e.gravidade === "erro").length;
   const nAvisos = (erros ?? []).length - nErros;
   const baixarCsvErros = () => { if (!errosFiltrados.length) return; baixarCsv(`erros-${competencia}.csv`, csvErros(errosFiltrados)); toast.success("CSV gerado."); };
-  const baixarPdfErros = () => { if (!errosFiltrados.length) return; abrirPreview(construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo }), `erros-${competencia}.pdf`, "Relatório de erros / crivo"); };
+  const baixarPdfErros = () => { if (!errosFiltrados.length) return; abrirPreview(construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo }), `consistencia-${competencia}.pdf`, "Consistência da produção"); };
 
   // ---- Profissionais inativos / sem produção ----
   const nomesUnidade = useMemo(() => Object.fromEntries(cnesOpcoes.map((u) => [u.cnes, u.nome])), [cnesOpcoes]);
@@ -317,9 +317,9 @@ function RelatoriosPage() {
           </div>
         </section>
 
-        {/* ============ Relatório de erros / crivo ============ */}
+        {/* ============ Consistência da produção (antigo "Erros / Crivo") ============ */}
         <section className={`${cardCls} mb-5`}>
-          <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground"><AlertTriangle className="size-4 text-amber-500" /> Erros / Crivo</h2>
+          <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground"><AlertTriangle className="size-4 text-amber-500" /> Consistência da produção</h2>
           <p className="mb-3 text-xs text-muted-foreground">Varre a produção do mês selecionado acima ({mesLabel(competencia)}) e o cadastro, e lista o que precisa de correção antes de transmitir.</p>
           <div className="mb-3 flex flex-wrap gap-2">
             {TODAS_CATS.map((c) => {
