@@ -809,12 +809,6 @@ function OrgCard({
             onChange={(e) => set("cor_relatorio", e.target.value.toUpperCase())}
             data-nocaps className="h-8 w-12 cursor-pointer rounded border border-border bg-background p-0.5" />
           <span className="font-mono text-[11px] text-muted-foreground">{o.cor_relatorio ?? "padrão (verde)"}</span>
-          {o.cor_relatorio && (
-            <button type="button" onClick={() => set("cor_relatorio", null)}
-              className="rounded border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted">
-              Usar padrão
-            </button>
-          )}
         </div>
       </div>
 
