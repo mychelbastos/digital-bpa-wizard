@@ -247,32 +247,33 @@ function TfdPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       {/* Cabeçalho */}
-      <PageHeader icon={Ambulance} titulo="TFD" descricao="Tratamento Fora de Domicílio — gera a produção da Central de Regulação."
-        right={podeGerir ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => setPacientesAberto(true)}
-              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
-              <Users className="size-4" /> Pacientes
-            </button>
-            <button type="button" onClick={() => setDestinosAberto(true)}
-              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
-              <MapPin className="size-4" /> Destinos
-            </button>
-            <button type="button" onClick={() => setRelatoriosAberto(true)}
-              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
-              <FileBarChart className="size-4" /> Relatórios
-            </button>
-            <button type="button" onClick={faturarMes} disabled={faturando || registros.length === 0}
-              className="flex items-center gap-2 rounded-md border border-primary/40 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
-              title="Consolida os TFDs do mês em fichas BPA-I (por profissional)">
-              {faturando ? <Loader2 className="size-4 animate-spin" /> : <Receipt className="size-4" />} Gerar faturamento do mês
-            </button>
-            <button type="button" onClick={abrirNovo}
-              className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-              <Plus className="size-4" /> Novo TFD
-            </button>
-          </div>
-        ) : undefined} />
+      <PageHeader icon={Ambulance} titulo="TFD" descricao="Tratamento Fora de Domicílio — gera a produção da Central de Regulação." />
+
+      {podeGerir && (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setPacientesAberto(true)}
+            className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+            <Users className="size-4" /> Pacientes
+          </button>
+          <button type="button" onClick={() => setDestinosAberto(true)}
+            className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+            <MapPin className="size-4" /> Destinos
+          </button>
+          <button type="button" onClick={() => setRelatoriosAberto(true)}
+            className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+            <FileBarChart className="size-4" /> Relatórios
+          </button>
+          <button type="button" onClick={faturarMes} disabled={faturando || registros.length === 0}
+            className="flex items-center gap-2 rounded-md border border-primary/40 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+            title="Consolida os TFDs do mês em fichas BPA-I (por profissional)">
+            {faturando ? <Loader2 className="size-4 animate-spin" /> : <Receipt className="size-4" />} Gerar faturamento do mês
+          </button>
+          <button type="button" onClick={abrirNovo}
+            className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            <Plus className="size-4" /> Novo TFD
+          </button>
+        </div>
+      )}
 
       {pacientesAberto && orgId && (
         <PacientesPanel orgId={orgId} onFechar={() => setPacientesAberto(false)} />
