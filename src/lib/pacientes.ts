@@ -124,6 +124,15 @@ export interface SalvarPacienteResultado { paciente: Paciente | null; erro?: str
 // Cria ou atualiza um paciente, deduplicando por CNS/CPF na org (CNS é o identificador forte).
 // Quando os documentos apontam para PESSOAS DIFERENTES, NÃO mescla: retorna erro descritivo
 // (ex.: CPF de outra pessoa). Retorna { paciente } no sucesso, ou { paciente: null, erro }.
+// "Cadastro manda": após alterar um paciente, o nome/nascimento corrigido é
+// escrito também nas fichas BPA-I que carregam o mesmo CNS/CPF (RPC no banco).
+// Best-effort: nunca derruba o salvamento se a propagação falhar.
+async function propagarParaFichas(pacienteId: string): Promise<void> {
+  if (!supabase || !pacienteId) return;
+  try { await supabase.rpc("propagar_paciente_fichas", { p_id: pacienteId }); }
+  catch { /* propagação é best-effort */ }
+}
+
 export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacienteResultado> {
   if (!supabase) return { paciente: null, erro: "Sistema indisponível." };
   const cns = soDigitos(input.cns) || null;
@@ -168,7 +177,9 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
     // Editar pelo cadastro = revisão feita → dá baixa na marca de conflito.
     if (input.id) {
       const { data, error } = await supabase.from("pacientes").update({ ...row, flag_revisao: false }).eq("id", input.id).select(COLS).single();
-      return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
+      if (error || !data) return { paciente: null, erro: erroBanco(error?.message) };
+      await propagarParaFichas(input.id); // cadastro manda: nome/nascimento vão p/ as fichas
+      return { paciente: data as Paciente };
     }
     // Dedup SEGURA. CNS é o identificador forte.
     const byCns = cns ? await acharPorDocumento(input.organizacao_id, "cns", cns) : null;
@@ -183,7 +194,9 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
     }
     if (existente) {
       const { data, error } = await supabase.from("pacientes").update(row).eq("id", existente.id).select(COLS).single();
-      return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
+      if (error || !data) return { paciente: null, erro: erroBanco(error?.message) };
+      await propagarParaFichas(existente.id); // cadastro manda: propaga p/ as fichas
+      return { paciente: data as Paciente };
     }
     // Criação: carimba `origem` (primeira aparição) quando informada.
     const rowInsert = input.origem ? { ...row, origem: input.origem } : row;
