@@ -118,6 +118,9 @@ function Home() {
   const [resumoFpo, setResumoFpo] = useState<FpoResumoUnidade[]>([]);
   const [logoOrg, setLogoOrg] = useState<string | null>(null);
   const [nomesEstabFpo, setNomesEstabFpo] = useState<Record<string, string>>({});
+  // Nome do estabelecimento pelo CADASTRO (fallback quando a ficha não traz o nome embutido —
+  // ex.: RAAS importado, onde `estabelecimentoNome` vem vazio). Resolve pela tabela `estabelecimentos`.
+  const [nomesEstabCad, setNomesEstabCad] = useState<Record<string, string>>({});
   const fpoDetalheRef = useRef<HTMLDivElement>(null);
   // "Ver detalhes" do total: abre o "Ver mais" e rola até o detalhe por unidade.
   const verDetalhesFpo = () => {
@@ -163,7 +166,29 @@ function Home() {
   useEffect(() => { carregarLogoOrg().then(setLogoOrg); }, []);
   useEffect(() => { setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
 
-  const unidades = useMemo(() => agrupar(rows, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)), [rows]);
+  // Busca no cadastro o nome das unidades cujas linhas vieram SEM nome embutido (ex.: RAAS
+  // importado). Só busca as que ainda não temos, para não repetir requisições.
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const faltando = [...new Set(
+        rows.filter((r) => r.cnes && !r.estabelecimento_nome?.trim()).map((r) => r.cnes as string),
+      )].filter((c) => !nomesEstabCad[c]);
+      if (faltando.length === 0) return;
+      const achados = await Promise.all(faltando.map(async (c) => [c, (await buscarEstabelecimento(c)) || ""] as const));
+      if (vivo) setNomesEstabCad((prev) => ({ ...prev, ...Object.fromEntries(achados.filter(([, n]) => n)) }));
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
+  // Rótulo da unidade: nome embutido na ficha → nome do cadastro → código do CNES.
+  const labelUnidade = useMemo(
+    () => (r: ProducaoBpaRow) => r.estabelecimento_nome?.trim() || nomesEstabCad[r.cnes || ""] || nomeOuCodigo(null, r.cnes),
+    [nomesEstabCad],
+  );
+
+  const unidades = useMemo(() => agrupar(rows, (r) => r.cnes || "sem-cnes", labelUnidade), [rows, labelUnidade]);
   const profissionais = useMemo(() => agrupar(rows, (r) => chaveProfissional(r), rotuloProfissional), [rows, nomesCbo]);
   // Opções do filtro de Procedimento: NOME (código), em ordem CRESCENTE de código.
   const procedimentos = useMemo(() => {
@@ -194,7 +219,7 @@ function Home() {
     { name: "BPA-I", value: kpis.bpaI },
     { name: "RAAS", value: kpis.raas },
   ].filter((r) => r.value > 0), [kpis]);
-  const topUnidades = useMemo(() => agrupar(filtradas, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)).slice(0, 8), [filtradas]);
+  const topUnidades = useMemo(() => agrupar(filtradas, (r) => r.cnes || "sem-cnes", labelUnidade).slice(0, 8), [filtradas, labelUnidade]);
   // Sem corte fixo: o ranking lista TODOS os profissionais do período (antes só top 8, o
   // que divergia do KPI "profissionais ativos"). A chave é a mesma do KPI (chaveProfissional).
   const topProfissionais = useMemo(() => agrupar(filtradas, (r) => chaveProfissional(r), rotuloProfissional), [filtradas, nomesCbo]);
