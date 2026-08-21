@@ -312,6 +312,8 @@ export interface TfdRelatorioRow {
   prof_nome: string | null;
   ficha_id: string | null;
   total_rs: number;
+  // Linhas de produção geradas (procedimentos BPA-I do TFD), p/ agrupar por procedimento.
+  linhas: { codigo: string; quantidade: number; valor_unitario: number }[];
 }
 
 // Carrega os TFDs de um CNES num intervalo de competências (AAAAMM), para relatórios.
@@ -319,7 +321,7 @@ export async function carregarRelatorioTfd(cnes: string, compDe: string, compAte
   if (!supabase || !cnes) return [];
   try {
     let q = supabase.from("tfd")
-      .select("id, competencia, status, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, data_atendimento, criado_em, paciente_id, prof_cns, prof_nome, ficha_id, paciente:pacientes!tfd_paciente_id_fkey(nome, cns), acompanhante:pacientes!tfd_acompanhante_id_fkey(nome), tfd_destinos(descricao), tfd_linhas(quantidade, valor_unitario)")
+      .select("id, competencia, status, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, data_atendimento, criado_em, paciente_id, prof_cns, prof_nome, ficha_id, paciente:pacientes!tfd_paciente_id_fkey(nome, cns), acompanhante:pacientes!tfd_acompanhante_id_fkey(nome), tfd_destinos(descricao), tfd_linhas(codigo, quantidade, valor_unitario)")
       .eq("cnes", cnes);
     if (compDe) q = q.gte("competencia", compDe);
     if (compAte) q = q.lte("competencia", compAte);
@@ -329,7 +331,7 @@ export async function carregarRelatorioTfd(cnes: string, compDe: string, compAte
       const pac = (Array.isArray(r.paciente) ? r.paciente[0] : r.paciente) as { nome?: string; cns?: string } | null;
       const ac = (Array.isArray(r.acompanhante) ? r.acompanhante[0] : r.acompanhante) as { nome?: string } | null;
       const dest = (Array.isArray(r.tfd_destinos) ? r.tfd_destinos[0] : r.tfd_destinos) as { descricao?: string } | null;
-      const linhas = (Array.isArray(r.tfd_linhas) ? r.tfd_linhas : []) as { quantidade: number; valor_unitario: number }[];
+      const linhas = (Array.isArray(r.tfd_linhas) ? r.tfd_linhas : []) as { codigo: string; quantidade: number; valor_unitario: number }[];
       return {
         id: r.id as string,
         competencia: r.competencia as string,
@@ -348,6 +350,7 @@ export async function carregarRelatorioTfd(cnes: string, compDe: string, compAte
         prof_nome: (r.prof_nome as string) ?? null,
         ficha_id: (r.ficha_id as string) ?? null,
         total_rs: linhas.reduce((s, l) => s + (l.quantidade || 0) * Number(l.valor_unitario || 0), 0),
+        linhas: linhas.map((l) => ({ codigo: l.codigo, quantidade: Number(l.quantidade) || 0, valor_unitario: Number(l.valor_unitario) || 0 })),
       };
     });
   } catch {

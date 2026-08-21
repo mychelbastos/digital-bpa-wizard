@@ -659,9 +659,9 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
       const pdf = construirPdfTfdPorUnidade({
         logo, periodo, status: status ? STATUS_ROTULO[status] : "Todos",
         agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
-        unidades: secoes.map(({ u, m }) => ({ nome: u.nome, cnes: u.cnes, colunas: m.colunas, dados: m.dados, totalTfd: m.totalTfd, totalViagens: m.totalViagens, totalRS: brlTfd(m.totalRS) })),
-        totalGeralTfd: montado.totalTfd, totalGeralViagens: montado.totalViagens, totalGeralRS: brlTfd(montado.totalRS),
-        resumoPorUnidade: secoes.map(({ u, m }) => [u.nome, u.cnes, String(m.totalTfd), String(m.totalViagens), brlTfd(m.totalRS)]),
+        unidades: secoes.map(({ u, m }) => ({ nome: u.nome, cnes: u.cnes, colunas: m.colunas, dados: m.dados, totalTfd: m.totalTfd, totalViagens: m.totalViagens, totalProducao: m.totalProducao, totalRS: brlTfd(m.totalRS) })),
+        totalGeralTfd: montado.totalTfd, totalGeralViagens: montado.totalViagens, totalGeralProducao: montado.totalProducao, totalGeralRS: brlTfd(montado.totalRS),
+        resumoPorUnidade: secoes.map(({ u, m }) => [u.nome, u.cnes, String(m.totalTfd), String(m.totalViagens), String(m.totalProducao), brlTfd(m.totalRS)]),
       });
       abrirPreview(pdf, `tfd_todas_por-unidade_${compDe}-${compAte}.pdf`, "Relatório de TFD — todas as unidades"); return;
     }
@@ -669,7 +669,7 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
       logo, nomeUnidade, periodo, status: status ? STATUS_ROTULO[status] : "Todos",
       agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
       colunas: montado.colunas, dados: montado.dados, totalTfd: montado.totalTfd,
-      totalViagens: montado.totalViagens, totalRS: brlTfd(montado.totalRS),
+      totalViagens: montado.totalViagens, totalProducao: montado.totalProducao, totalRS: brlTfd(montado.totalRS),
     });
     abrirPreview(pdf, `tfd_${agrup}_${compDe}-${compAte}.pdf`, "Relatório de TFD");
   };

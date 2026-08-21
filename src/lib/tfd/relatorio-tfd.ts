@@ -12,6 +12,7 @@ export interface DadosRelatorioTfd {
   dados: string[][];
   totalTfd: number;
   totalViagens: number;
+  totalProducao?: number; // qtd de procedimentos BPA-I gerados (produção)
   totalRS: string;       // já formatado (brl)
   geradoEm?: Date;
 }
@@ -74,7 +75,7 @@ export function construirPdfTfd(d: DadosRelatorioTfd): jsPDF {
   pdf.line(margem, y - 6, margem + dispon, y - 6);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(9.5);
-  pdf.text(`Total: ${d.totalTfd} TFD · ${d.totalViagens} viagens`, margem, y + 6);
+  pdf.text(`Total: ${d.totalTfd} TFD · ${d.totalViagens} viagens${d.totalProducao != null ? ` · ${d.totalProducao} procedimento(s)` : ""}`, margem, y + 6);
   pdf.text(d.totalRS, margem + dispon, y + 6, { align: "right" });
 
   carimbarRodapeSpa(pdf);
@@ -88,14 +89,14 @@ export function construirPdfTfd(d: DadosRelatorioTfd): jsPDF {
 export interface UnidadeTfdSecao {
   nome: string; cnes: string;
   colunas: string[]; dados: string[][];
-  totalTfd: number; totalViagens: number; totalRS: string;
+  totalTfd: number; totalViagens: number; totalProducao?: number; totalRS: string;
 }
 
 export function construirPdfTfdPorUnidade(d: {
   logo?: string | null; periodo: string; status: string; agrupamento: string;
   unidades: UnidadeTfdSecao[];
-  totalGeralTfd: number; totalGeralViagens: number; totalGeralRS: string;
-  resumoPorUnidade: string[][]; // [Unidade, CNES, TFDs, Viagens, Total]
+  totalGeralTfd: number; totalGeralViagens: number; totalGeralProducao?: number; totalGeralRS: string;
+  resumoPorUnidade: string[][]; // [Unidade, CNES, TFDs, Viagens, Produção, Total]
   geradoEm?: Date;
 }): jsPDF {
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -152,7 +153,7 @@ export function construirPdfTfdPorUnidade(d: {
     // Subtotal da unidade
     y += 4; pdf.setDrawColor(180); pdf.line(margem, y - 6, margem + dispon, y - 6);
     pdf.setFont("helvetica", "bold"); pdf.setFontSize(9); pdf.setTextColor(0);
-    pdf.text(`Subtotal: ${u.totalTfd} TFD · ${u.totalViagens} viagens`, margem, y + 5);
+    pdf.text(`Subtotal: ${u.totalTfd} TFD · ${u.totalViagens} viagens${u.totalProducao != null ? ` · ${u.totalProducao} procedimento(s)` : ""}`, margem, y + 5);
     pdf.text(u.totalRS, margem + dispon, y + 5, { align: "right" });
     y += 22;
   });
@@ -162,10 +163,10 @@ export function construirPdfTfdPorUnidade(d: {
   y += 8;
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(12); pdf.setTextColor(16, 122, 87);
   pdf.text("Resumo geral — Todas as unidades", margem, y); y += 16; pdf.setTextColor(0);
-  desenharTabela(["Unidade", "CNES", "TFDs", "Viagens", "Total"], d.resumoPorUnidade);
+  desenharTabela(["Unidade", "CNES", "TFDs", "Viagens", "Produção", "Total"], d.resumoPorUnidade);
   y += 6; pdf.setDrawColor(160); pdf.line(margem, y - 6, margem + dispon, y - 6);
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(9.5);
-  pdf.text(`Total geral: ${d.totalGeralTfd} TFD · ${d.totalGeralViagens} viagens`, margem, y + 6);
+  pdf.text(`Total geral: ${d.totalGeralTfd} TFD · ${d.totalGeralViagens} viagens${d.totalGeralProducao != null ? ` · ${d.totalGeralProducao} procedimento(s)` : ""}`, margem, y + 6);
   pdf.text(d.totalGeralRS, margem + dispon, y + 6, { align: "right" });
 
   carimbarRodapeSpa(pdf);

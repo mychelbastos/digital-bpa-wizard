@@ -22,7 +22,7 @@ import {
   listarTfdsDoPaciente, carregarRelatorioTfd, CNES_TFD,
   type TfdDestino, type TfdRegistroView, type TfdStatus, type TfdHistoricoItem, type TfdEdicao, type TfdRelatorioRow,
 } from "@/lib/tfd/tfd";
-import { COD_TFD } from "@/lib/tfd/gerar-bpa-tfd";
+import { CODIGOS_TFD } from "@/lib/relatorios/tfd-rel";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { carregarLogoOrg } from "@/lib/org-logo";
 import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
@@ -52,15 +52,8 @@ const competenciasRecentes = (): string[] => {
 };
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-// Os 6 códigos TFD, na ordem de exibição, para a tela de valores.
-const CODIGOS_TFD: { codigo: string; rotulo: string }[] = [
-  { codigo: COD_TFD.DESLOC_PAC, rotulo: "Deslocamento — paciente (cada 50 km)" },
-  { codigo: COD_TFD.ALIM_PERNOITE_PAC, rotulo: "Alimentação c/ pernoite — paciente" },
-  { codigo: COD_TFD.ALIM_SEM_PERNOITE_PAC, rotulo: "Alimentação s/ pernoite — paciente" },
-  { codigo: COD_TFD.DESLOC_ACOMP, rotulo: "Deslocamento — acompanhante (cada 50 km)" },
-  { codigo: COD_TFD.ALIM_PERNOITE_ACOMP, rotulo: "Alimentação c/ pernoite — acompanhante" },
-  { codigo: COD_TFD.ALIM_SEM_PERNOITE_ACOMP, rotulo: "Alimentação s/ pernoite — acompanhante" },
-];
+// Os 6 códigos/rótulos do TFD vêm de `tfd-rel` (fonte única, reusada no agrupamento por
+// procedimento). Aqui são usados na tela de valores e no relatório.
 
 const STATUS_META: Record<TfdStatus, { rotulo: string; cor: string }> = {
   agendada: { rotulo: "Agendada", cor: "bg-amber-100 text-amber-800" },
@@ -957,14 +950,16 @@ function DestinosPanel(props: { orgId: string; onFechar: () => void; onMudou: ()
 // ---------------------------------------------------------------------------
 // Painel de Relatórios: filtros por período/status + agrupamentos + CSV/impressão.
 // ---------------------------------------------------------------------------
-type AgrupamentoRel = "detalhado" | "competencia" | "paciente" | "profissional" | "destino";
+type AgrupamentoRel = "detalhado" | "competencia" | "paciente" | "profissional" | "destino" | "procedimento";
 const AGRUPAMENTOS: { valor: AgrupamentoRel; rotulo: string }[] = [
   { valor: "detalhado", rotulo: "Detalhado (um por TFD)" },
+  { valor: "procedimento", rotulo: "Por procedimento (produção)" },
   { valor: "competencia", rotulo: "Por competência (mês)" },
   { valor: "paciente", rotulo: "Por paciente" },
   { valor: "profissional", rotulo: "Por profissional (faturamento)" },
   { valor: "destino", rotulo: "Por destino" },
 ];
+const ROTULO_PROC = new Map(CODIGOS_TFD.map((c) => [c.codigo, c.rotulo]));
 
 function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia: string; onFechar: () => void }) {
   const [compDe, setCompDe] = useState(props.competencia);
@@ -987,15 +982,38 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
   const filtradas = useMemo(() => (status ? rows.filter((r) => r.status === status) : rows), [rows, status]);
 
   // Colunas + linhas conforme o agrupamento.
-  const { colunas, dados, totalRS, totalViagens } = useMemo(() => {
+  const { colunas, dados, totalRS, totalViagens, totalProducao } = useMemo(() => {
     const viagensDe = (r: TfdRelatorioRow) => r.qtd_com_pernoite + r.qtd_sem_pernoite;
+    const producaoDe = (r: TfdRelatorioRow) => r.linhas.reduce((s, l) => s + l.quantidade, 0);
     const somaRS = filtradas.reduce((s, r) => s + r.total_rs, 0);
     const somaViag = filtradas.reduce((s, r) => s + viagensDe(r), 0);
+    const somaProd = filtradas.reduce((s, r) => s + producaoDe(r), 0);
     if (agrup === "detalhado") {
       return {
-        colunas: ["Competência", "Paciente", "CNS", "Destino", "Profissional", "Viagens", "Status", "Total"],
-        dados: filtradas.map((r) => [compLabel(r.competencia), r.paciente_nome ?? "—", r.paciente_cns ?? "", r.destino_descricao ?? "—", r.prof_nome ?? "—", String(viagensDe(r)), STATUS_META[r.status].rotulo, brl(r.total_rs)]),
-        totalRS: somaRS, totalViagens: somaViag,
+        colunas: ["Competência", "Paciente", "CNS", "Destino", "Profissional", "Viagens", "Produção", "Status", "Total"],
+        dados: filtradas.map((r) => [compLabel(r.competencia), r.paciente_nome ?? "—", r.paciente_cns ?? "", r.destino_descricao ?? "—", r.prof_nome ?? "—", String(viagensDe(r)), String(producaoDe(r)), STATUS_META[r.status].rotulo, brl(r.total_rs)]),
+        totalRS: somaRS, totalViagens: somaViag, totalProducao: somaProd,
+      };
+    }
+    // Por procedimento: soma a QUANTIDADE de produção (procedimentos BPA-I gerados) por código.
+    if (agrup === "procedimento") {
+      const gp = new Map<string, { qtd: number; total: number }>();
+      for (const r of filtradas) {
+        for (const l of r.linhas) {
+          if (!l.codigo) continue;
+          const cur = gp.get(l.codigo) ?? { qtd: 0, total: 0 };
+          cur.qtd += l.quantidade;
+          cur.total += l.quantidade * l.valor_unitario;
+          gp.set(l.codigo, cur);
+        }
+      }
+      // Ordena na ordem canônica dos 6 procedimentos do TFD; ignora códigos sem produção.
+      const ordem = [...ROTULO_PROC.keys()];
+      const linhasProc = [...gp.entries()].sort((a, b) => ordem.indexOf(a[0]) - ordem.indexOf(b[0]));
+      return {
+        colunas: ["Procedimento", "Código", "Quantidade", "Total"],
+        dados: linhasProc.map(([cod, v]) => [ROTULO_PROC.get(cod) ?? cod, cod, String(v.qtd), brl(v.total)]),
+        totalRS: somaRS, totalViagens: somaViag, totalProducao: somaProd,
       };
     }
     const chave = (r: TfdRelatorioRow) =>
@@ -1003,18 +1021,18 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
         : agrup === "paciente" ? (r.paciente_nome ?? "—")
           : agrup === "profissional" ? (r.prof_nome ?? "— (sem profissional)")
             : (r.destino_descricao ?? "—");
-    const g = new Map<string, { qtd: number; viagens: number; total: number }>();
+    const g = new Map<string, { qtd: number; viagens: number; producao: number; total: number }>();
     for (const r of filtradas) {
       const k = chave(r);
-      const cur = g.get(k) ?? { qtd: 0, viagens: 0, total: 0 };
-      cur.qtd++; cur.viagens += viagensDe(r); cur.total += r.total_rs;
+      const cur = g.get(k) ?? { qtd: 0, viagens: 0, producao: 0, total: 0 };
+      cur.qtd++; cur.viagens += viagensDe(r); cur.producao += producaoDe(r); cur.total += r.total_rs;
       g.set(k, cur);
     }
     const rotuloChave = agrup === "competencia" ? "Competência" : agrup === "paciente" ? "Paciente" : agrup === "profissional" ? "Profissional" : "Destino";
     return {
-      colunas: [rotuloChave, "TFDs", "Viagens", "Total"],
-      dados: [...g.entries()].sort((a, b) => b[1].total - a[1].total).map(([k, v]) => [k, String(v.qtd), String(v.viagens), brl(v.total)]),
-      totalRS: somaRS, totalViagens: somaViag,
+      colunas: [rotuloChave, "TFDs", "Viagens", "Produção", "Total"],
+      dados: [...g.entries()].sort((a, b) => b[1].total - a[1].total).map(([k, v]) => [k, String(v.qtd), String(v.viagens), String(v.producao), brl(v.total)]),
+      totalRS: somaRS, totalViagens: somaViag, totalProducao: somaProd,
     };
   }, [filtradas, agrup]);
 
@@ -1034,7 +1052,7 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
       logo, nomeUnidade: props.nomeUnidade, periodo,
       status: status ? STATUS_META[status].rotulo : "Todos",
       agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
-      colunas, dados, totalTfd: filtradas.length, totalViagens, totalRS: brl(totalRS),
+      colunas, dados, totalTfd: filtradas.length, totalViagens, totalProducao, totalRS: brl(totalRS),
     });
     pdf.save(`tfd_${agrup}_${compDe}-${compAte}.pdf`);
   };
@@ -1064,7 +1082,7 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
 
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="text-xs text-muted-foreground">
-            {carregando ? "Carregando…" : `${filtradas.length} TFD · ${totalViagens} viagens · total `}
+            {carregando ? "Carregando…" : `${filtradas.length} TFD · ${totalViagens} viagens · ${totalProducao} procedimento(s) · total `}
             {!carregando && <span className="font-semibold text-foreground">{brl(totalRS)}</span>}
           </div>
           <div className="flex gap-2">
