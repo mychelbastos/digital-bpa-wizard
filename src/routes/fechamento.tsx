@@ -2,11 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Download, CalendarCheck, Loader2, Lock, Snowflake, LockOpen } from "lucide-react";
+import { Download, CalendarCheck, Loader2, Lock, Snowflake, LockOpen, HeartPulse } from "lucide-react";
 import { fichasDoMes } from "@/lib/bpa-i-v2/fichas";
 import { gerarArquivoMes, type FechamentoMes } from "@/lib/fechamento-mes";
 import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { baixarTxt } from "@/lib/export-txt";
+import { gerarAas, baixarAas, type ArquivoAas } from "@/lib/raas/gerar-aas";
+import type { RaasState } from "@/lib/raas/raas-layout";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { exportarProducao, reabrirProducao, listarProducoes, type Producao } from "@/lib/producoes";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
@@ -36,6 +38,9 @@ function Fechamento() {
   // Cabeçalho que sairá no arquivo (versão/destino) — muda quase todo mês; mostramos para o
   // operador conferir antes de fechar.
   const [cfgCab, setCfgCab] = useState(() => loadConfig());
+  // RAAS: arquivo(s) .AAS gerado(s) — separado do .txt do BPA (vai para outro programa).
+  const [resAas, setResAas] = useState<ArquivoAas[] | null>(null);
+  const [loadingAas, setLoadingAas] = useState(false);
 
   const recarregarProducoes = useCallback(() => {
     listarProducoes().then(setProducoes);
@@ -82,6 +87,41 @@ function Fechamento() {
 
   const baixar = () => {
     if (res?.arquivo) baixarTxt(res.arquivo.nome, res.arquivo.conteudo);
+  };
+
+  // Gera o(s) arquivo(s) .AAS do RAAS do mês (um por CNES). Arquivo SEPARADO do .txt — vai
+  // para outro programa (RAAS-PAD/SIA). Não congela nada; é só a geração.
+  const gerarAasHandler = async () => {
+    if (!/^\d{6}$/.test(comp)) {
+      toast.error("Informe o mês de produção no formato AAAAMM.");
+      return;
+    }
+    setLoadingAas(true);
+    setResAas(null);
+    try {
+      const fichas = await fichasDoMes(comp);
+      const raas = fichas.filter((f) => f.tipo === "RAAS").map((f) => f.dados as RaasState);
+      if (raas.length === 0) {
+        toast.warning("Nenhuma ficha RAAS neste mês de produção.");
+        setResAas([]);
+        return;
+      }
+      const hoje = new Date();
+      const hojeStr = `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, "0")}${String(hoje.getDate()).padStart(2, "0")}`;
+      const arqs = gerarAas(
+        raas,
+        comp,
+        { sigla: cfgCab.sigla, cnpj: cfgCab.cgcCpf, gestorNome: cfgCab.orgaoDestinoNome, destinoTipo: cfgCab.destinoTipo },
+        hojeStr,
+      );
+      setResAas(arqs);
+      if (arqs.length === 0) toast.warning("Nenhuma ação RAAS válida (procedimento/quantidade) neste mês.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Falha ao gerar o arquivo .AAS. Veja o console.");
+    } finally {
+      setLoadingAas(false);
+    }
   };
 
   // Fecha a produção: congela as fichas do mês (RPC atômica) e baixa o .txt. Ação
@@ -275,6 +315,65 @@ function Fechamento() {
             )}
           </div>
         )}
+
+        {/* ============ RAAS (.AAS) — arquivo SEPARADO, vai para outro programa ============ */}
+        <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/40 p-5 shadow-sm">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <HeartPulse className="size-4 text-violet-600" /> RAAS · arquivo .AAS (CAPS / Atenção Psicossocial)
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            O RAAS é um <strong>arquivo separado</strong> do .txt do BPA (registros 01/15/16) e vai
+            para <strong>outro programa</strong> (RAAS-PAD/SIA). Gera <strong>um .AAS por unidade</strong>{" "}
+            (CNES) com as fichas RAAS do mês de produção <strong>{comp}</strong>.
+          </p>
+          <div className="mt-3">
+            <button
+              onClick={gerarAasHandler}
+              disabled={loadingAas}
+              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+            >
+              {loadingAas ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Gerando…
+                </>
+              ) : (
+                <>
+                  <HeartPulse className="size-4" /> Gerar .AAS do RAAS
+                </>
+              )}
+            </button>
+          </div>
+
+          {resAas && resAas.length > 0 && (
+            <>
+              <ul className="mt-4 divide-y divide-violet-200">
+                {resAas.map((a) => (
+                  <li key={a.cnes} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium text-foreground">{a.estabelecimento}</span>
+                      <span className="ml-2 font-mono text-xs text-muted-foreground">{a.cnes}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {a.fichas} ficha(s) · {a.acoes} ação(ões) · {a.nome}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => baixarAas(a.nome, a.conteudo)}
+                      className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-violet-300 bg-background px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+                    >
+                      <Download className="size-4" /> Baixar {a.nome}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                ⚠️ <strong>Valide antes de transmitir.</strong> Os registros e seus dígitos de controle
+                foram conferidos byte a byte contra arquivos reais, mas o <strong>número de remessa do
+                cabeçalho</strong> é interno do aplicativo SIA e não pode ser reproduzido. Importe este
+                arquivo <strong>uma vez</strong> no programa destino para confirmar que é aceito.
+              </p>
+            </>
+          )}
+        </div>
 
         {producoes.length > 0 && (
           <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
