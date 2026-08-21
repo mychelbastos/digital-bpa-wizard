@@ -95,6 +95,7 @@ export function construirPdfProducao(d: DadosRelatorioProducao): jsPDF {
   const totalAtend = rows.length;
   const bpaC = rows.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
   const bpaI = rows.filter((r) => r.tipo === "BPA-I").reduce((s, r) => s + r.quantidade, 0);
+  const raas = rows.filter((r) => r.tipo === "RAAS").reduce((s, r) => s + r.quantidade, 0);
 
   const fit = (txt: string, maxW: number, size: number) => {
     pdf.setFontSize(size);
@@ -146,6 +147,8 @@ export function construirPdfProducao(d: DadosRelatorioProducao): jsPDF {
       { label: "Atendimentos", valor: int(totalAtend) },
       { label: "BPA-C", valor: int(bpaC) },
       { label: "BPA-I", valor: int(bpaI) },
+      // RAAS só entra no resumo quando há produção RAAS no recorte (senão mantém 4 chips).
+      ...(raas > 0 ? [{ label: "RAAS", valor: int(raas) }] : []),
     ];
     const gap = 10;
     const cw = (totalW - gap * (chips.length - 1)) / chips.length;

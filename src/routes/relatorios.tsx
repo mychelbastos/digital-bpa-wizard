@@ -80,7 +80,7 @@ function RelatoriosPage() {
   const [cnes, setCnes] = useState("todos");
   const [prof, setProf] = useState("todos");
   const [proc, setProc] = useState("todos");
-  const [tipo, setTipo] = useState<"todos" | "BPA-C" | "BPA-I">("todos");
+  const [tipo, setTipo] = useState<"todos" | "BPA-C" | "BPA-I" | "RAAS">("todos");
   const [cid, setCid] = useState("todos");
   const [carater, setCarater] = useState("todos");
 
@@ -143,6 +143,7 @@ function RelatoriosPage() {
   const totalQtd = filtradas.reduce((s, r) => s + r.quantidade, 0);
   const bpaC = filtradas.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
   const bpaI = filtradas.filter((r) => r.tipo === "BPA-I").reduce((s, r) => s + r.quantidade, 0);
+  const raas = filtradas.filter((r) => r.tipo === "RAAS").reduce((s, r) => s + r.quantidade, 0);
 
   const filtrosLabel = () => {
     const p: string[] = [];
@@ -208,7 +209,7 @@ function RelatoriosPage() {
     abrirPreview(pdf, `${nomeArq()}.pdf`, "Relatório de Produção");
   };
   const imprimirFichas = () => {
-    const ids = [...new Set(filtradas.map((r) => `${r.tipo === "BPA-C" ? "C" : "I"}~${r.ficha_id}`))];
+    const ids = [...new Set(filtradas.map((r) => `${r.tipo === "BPA-C" ? "C" : r.tipo === "RAAS" ? "R" : "I"}~${r.ficha_id}`))];
     if (ids.length === 0) return;
     window.open(`/imprimir?itens=${encodeURIComponent(ids.join(","))}`, "_blank");
   };
@@ -234,7 +235,7 @@ function RelatoriosPage() {
         {/* ============ Relatório de Produção (BPA-I/BPA-C) ============ */}
         <section className={`${cardCls} mb-5`}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-base font-bold text-foreground"><FileText className="size-4 text-primary" /> Produção (BPA-I / BPA-C)</h2>
+            <h2 className="flex items-center gap-2 text-base font-bold text-foreground"><FileText className="size-4 text-primary" /> Produção (BPA-I / BPA-C / RAAS)</h2>
             <button onClick={carregar} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </button>
@@ -251,7 +252,7 @@ function RelatoriosPage() {
             <label className="block">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tipo</span>
               <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls}>
-                <option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="BPA-C">BPA-C</option>
+                <option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="BPA-C">BPA-C</option><option value="RAAS">RAAS</option>
               </select>
             </label>
             <label className="block">
@@ -292,11 +293,12 @@ function RelatoriosPage() {
           </div>
 
           {/* Prévia */}
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className={`mt-4 grid grid-cols-2 gap-3 ${raas > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
             <MiniStat label="Procedimentos" value={totalQtd} destaque />
             <MiniStat label="Atendimentos" value={filtradas.length} />
             <MiniStat label="BPA-C" value={bpaC} />
             <MiniStat label="BPA-I" value={bpaI} />
+            {raas > 0 && <MiniStat label="RAAS" value={raas} />}
           </div>
 
           {/* Ações */}
@@ -370,7 +372,7 @@ function RelatoriosPage() {
                       <td className="px-2 py-1.5 whitespace-nowrap">{e.tipo}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap font-mono text-[11px]">{e.cnes}</td>
                       <td className="px-2 py-1.5">{e.profissional}</td>
-                      <td className="px-2 py-1.5 text-foreground">{e.descricao}{e.fichaId ? <a href={`${e.tipo === "BPA-C" ? "/bpa-c-v3" : "/bpa-i-v3"}?ficha=${e.fichaId}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir ficha</a> : null}{e.categoria === "paciente-revisao" && e.pacienteId ? <button onClick={() => resolverRevisao(e.pacienteId!)} disabled={resolvendo === e.pacienteId} className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">{resolvendo === e.pacienteId ? "Resolvendo…" : "Resolver revisão"}</button> : null}</td>
+                      <td className="px-2 py-1.5 text-foreground">{e.descricao}{e.fichaId ? <a href={`${e.tipo === "BPA-C" ? "/bpa-c-v3" : e.tipo === "RAAS" ? "/raas" : "/bpa-i-v3"}?ficha=${e.fichaId}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir ficha</a> : null}{e.categoria === "paciente-revisao" && e.pacienteId ? <button onClick={() => resolverRevisao(e.pacienteId!)} disabled={resolvendo === e.pacienteId} className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">{resolvendo === e.pacienteId ? "Resolvendo…" : "Resolver revisão"}</button> : null}</td>
                     </tr>
                   ))}
                 </tbody>
