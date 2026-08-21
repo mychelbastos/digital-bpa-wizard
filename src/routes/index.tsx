@@ -165,6 +165,9 @@ function Home() {
   useEffect(() => { carregar(); }, [competencia]);
   useEffect(() => { carregarLogoOrg().then(setLogoOrg); }, []);
   useEffect(() => { setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
+  // Ao trocar de unidade, zera Profissional/Procedimento: as opções passam a ser as daquele
+  // CNES, então uma seleção anterior poderia não existir mais (e zeraria os dados).
+  useEffect(() => { setProfissional("todos"); setProcedimento("todos"); }, [cnes]);
 
   // Busca no cadastro o nome das unidades cujas linhas vieram SEM nome embutido (ex.: RAAS
   // importado). Só busca as que ainda não temos, para não repetir requisições.
@@ -189,14 +192,21 @@ function Home() {
   );
 
   const unidades = useMemo(() => agrupar(rows, (r) => r.cnes || "sem-cnes", labelUnidade), [rows, labelUnidade]);
-  const profissionais = useMemo(() => agrupar(rows, (r) => chaveProfissional(r), rotuloProfissional), [rows, nomesCbo]);
-  // Opções do filtro de Procedimento: NOME (código), em ordem CRESCENTE de código.
+  // Escopo das opções de Profissional/Procedimento: quando uma unidade está selecionada, só
+  // as linhas dela — assim o filtro de profissional lista só quem atende naquele CNES.
+  const rowsDaUnidade = useMemo(
+    () => (cnes === "todos" ? rows : rows.filter((r) => (r.cnes || "sem-cnes") === cnes)),
+    [rows, cnes],
+  );
+  const profissionais = useMemo(() => agrupar(rowsDaUnidade, (r) => chaveProfissional(r), rotuloProfissional), [rowsDaUnidade, nomesCbo]);
+  // Opções do filtro de Procedimento: NOME (código), em ordem CRESCENTE de código (também no
+  // escopo da unidade selecionada).
   const procedimentos = useMemo(() => {
     const map = new Map<string, string>();
-    for (const r of rows) if (r.procedimento && !map.has(r.procedimento)) map.set(r.procedimento, nomeProc(r.procedimento) || r.procedimento);
+    for (const r of rowsDaUnidade) if (r.procedimento && !map.has(r.procedimento)) map.set(r.procedimento, nomeProc(r.procedimento) || r.procedimento);
     return [...map.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.code.localeCompare(b.code));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, nomesProc]);
+  }, [rowsDaUnidade, nomesProc]);
 
   const filtradas = useMemo(() => rows.filter((r) =>
     (cnes === "todos" || (r.cnes || "sem-cnes") === cnes) &&
