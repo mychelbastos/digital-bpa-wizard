@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
-  Activity, Building2, ChevronDown, FileText, IdCard, MapPin, Printer, RefreshCw,
+  Activity, Building2, ChevronDown, FileText, HeartPulse, IdCard, MapPin, Printer, RefreshCw,
   Stethoscope, TrendingUp, Users, X,
 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -47,6 +47,12 @@ const nomeOuCodigo = (nome: string | null, codigo: string | null) => nome?.trim(
 // separados mesmo quando compartilham o CBO.
 const chaveProfissional = (r: ProducaoBpaRow) => r.profissional_cns || r.profissional_nome || r.cbo || "sem-profissional";
 const CHART_COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
+// Cor fixa por tipo de produção (independe de quais tipos existem no mês).
+const COR_TIPO: Record<string, string> = {
+  "BPA-C": "var(--color-chart-2)",
+  "BPA-I": "var(--color-chart-1)",
+  "RAAS": "var(--color-chart-3)",
+};
 
 // Tick do eixo X do gráfico de unidades: nomes de estabelecimento são longos e se
 // sobrepõem. Quebra em até 2 linhas (~18 chars cada) e trunca com reticências o excedente,
@@ -83,6 +89,11 @@ function agrupar<T extends string>(rows: ProducaoBpaRow[], key: (r: ProducaoBpaR
   for (const r of rows) {
     const k = key(r);
     const atual = map.get(k) ?? { key: k, name: label(r), quantidade: 0, atendimentos: 0 };
+    // Nome "melhor" ganha: se o já guardado é só o código (== chave) e uma linha
+    // posterior trouxe um nome de verdade, adota o nome. Necessário no RAAS importado,
+    // onde algumas fichas vêm sem `estabelecimentoNome` e outras com "CAPS RUY BARBOSA".
+    const novo = label(r);
+    if (atual.name === String(k) && novo && novo !== String(k)) atual.name = novo;
     atual.quantidade += r.quantidade;
     atual.atendimentos += 1;
     map.set(k, atual);
@@ -172,14 +183,16 @@ function Home() {
     const total = filtradas.reduce((s, r) => s + r.quantidade, 0);
     const bpaC = filtradas.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
     const bpaI = filtradas.filter((r) => r.tipo === "BPA-I").reduce((s, r) => s + r.quantidade, 0);
+    const raas = filtradas.filter((r) => r.tipo === "RAAS").reduce((s, r) => s + r.quantidade, 0);
     const unidadesAtivas = new Set(filtradas.map((r) => r.cnes).filter(Boolean)).size;
     const profissionaisAtivos = new Set(filtradas.map((r) => r.profissional_cns || r.profissional_nome || r.cbo).filter(Boolean)).size;
-    return { total, bpaC, bpaI, unidadesAtivas, profissionaisAtivos };
+    return { total, bpaC, bpaI, raas, unidadesAtivas, profissionaisAtivos };
   }, [filtradas]);
 
   const porTipo = useMemo(() => [
     { name: "BPA-C", value: kpis.bpaC },
     { name: "BPA-I", value: kpis.bpaI },
+    { name: "RAAS", value: kpis.raas },
   ].filter((r) => r.value > 0), [kpis]);
   const topUnidades = useMemo(() => agrupar(filtradas, (r) => r.cnes || "sem-cnes", (r) => nomeOuCodigo(r.estabelecimento_nome, r.cnes)).slice(0, 8), [filtradas]);
   // Sem corte fixo: o ranking lista TODOS os profissionais do período (antes só top 8, o
@@ -266,10 +279,12 @@ function Home() {
         )}
 
         {/* KPIs */}
-        <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {/* Grid ganha uma coluna quando há produção RAAS no mês (senão fica com 5, como antes). */}
+        <section className={`mb-5 grid gap-3 sm:grid-cols-2 ${kpis.raas > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
           <Kpi icon={<TrendingUp className="size-4" />} label={`Produção · ${mesLabel(competencia)}`} value={kpis.total} destaque />
           <Kpi icon={<FileText className="size-4" />} label="BPA-C" value={kpis.bpaC} />
           <Kpi icon={<Stethoscope className="size-4" />} label="BPA-I" value={kpis.bpaI} />
+          {kpis.raas > 0 && <Kpi icon={<HeartPulse className="size-4" />} label="RAAS" value={kpis.raas} />}
           <Kpi icon={<Building2 className="size-4" />} label="Unidades ativas" value={kpis.unidadesAtivas} />
           <Kpi icon={<Users className="size-4" />} label="Profissionais ativos" value={kpis.profissionaisAtivos} />
         </section>
@@ -285,7 +300,7 @@ function Home() {
               <Activity className="size-6" />
             </div>
             <h2 className="mt-4 text-base font-semibold text-foreground">Ainda não há produção registrada em {mesLabel(competencia)}.</h2>
-            <p className="mt-1 text-sm text-muted-foreground">A dashboard preenche com as fichas BPA-C/BPA-I salvas neste mês de produção.</p>
+            <p className="mt-1 text-sm text-muted-foreground">A dashboard preenche com as fichas BPA-C/BPA-I/RAAS salvas neste mês de produção.</p>
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-3">
@@ -303,19 +318,19 @@ function Home() {
               </ChartContainer>
             </ChartBox>
 
-            <ChartBox title="BPA-C x BPA-I">
-              <ChartContainer config={{ "BPA-C": { label: "BPA-C", color: "var(--color-chart-2)" }, "BPA-I": { label: "BPA-I", color: "var(--color-chart-1)" } }} className="h-72 w-full">
+            <ChartBox title="Produção por tipo">
+              <ChartContainer config={{ "BPA-C": { label: "BPA-C", color: "var(--color-chart-2)" }, "BPA-I": { label: "BPA-I", color: "var(--color-chart-1)" }, "RAAS": { label: "RAAS", color: "var(--color-chart-3)" } }} className="h-72 w-full">
                 <PieChart>
                   <Pie data={porTipo} dataKey="value" nameKey="name" innerRadius={54} outerRadius={84} paddingAngle={3} strokeWidth={2}>
-                    {porTipo.map((_, i) => <Cell key={i} fill={i === 0 ? "var(--color-chart-2)" : "var(--color-chart-1)"} />)}
+                    {porTipo.map((t) => <Cell key={t.name} fill={COR_TIPO[t.name] ?? "var(--color-chart-1)"} />)}
                   </Pie>
                   <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                 </PieChart>
               </ChartContainer>
-              <div className="mt-3 flex items-center justify-center gap-4 text-xs">
-                {porTipo.map((t, i) => (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs">
+                {porTipo.map((t) => (
                   <span key={t.name} className="inline-flex items-center gap-1.5 text-muted-foreground">
-                    <span className="size-2 rounded-full" style={{ background: i === 0 ? "var(--color-chart-2)" : "var(--color-chart-1)" }} />
+                    <span className="size-2 rounded-full" style={{ background: COR_TIPO[t.name] ?? "var(--color-chart-1)" }} />
                     {t.name} · {t.value.toLocaleString("pt-BR")}
                   </span>
                 ))}
@@ -921,7 +936,7 @@ function ImprimirFichasProfissional({ nome, rows, nomeProc, onClose }: {
 
   const imprimir = () => {
     if (selecionadas.length === 0) return;
-    const itens = selecionadas.map((f) => `${f.tipo === "BPA-C" ? "C" : "I"}~${f.id}`).join(",");
+    const itens = selecionadas.map((f) => `${f.tipo === "BPA-C" ? "C" : f.tipo === "RAAS" ? "R" : "I"}~${f.id}`).join(",");
     window.open(`/imprimir?itens=${encodeURIComponent(itens)}`, "_blank");
   };
 

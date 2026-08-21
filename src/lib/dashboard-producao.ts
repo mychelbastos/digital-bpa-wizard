@@ -1,6 +1,6 @@
 import { supabase, buscarTodasPaginado } from "@/lib/supabase";
 
-export type TipoBpa = "BPA-C" | "BPA-I";
+export type TipoBpa = "BPA-C" | "BPA-I" | "RAAS";
 
 // Uma linha de produção para a dashboard, já achatada e SEM PII do paciente pela view
 // `producao_dashboard` (security_invoker => respeita a RLS de fichas de quem consulta).
