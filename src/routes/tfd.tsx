@@ -454,17 +454,31 @@ function FormTfd(props: {
     if (d) setDistanciaKm(String(d.distancia_km));
   };
 
+  // Acompanhante HABITUAL do paciente (vindo do cadastro dele) — guardado p/ pré-selecionar
+  // tanto na escolha do paciente quanto ao (re)marcar "tem acompanhante".
+  const acompHabitualRef = useRef<Paciente | null>(edicao?.acompanhante ?? null);
+
   // Ao escolher um paciente com acompanhante habitual, já traz o acompanhante (removível).
   // Não roda na edição (preserva o acompanhante já gravado no TFD).
   useEffect(() => {
     if (edicao) return;
-    if (paciente?.acompanhante_id) {
-      carregarPaciente(paciente.acompanhante_id, false).then((ac) => {
-        if (ac) { setTemAcomp(true); setAcompanhante(ac); }
-      });
-    }
+    const accId = paciente?.acompanhante_id;
+    if (!accId) { acompHabitualRef.current = null; return; }
+    carregarPaciente(accId, false).then((ac) => {
+      if (!ac) return;
+      acompHabitualRef.current = ac;
+      setTemAcomp(true);
+      setAcompanhante(ac);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paciente?.id]);
+
+  // Marca/desmarca "tem acompanhante": ao marcar, pré-seleciona o acompanhante habitual do
+  // paciente (se houver e nenhum estiver selecionado) — evita ter de buscá-lo à mão.
+  const aoMarcarAcompanhante = (v: boolean) => {
+    setTemAcomp(v);
+    if (v && !acompanhante && acompHabitualRef.current) setAcompanhante(acompHabitualRef.current);
+  };
 
   const viagensValidas = viagens.filter((v) => v.data);
   const comP = viagensValidas.filter((v) => v.pernoite === "com").length;
@@ -487,6 +501,7 @@ function FormTfd(props: {
 
   const salvar = async () => {
     if (!paciente) { toast.error("Selecione ou cadastre o paciente."); return; }
+    if (!destinoId) { toast.error("Selecione um destino para o TFD."); return; }
     if (viagensValidas.length === 0) { toast.error("Adicione ao menos uma viagem com data."); return; }
     if (temAcomp && !acompanhante) { toast.error("Cadastre/selecione o acompanhante (ou desmarque acompanhante)."); return; }
     setSalvando(true);
@@ -566,7 +581,7 @@ function FormTfd(props: {
       </div>
 
       <label className="mt-3 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={temAcomp} onChange={(e) => setTemAcomp(e.target.checked)} className="size-4" />
+        <input type="checkbox" checked={temAcomp} onChange={(e) => aoMarcarAcompanhante(e.target.checked)} className="size-4" />
         Tem acompanhante
       </label>
 
