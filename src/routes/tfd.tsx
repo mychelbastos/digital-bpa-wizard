@@ -458,17 +458,16 @@ function FormTfd(props: {
   // tanto na escolha do paciente quanto ao (re)marcar "tem acompanhante".
   const acompHabitualRef = useRef<Paciente | null>(edicao?.acompanhante ?? null);
 
-  // Ao escolher um paciente com acompanhante habitual, já traz o acompanhante (removível).
-  // Não roda na edição (preserva o acompanhante já gravado no TFD).
+  // Acompanhante habitual do cadastro do paciente. Carrega SEMPRE (inclusive na edição) para
+  // ficar disponível ao marcar "tem acompanhante"; mas só auto-seleciona num TFD NOVO (na
+  // edição preserva o que já estava gravado — só serve de sugestão se o campo estiver vazio).
   useEffect(() => {
-    if (edicao) return;
     const accId = paciente?.acompanhante_id;
-    if (!accId) { acompHabitualRef.current = null; return; }
+    if (!accId) { if (!edicao) acompHabitualRef.current = null; return; }
     carregarPaciente(accId, false).then((ac) => {
       if (!ac) return;
-      acompHabitualRef.current = ac;
-      setTemAcomp(true);
-      setAcompanhante(ac);
+      if (!acompHabitualRef.current) acompHabitualRef.current = ac; // não sobrescreve o acompanhante já salvo no TFD
+      if (!edicao) { setTemAcomp(true); setAcompanhante(ac); }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paciente?.id]);
