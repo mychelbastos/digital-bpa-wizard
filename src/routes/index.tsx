@@ -130,17 +130,29 @@ function Home() {
   // Detalhes (Top procedimentos, Ranking, FPO × Produção) ocultos por padrão; "Ver mais" expande.
   const [verMais, setVerMais] = useState(false);
 
+  // Token da carga mais recente: a produção é paginada (várias idas ao banco), então uma
+  // carga antiga (ex.: mês anterior, mais lenta) pode responder DEPOIS da nova e sobrescrever
+  // os dados do mês recém-selecionado. Só aplicamos o resultado se ainda for a carga atual.
+  const cargaRef = useRef(0);
   const carregar = async () => {
+    const token = ++cargaRef.current;
     setLoading(true);
     const [vincs, producao] = await Promise.all([
       carregarVinculosUsuario(),
       carregarProducaoDashboard(competencia),
     ]);
+    if (cargaRef.current !== token) return; // carga obsoleta — ignora
     setVinculos(vincs);
     setRows(producao);
-    setNomesProc(await carregarNomesProcedimentos(producao.map((r) => r.procedimento)));
-    setNomesCid(await carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)));
-    setNomesCbo(await carregarDescricoesCbo(producao.map((r) => r.cbo).filter((c): c is string => !!c)));
+    const [np, ncid, ncbo] = await Promise.all([
+      carregarNomesProcedimentos(producao.map((r) => r.procedimento)),
+      carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)),
+      carregarDescricoesCbo(producao.map((r) => r.cbo).filter((c): c is string => !!c)),
+    ]);
+    if (cargaRef.current !== token) return;
+    setNomesProc(np);
+    setNomesCid(ncid);
+    setNomesCbo(ncbo);
     setAtualizadoEm(new Date());
     setLoading(false);
   };
@@ -164,7 +176,9 @@ function Home() {
 
   useEffect(() => { carregar(); }, [competencia]);
   useEffect(() => { carregarLogoOrg().then(setLogoOrg); }, []);
-  useEffect(() => { setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
+  // Ao TROCAR de mês, limpa as linhas na hora (o Atualizar não passa por aqui): evita exibir
+  // o total do mês anterior sob o rótulo do mês novo enquanto a nova carga não chega.
+  useEffect(() => { setRows([]); setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
   // Ao trocar de unidade, zera Profissional/Procedimento: as opções passam a ser as daquele
   // CNES, então uma seleção anterior poderia não existir mais (e zeraria os dados).
   useEffect(() => { setProfissional("todos"); setProcedimento("todos"); }, [cnes]);
