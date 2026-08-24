@@ -24,7 +24,7 @@ import {
 } from "@/lib/tfd/tfd";
 import { CODIGOS_TFD } from "@/lib/relatorios/tfd-rel";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
-import { carregarLogoOrg } from "@/lib/org-logo";
+import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
 import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
 
 export const Route = createFileRoute("/tfd")({
@@ -969,7 +969,8 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
   const [rows, setRows] = useState<TfdRelatorioRow[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [logo, setLogo] = useState<string | null>(null);
-  useEffect(() => { carregarLogoOrg().then(setLogo); }, []);
+  const [cor, setCor] = useState<string | null>(null);
+  useEffect(() => { carregarLogoOrg().then(setLogo); carregarCorOrg().then(setCor); }, []);
 
   const carregar = useCallback(async () => {
     if (!props.cnes) return;
@@ -1052,7 +1053,7 @@ function RelatoriosPanel(props: { cnes: string; nomeUnidade: string; competencia
       logo, nomeUnidade: props.nomeUnidade, periodo,
       status: status ? STATUS_META[status].rotulo : "Todos",
       agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
-      colunas, dados, totalTfd: filtradas.length, totalViagens, totalProducao, totalRS: brl(totalRS),
+      colunas, dados, totalTfd: filtradas.length, totalViagens, totalProducao, totalRS: brl(totalRS), cor,
     });
     pdf.save(`tfd_${agrup}_${compDe}-${compAte}.pdf`);
   };

@@ -13,7 +13,8 @@ import {
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
 import { carregarResumoFpo, type FpoResumoUnidade } from "@/lib/fpo/fpo";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
-import { carregarLogoOrg } from "@/lib/org-logo";
+import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
+import { paletaRelatorio } from "@/lib/relatorio-cor";
 import spaEmblem from "@/assets/spa-emblem.png";
 import { SPA_EMBLEMA_DATA_URI } from "@/lib/spa-emblem-pdf";
 
@@ -117,6 +118,7 @@ function Home() {
   const [procModalOpen, setProcModalOpen] = useState(false);
   const [resumoFpo, setResumoFpo] = useState<FpoResumoUnidade[]>([]);
   const [logoOrg, setLogoOrg] = useState<string | null>(null);
+  const [corOrg, setCorOrg] = useState<string | null>(null);
   const [nomesEstabFpo, setNomesEstabFpo] = useState<Record<string, string>>({});
   // Nome do estabelecimento pelo CADASTRO (fallback quando a ficha não traz o nome embutido —
   // ex.: RAAS importado, onde `estabelecimentoNome` vem vazio). Resolve pela tabela `estabelecimentos`.
@@ -175,7 +177,7 @@ function Home() {
   };
 
   useEffect(() => { carregar(); }, [competencia]);
-  useEffect(() => { carregarLogoOrg().then(setLogoOrg); }, []);
+  useEffect(() => { carregarLogoOrg().then(setLogoOrg); carregarCorOrg().then(setCorOrg); }, []);
   // Ao TROCAR de mês, limpa as linhas na hora (o Atualizar não passa por aqui): evita exibir
   // o total do mês anterior sob o rótulo do mês novo enquanto a nova carga não chega.
   useEffect(() => { setRows([]); setCnes("todos"); setProfissional("todos"); setProcedimento("todos"); }, [competencia]);
@@ -423,6 +425,7 @@ function Home() {
             rotuloCid={rotuloCid}
             competenciaLabel={mesLabel(competencia)}
             logo={logoOrg}
+            cor={corOrg}
             onClose={() => setProfDetalhe(null)}
           />
         )}
@@ -704,13 +707,17 @@ interface ItemAgrupado { key: string; name: string; quantidade: number; atendime
 // dashboard — o relatório é um documento próprio, com seu próprio estilo de impressão.
 function imprimirProducaoProfissional(d: {
   nome: string; cns: string | null; cbo: string | null; cboNome: string | null; competenciaLabel: string;
-  logo: string | null;
+  logo: string | null; cor: string | null;
   totalQtd: number; atendimentos: number; bpaC: number; bpaI: number;
   procedimentos: ItemAgrupado[]; unidades: ItemAgrupado[]; carateres: ItemAgrupado[]; cids: ItemAgrupado[];
 }) {
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const num = (n: number) => n.toLocaleString("pt-BR");
+  // Mesma cor de destaque dos demais relatórios (verde padrão / roxo Ruy Barbosa etc.).
+  const { accent, accentClaro } = paletaRelatorio(d.cor);
+  const AC = `rgb(${accent[0]},${accent[1]},${accent[2]})`;
+  const ACL = `rgb(${accentClaro[0]},${accentClaro[1]},${accentClaro[2]})`;
 
   const linhaProc = (p: ItemAgrupado) => `
     <tr>
@@ -735,27 +742,33 @@ function imprimirProducaoProfissional(d: {
      "about:blank", nº de página). As margens do conteúdo vêm do padding do body. */
   @page { size: A4 portrait; margin: 0; }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #111827; margin: 0; padding: 14mm; font-size: 12px; }
-  header { border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-  header .logo { max-height: 56px; max-width: 160px; width: auto; height: auto; object-fit: contain; }
-  header .tit { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; }
-  header h1 { font-size: 20px; margin: 2px 0 6px; }
-  header .meta { font-size: 11px; color: #374151; display: flex; flex-wrap: wrap; gap: 14px; }
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #111827; margin: 0; padding: 14mm; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Banda de cabeçalho na cor de destaque (mesmo padrão dos relatórios em PDF). Sangra até a
+     borda da página (margens negativas cancelam o padding do body). */
+  header { background: ${AC}; color: #fff; margin: -14mm -14mm 16px; padding: 12mm 14mm 10mm; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  header .logo-box { background: #fff; border-radius: 8px; padding: 6px 8px; display: inline-flex; }
+  header .logo { max-height: 52px; max-width: 150px; width: auto; height: auto; object-fit: contain; }
+  header .tit { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.8); }
+  header h1 { font-size: 20px; margin: 3px 0 8px; color: #fff; }
+  header .meta { font-size: 11px; color: rgba(255,255,255,.92); display: flex; flex-wrap: wrap; gap: 14px; }
+  header .meta b { color: #fff; }
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
   .stats div { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; }
+  .stats div.destaque { background: ${ACL}; border-color: ${AC}; }
   .stats span { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
   .stats b { font-size: 18px; }
+  .stats div.destaque b { color: ${AC}; }
   section { margin-bottom: 16px; page-break-inside: avoid; }
-  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin: 0 0 8px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: ${AC}; border-bottom: 2px solid ${AC}; padding-bottom: 4px; margin: 0 0 8px; }
   table { width: 100%; border-collapse: collapse; }
   td { padding: 5px 4px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; width: 70px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; width: 70px; color: ${AC}; }
   .cod { color: #9ca3af; font-family: ui-monospace, monospace; font-size: 10px; }
   ul.chips { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   ul.chips li { border: 1px solid #e5e7eb; border-radius: 999px; padding: 3px 9px; }
-  ul.chips b { margin-left: 4px; }
+  ul.chips b { margin-left: 4px; color: ${AC}; }
   footer { margin-top: 20px; border-top: 1px solid #e5e7eb; padding-top: 8px; font-size: 10px; color: #9ca3af; }
-  @media screen { body { max-width: 800px; margin: 24px auto; padding: 0 16px; } }
+  @media screen { body { max-width: 800px; margin: 24px auto; padding: 0; } header { margin: 0 0 16px; padding: 20px 24px; border-radius: 0 0 12px 12px; } .stats, section, footer { padding-left: 24px; padding-right: 24px; } }
 </style></head>
 <body>
   <header>
@@ -769,10 +782,10 @@ function imprimirProducaoProfissional(d: {
         ${d.unidades.map((u) => `<span>Unidade: ${esc(u.name)}${u.name !== u.key ? ` (CNES ${esc(u.key)})` : ""}</span>`).join("")}
       </div>
     </div>
-    ${d.logo ? `<img class="logo" src="${esc(d.logo)}" alt="Logo" />` : ""}
+    ${d.logo ? `<span class="logo-box"><img class="logo" src="${esc(d.logo)}" alt="Logo" /></span>` : ""}
   </header>
   <div class="stats">
-    <div><span>Procedimentos</span><b>${num(d.totalQtd)}</b></div>
+    <div class="destaque"><span>Procedimentos</span><b>${num(d.totalQtd)}</b></div>
     <div><span>Atendimentos</span><b>${num(d.atendimentos)}</b></div>
     <div><span>BPA-C</span><b>${num(d.bpaC)}</b></div>
     <div><span>BPA-I</span><b>${num(d.bpaI)}</b></div>
@@ -795,7 +808,7 @@ function imprimirProducaoProfissional(d: {
   win.onload = () => { win.focus(); win.print(); };
 }
 
-function ProfissionalDetalhe({ chave, rows, nomeProc, nomeCbo, rotuloCid, competenciaLabel, logo, onClose }: {
+function ProfissionalDetalhe({ chave, rows, nomeProc, nomeCbo, rotuloCid, competenciaLabel, logo, cor, onClose }: {
   chave: string;
   rows: ProducaoBpaRow[];
   nomeProc: (codigo: string) => string | null;
@@ -803,6 +816,7 @@ function ProfissionalDetalhe({ chave, rows, nomeProc, nomeCbo, rotuloCid, compet
   rotuloCid: (cid: string | null) => string;
   competenciaLabel: string;
   logo: string | null;
+  cor: string | null;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -827,7 +841,7 @@ function ProfissionalDetalhe({ chave, rows, nomeProc, nomeCbo, rotuloCid, compet
   const [fichasOpen, setFichasOpen] = useState(false);
 
   const imprimir = () => imprimirProducaoProfissional({
-    nome, cns, cbo, cboNome, competenciaLabel, logo,
+    nome, cns, cbo, cboNome, competenciaLabel, logo, cor,
     totalQtd, atendimentos, bpaC, bpaI,
     procedimentos, unidades, carateres, cids,
   });

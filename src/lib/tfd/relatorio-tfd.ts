@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import { desenharCabecalhoPdf } from "@/lib/relatorio-comum";
 import { carimbarRodapeSpa } from "@/lib/spa-emblem-pdf";
+import { paletaRelatorio, type RGB } from "@/lib/relatorio-cor";
 
 export interface DadosRelatorioTfd {
   logo?: string | null;
@@ -14,6 +15,7 @@ export interface DadosRelatorioTfd {
   totalViagens: number;
   totalProducao?: number; // qtd de procedimentos BPA-I gerados (produção)
   totalRS: string;       // já formatado (brl)
+  cor?: string | RGB | null; // cor de destaque da prefeitura
   geradoEm?: Date;
 }
 
@@ -29,6 +31,7 @@ export function construirPdfTfd(d: DadosRelatorioTfd): jsPDF {
     titulo: `Relatório de TFD — ${d.nomeUnidade}`,
     subtitulo: `Período: ${d.periodo}  ·  Status: ${d.status}  ·  Agrupamento: ${d.agrupamento}`,
     geradoEm: d.geradoEm ?? new Date(),
+    cor: d.cor,
   });
 
   // Larguras de coluna: última (valor) fixa à direita; demais dividem o resto.
@@ -97,6 +100,7 @@ export function construirPdfTfdPorUnidade(d: {
   unidades: UnidadeTfdSecao[];
   totalGeralTfd: number; totalGeralViagens: number; totalGeralProducao?: number; totalGeralRS: string;
   resumoPorUnidade: string[][]; // [Unidade, CNES, TFDs, Viagens, Produção, Total]
+  cor?: string | RGB | null;
   geradoEm?: Date;
 }): jsPDF {
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -104,12 +108,14 @@ export function construirPdfTfdPorUnidade(d: {
   const largura = pdf.internal.pageSize.getWidth();
   const altura = pdf.internal.pageSize.getHeight();
   const dispon = largura - margem * 2;
+  const { accent } = paletaRelatorio(d.cor);
 
   let y = desenharCabecalhoPdf(pdf, {
     logo: d.logo,
     titulo: "Relatório de TFD — Todas as unidades",
     subtitulo: `Período: ${d.periodo}  ·  Status: ${d.status}  ·  Agrupamento: ${d.agrupamento}`,
     geradoEm: d.geradoEm ?? new Date(),
+    cor: d.cor,
   });
 
   // Desenha uma tabela (colunas/dados) a partir do y atual, com paginação. Última coluna
@@ -161,7 +167,7 @@ export function construirPdfTfdPorUnidade(d: {
   // Resumo geral.
   if (y > altura - margem - 90) { pdf.addPage(); y = margem + 8; }
   y += 8;
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(12); pdf.setTextColor(16, 122, 87);
+  pdf.setFont("helvetica", "bold"); pdf.setFontSize(12); pdf.setTextColor(accent[0], accent[1], accent[2]);
   pdf.text("Resumo geral — Todas as unidades", margem, y); y += 16; pdf.setTextColor(0);
   desenharTabela(["Unidade", "CNES", "TFDs", "Viagens", "Produção", "Total"], d.resumoPorUnidade);
   y += 6; pdf.setDrawColor(160); pdf.line(margem, y - 6, margem + dispon, y - 6);

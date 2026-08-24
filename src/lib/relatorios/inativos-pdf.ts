@@ -27,7 +27,7 @@ const COLS: Col[] = [
   { titulo: "Qtd ant.", w: 46 },
 ];
 
-export function construirPdfInativos(d: { rows: ProfInativoRow[]; subtitulo: string; logo?: string | null; geradoEm?: Date }): jsPDF {
+export function construirPdfInativos(d: { rows: ProfInativoRow[]; subtitulo: string; logo?: string | null; cor?: string | [number, number, number] | null; geradoEm?: Date }): jsPDF {
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const margem = 32;
   const largura = pdf.internal.pageSize.getWidth();
@@ -37,7 +37,7 @@ export function construirPdfInativos(d: { rows: ProfInativoRow[]; subtitulo: str
   const cols = COLS.map((c) => ({ ...c, w: c.titulo === "Unidade" ? dispon - fixas : c.w }));
   const xDe = (i: number) => margem + cols.slice(0, i).reduce((a, c) => a + c.w, 0);
 
-  let y = desenharCabecalhoPdf(pdf, { logo: d.logo, titulo: "Profissionais sem produção", subtitulo: d.subtitulo, geradoEm: d.geradoEm ?? new Date() });
+  let y = desenharCabecalhoPdf(pdf, { logo: d.logo, titulo: "Profissionais sem produção", subtitulo: d.subtitulo, cor: d.cor, geradoEm: d.geradoEm ?? new Date() });
 
   const cabecalho = () => {
     pdf.setFillColor(240, 240, 240); pdf.rect(margem, y - 10, dispon, 16, "F");

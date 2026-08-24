@@ -177,7 +177,7 @@ function RelatoriosPage() {
   const nErros = (erros ?? []).filter((e) => e.gravidade === "erro").length;
   const nAvisos = (erros ?? []).length - nErros;
   const baixarCsvErros = () => { if (!errosFiltrados.length) return; baixarCsv(`erros-${competencia}.csv`, csvErros(errosFiltrados)); toast.success("CSV gerado."); };
-  const baixarPdfErros = () => { if (!errosFiltrados.length) return; abrirPreview(construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo }), `consistencia-${competencia}.pdf`, "Consistência da produção"); };
+  const baixarPdfErros = () => { if (!errosFiltrados.length) return; abrirPreview(construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo, cor }), `consistencia-${competencia}.pdf`, "Consistência da produção"); };
 
   // ---- Profissionais inativos / sem produção ----
   const nomesUnidade = useMemo(() => Object.fromEntries(cnesOpcoes.map((u) => [u.cnes, u.nome])), [cnesOpcoes]);
@@ -195,7 +195,7 @@ function RelatoriosPage() {
   };
   const inaNomeArq = () => `sem-producao-${competencia}${inaCnes !== "todos" ? `-${inaCnes}` : ""}`;
   const baixarCsvInativos = () => { if (!inativos?.rows.length) return; baixarCsv(`${inaNomeArq()}.csv`, csvInativos(inativos.rows)); toast.success("CSV gerado."); };
-  const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
+  const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo, cor }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
 
   const nomeArq = () => `producao-${competencia}${cnes !== "todos" ? `-${cnes}` : ""}`;
   const baixarCsvProd = () => {
@@ -480,7 +480,7 @@ function RelatoriosPage() {
       </div>
 
       {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} cor={cor} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
-      {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} onClose={() => setTfdOpen(false)} />}
+      {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} cor={cor} onClose={() => setTfdOpen(false)} />}
       {previewNode}
     </div>
   );
@@ -616,7 +616,7 @@ function FpoModal({ unidades, logo, cor, responsavel, onClose }: { unidades: { c
 }
 
 // ---- TFD: unidade + faixa de competência + status + agrupamento → CSV/PDF aqui ----
-function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; onClose: () => void }) {
+function TfdModal({ unidades, logo, cor, onClose }: { unidades: { cnes: string; nome: string }[]; logo: string | null; cor: string | null; onClose: () => void }) {
   const { abrirPreview, previewNode } = usePreviewPdf();
   const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
   const [compDe, setCompDe] = useState(competenciaAtual());
@@ -662,6 +662,7 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
         unidades: secoes.map(({ u, m }) => ({ nome: u.nome, cnes: u.cnes, colunas: m.colunas, dados: m.dados, totalTfd: m.totalTfd, totalViagens: m.totalViagens, totalProducao: m.totalProducao, totalRS: brlTfd(m.totalRS) })),
         totalGeralTfd: montado.totalTfd, totalGeralViagens: montado.totalViagens, totalGeralProducao: montado.totalProducao, totalGeralRS: brlTfd(montado.totalRS),
         resumoPorUnidade: secoes.map(({ u, m }) => [u.nome, u.cnes, String(m.totalTfd), String(m.totalViagens), String(m.totalProducao), brlTfd(m.totalRS)]),
+        cor,
       });
       abrirPreview(pdf, `tfd_todas_por-unidade_${compDe}-${compAte}.pdf`, "Relatório de TFD — todas as unidades"); return;
     }
@@ -669,7 +670,7 @@ function TfdModal({ unidades, logo, onClose }: { unidades: { cnes: string; nome:
       logo, nomeUnidade, periodo, status: status ? STATUS_ROTULO[status] : "Todos",
       agrupamento: AGRUPAMENTOS.find((a) => a.valor === agrup)?.rotulo ?? agrup,
       colunas: montado.colunas, dados: montado.dados, totalTfd: montado.totalTfd,
-      totalViagens: montado.totalViagens, totalProducao: montado.totalProducao, totalRS: brlTfd(montado.totalRS),
+      totalViagens: montado.totalViagens, totalProducao: montado.totalProducao, totalRS: brlTfd(montado.totalRS), cor,
     });
     abrirPreview(pdf, `tfd_${agrup}_${compDe}-${compAte}.pdf`, "Relatório de TFD");
   };

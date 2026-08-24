@@ -25,7 +25,7 @@ const COLS: Col[] = [
   { titulo: "Descrição", w: 0 }, // resto
 ];
 
-export function construirPdfErros(d: { itens: ErroItem[]; subtitulo: string; logo?: string | null; geradoEm?: Date }): jsPDF {
+export function construirPdfErros(d: { itens: ErroItem[]; subtitulo: string; logo?: string | null; cor?: string | [number, number, number] | null; geradoEm?: Date }): jsPDF {
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const margem = 32;
   const largura = pdf.internal.pageSize.getWidth();
@@ -35,7 +35,7 @@ export function construirPdfErros(d: { itens: ErroItem[]; subtitulo: string; log
   const cols = COLS.map((c) => ({ ...c, w: c.titulo === "Descrição" ? dispon - fixas : c.w }));
   const xDe = (i: number) => margem + cols.slice(0, i).reduce((a, c) => a + c.w, 0);
 
-  let y = desenharCabecalhoPdf(pdf, { logo: d.logo, titulo: "Consistência da produção", subtitulo: d.subtitulo, geradoEm: d.geradoEm ?? new Date() });
+  let y = desenharCabecalhoPdf(pdf, { logo: d.logo, titulo: "Consistência da produção", subtitulo: d.subtitulo, cor: d.cor, geradoEm: d.geradoEm ?? new Date() });
 
   const cabecalho = () => {
     pdf.setFillColor(240, 240, 240); pdf.rect(margem, y - 10, dispon, 16, "F");
