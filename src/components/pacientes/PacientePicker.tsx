@@ -33,9 +33,11 @@ export function PacientePicker(props: CtxPaciente & {
   orgId: string; paciente: Paciente | null; onEscolhe: (p: Paciente | null) => void;
   titulo?: string; permitirAcompanhante?: boolean; enderecoPadrao?: EnderecoPadrao;
   onPendente?: (v: boolean) => void;
+  emModal?: boolean; // cadastra num popup em vez de expandir inline (ex.: acompanhante do TFD)
 }) {
   const { orgId, paciente } = props;
   const apenasTfd = props.apenasTfd ?? true;
+  const emModal = props.emModal ?? false;
   const titulo = props.titulo ?? "Paciente";
   const termoTipo = titulo.toLowerCase(); // "paciente" ou "acompanhante"
   const [termo, setTermo] = useState("");
@@ -70,20 +72,26 @@ export function PacientePicker(props: CtxPaciente & {
     else props.onEscolhe(p);
   };
 
-  if (completar) {
-    return (
-      <div>
+  const fecharForm = () => { setCompletar(null); setCriando(false); };
+  // Form de cadastro/complemento (compartilhado pelos modos "completar" e "criando").
+  const conteudoForm = (
+    <>
+      {completar && (
         <div className="mb-1 flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <UserPlus className="size-4 shrink-0" />
           Cadastro incompleto de <b>{completar.nome}</b>. Complete os dados obrigatórios para usar.
         </div>
-        <PacienteForm orgId={orgId} paciente={completar} permitirAcompanhante={props.permitirAcompanhante}
-          enderecoPadrao={props.enderecoPadrao} titulo={titulo}
-          apenasTfd={apenasTfd} marcarTfd={props.marcarTfd} origem={props.origem}
-          onSalvo={(p) => { setCompletar(null); props.onEscolhe(p); }}
-          onCancela={() => setCompletar(null)} />
-      </div>
-    );
+      )}
+      <PacienteForm orgId={orgId} paciente={completar ?? undefined} nomeInicial={completar ? undefined : termo}
+        permitirAcompanhante={props.permitirAcompanhante} enderecoPadrao={props.enderecoPadrao} titulo={titulo}
+        apenasTfd={apenasTfd} marcarTfd={props.marcarTfd} origem={props.origem}
+        onSalvo={(p) => { fecharForm(); props.onEscolhe(p); }} onCancela={fecharForm} />
+    </>
+  );
+
+  // Inline (comportamento padrão): "completar" substitui a busca pelo form.
+  if (completar && !emModal) {
+    return <div>{conteudoForm}</div>;
   }
 
   if (paciente) {
@@ -133,12 +141,33 @@ export function PacientePicker(props: CtxPaciente & {
           <UserPlus className="size-3" /> Cadastrar novo {termoTipo}
         </button>
       )}
-      {criando && (
-        <PacienteForm orgId={orgId} nomeInicial={termo} permitirAcompanhante={props.permitirAcompanhante}
-          enderecoPadrao={props.enderecoPadrao} titulo={titulo}
-          apenasTfd={apenasTfd} marcarTfd={props.marcarTfd} origem={props.origem}
-          onSalvo={(p) => { setCriando(false); props.onEscolhe(p); }} onCancela={() => setCriando(false)} />
+      {/* Inline: expande o form abaixo da busca. Em modal: abre popup (não estica a página). */}
+      {criando && !emModal && conteudoForm}
+      {(criando || completar) && emModal && (
+        <ModalCadastro titulo={`${completar ? "Completar cadastro" : "Cadastrar"} ${titulo.toLowerCase()}`} onClose={fecharForm}>
+          {conteudoForm}
+        </ModalCadastro>
       )}
+    </div>
+  );
+}
+
+// Popup (scrollável) para hospedar o form de cadastro do acompanhante sem esticar a página.
+function ModalCadastro({ titulo, onClose, children }: { titulo: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onMouseDown={onClose}>
+      <div className="my-6 w-full max-w-3xl rounded-lg border border-border bg-card p-4 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">{titulo}</h3>
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
@@ -449,7 +478,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         <>
           <div className="mb-1 mt-3 text-[11px] font-semibold uppercase text-muted-foreground">Acompanhante (opcional)</div>
           <PacientePicker orgId={props.orgId} paciente={acompanhante} onEscolhe={setAcompanhante} titulo="Acompanhante"
-            permitirAcompanhante={false} onPendente={setAcompanhantePendente}
+            permitirAcompanhante={false} onPendente={setAcompanhantePendente} emModal
             apenasTfd={props.apenasTfd} marcarTfd={marcarTfd} origem={props.origem}
             enderecoPadrao={{
               cep, cod_logradouro: codLog, logradouro, numero, complemento, bairro,
@@ -468,7 +497,7 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
         <button type="button" onClick={props.onCancela} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted">Cancelar</button>
         <button type="button" onClick={salvar} disabled={salvando}
           className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-          {salvando ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Salvar paciente
+          {salvando ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Salvar {rotuloTipo}
         </button>
       </div>
     </div>

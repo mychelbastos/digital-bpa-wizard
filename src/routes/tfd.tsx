@@ -577,7 +577,7 @@ function FormTfd(props: {
               cep: paciente.cep, cod_logradouro: paciente.cod_logradouro, logradouro: paciente.logradouro,
               numero: paciente.numero, complemento: paciente.complemento, bairro: paciente.bairro,
               municipio_nome: paciente.municipio_nome, municipio_ibge: paciente.municipio_ibge, uf: paciente.uf,
-            } : undefined} />
+            } : undefined} emModal />
         </div>
       )}
 
