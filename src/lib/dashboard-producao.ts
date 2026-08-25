@@ -78,7 +78,11 @@ export async function carregarProducaoDashboardPeriodo(de: string, ate: string):
     const paginas = await Promise.all(
       Array.from({ length: nPaginas }, (_, i) => base().range(i * TAM_PAGINA, i * TAM_PAGINA + TAM_PAGINA - 1)),
     );
-    return paginas.flatMap((p) => (p.data as ProducaoBpaRow[] | null) ?? []);
+    // Se ALGUMA página falhou, não devolve resultado parcial (subcontaria): cai para o serial.
+    if (paginas.some((p) => p.error || !p.data)) {
+      return await buscarTodasPaginado<ProducaoBpaRow>((lo, hi) => base().range(lo, hi), TAM_PAGINA);
+    }
+    return paginas.flatMap((p) => p.data as ProducaoBpaRow[]);
   } catch {
     return [];
   }

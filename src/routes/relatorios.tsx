@@ -161,16 +161,23 @@ function RelatoriosPage() {
   const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
   const periodoArq = compDe === compAte ? compDe : `${compDe}-${compAte}`;
 
+  // Token da carga atual: a produção é paginada e o período pode mudar rápido; sem isto uma
+  // carga antiga (mais lenta) responde depois e sobrescreve a nova (dava 155 vs 227 no mesmo
+  // filtro). Só aplicamos o resultado se ainda for a carga mais recente.
+  const cargaRef = useRef(0);
   const carregar = async () => {
+    const token = ++cargaRef.current;
     setLoading(true);
     const producao = await carregarProducaoDashboardPeriodo(compDe, compAte);
-    setRows(producao);
+    if (cargaRef.current !== token) return; // carga obsoleta — ignora
     // Nomes (procedimento/CID/CBO) em PARALELO — antes eram 3 buscas em série.
     const [np, ncid, ncbo] = await Promise.all([
       carregarNomesProcedimentos(producao.map((r) => r.procedimento)),
       carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)),
       carregarDescricoesCbo(producao.map((r) => r.cbo).filter((c): c is string => !!c)),
     ]);
+    if (cargaRef.current !== token) return;
+    setRows(producao);
     setNomesProc(np);
     setNomesCid(ncid);
     setNomesCbo(ncbo);
@@ -407,29 +414,31 @@ function RelatoriosPage() {
           </div>
 
           {/* Prévia */}
-          <div className={`mt-4 grid grid-cols-2 gap-3 ${raas > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
-            <MiniStat label="Procedimentos" value={totalQtd} destaque />
-            <MiniStat label="Atendimentos" value={filtradas.length} />
-            <MiniStat label="BPA-C" value={bpaC} />
-            <MiniStat label="BPA-I" value={bpaI} />
-            {raas > 0 && <MiniStat label="RAAS" value={raas} />}
+          <div className={`mt-4 grid grid-cols-2 gap-3 ${!loading && raas > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+            <MiniStat label="Procedimentos" value={totalQtd} destaque loading={loading} />
+            <MiniStat label="Atendimentos" value={filtradas.length} loading={loading} />
+            <MiniStat label="BPA-C" value={bpaC} loading={loading} />
+            <MiniStat label="BPA-I" value={bpaI} loading={loading} />
+            {!loading && raas > 0 && <MiniStat label="RAAS" value={raas} />}
           </div>
 
           {/* Ações */}
           <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={baixarCsvProd} disabled={filtradas.length === 0}
+            <button onClick={baixarCsvProd} disabled={loading || filtradas.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50">
               <Download className="size-4" /> Baixar CSV
             </button>
-            <button onClick={baixarPdfProd} disabled={filtradas.length === 0}
+            <button onClick={baixarPdfProd} disabled={loading || filtradas.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
               <FileText className="size-4" /> Gerar PDF (timbre)
             </button>
-            <button onClick={imprimirFichas} disabled={filtradas.length === 0}
+            <button onClick={imprimirFichas} disabled={loading || filtradas.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50">
               <Printer className="size-4" /> Imprimir fichas
             </button>
-            <span className="self-center text-xs text-muted-foreground">{loading ? "Carregando…" : `${filtradas.length} linha(s) · ${filtrosLabel()}`}</span>
+            <span className="inline-flex items-center gap-1.5 self-center text-xs text-muted-foreground">
+              {loading ? <><Loader2 className="size-3.5 animate-spin" /> Buscando produção…</> : `${filtradas.length} linha(s) · ${filtrosLabel()}`}
+            </span>
           </div>
         </section>
 
@@ -603,11 +612,13 @@ function RelatoriosPage() {
   );
 }
 
-function MiniStat({ label, value, destaque = false }: { label: string; value: number; destaque?: boolean }) {
+function MiniStat({ label, value, destaque = false, loading = false }: { label: string; value: number; destaque?: boolean; loading?: boolean }) {
   return (
     <div className={`rounded-xl border p-3 ${destaque ? "border-primary/30 bg-primary/5" : "border-border bg-muted/40"}`}>
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-bold tabular-nums text-foreground">{value.toLocaleString("pt-BR")}</p>
+      {loading
+        ? <span className="mt-2 block h-5 w-16 animate-pulse rounded bg-muted-foreground/20" />
+        : <p className="mt-1 text-xl font-bold tabular-nums text-foreground">{value.toLocaleString("pt-BR")}</p>}
     </div>
   );
 }
