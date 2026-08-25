@@ -56,21 +56,29 @@ export async function carregarProducaoDashboard(mesProducao?: string): Promise<P
 }
 
 // Produção de um PERÍODO de meses de produção [de, ate] (AAAAMM, inclusive). Se de==ate,
-// equivale a um mês só. Ordena por (mes_producao, id) — estável para a paginação.
+// equivale a um mês só. Para períodos grandes a produção passa fácil de dezenas de milhares
+// de linhas: em vez de paginar em SÉRIE (dezenas de round-trips), conta o total e busca todas
+// as páginas EM PARALELO — reduz muito o tempo de carga. Cai para o modo serial se a contagem
+// falhar. Ordena por (mes_producao, id) — estável.
+const TAM_PAGINA = 1000;
 export async function carregarProducaoDashboardPeriodo(de: string, ate: string): Promise<ProducaoBpaRow[]> {
   if (!supabase || !/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate)) return [];
   const [ini, fim] = de <= ate ? [de, ate] : [ate, de]; // tolera inversão
+  const base = () => supabase!.from("producao_dashboard").select(COLS).gte("mes_producao", ini).lte("mes_producao", fim)
+    .order("mes_producao", { ascending: true }).order("id", { ascending: true });
   try {
-    return await buscarTodasPaginado<ProducaoBpaRow>((lo, hi) =>
-      supabase!
-        .from("producao_dashboard")
-        .select(COLS)
-        .gte("mes_producao", ini)
-        .lte("mes_producao", fim)
-        .order("mes_producao", { ascending: true })
-        .order("id", { ascending: true })
-        .range(lo, hi),
+    const { count } = await supabase.from("producao_dashboard").select("id", { count: "exact", head: true })
+      .gte("mes_producao", ini).lte("mes_producao", fim);
+    if (count == null) {
+      // Sem contagem: paginação serial (fallback seguro).
+      return await buscarTodasPaginado<ProducaoBpaRow>((lo, hi) => base().range(lo, hi), TAM_PAGINA);
+    }
+    if (count === 0) return [];
+    const nPaginas = Math.ceil(count / TAM_PAGINA);
+    const paginas = await Promise.all(
+      Array.from({ length: nPaginas }, (_, i) => base().range(i * TAM_PAGINA, i * TAM_PAGINA + TAM_PAGINA - 1)),
     );
+    return paginas.flatMap((p) => (p.data as ProducaoBpaRow[] | null) ?? []);
   } catch {
     return [];
   }

@@ -68,6 +68,8 @@ function MultiSelect({ titulo, opcoes, sel, onChange, allLabel = "Todos", comCod
   }, []);
   const rotulo = (o: { code: string; label: string }) => (comCodigo && o.label !== o.code ? `${o.label} (${o.code})` : o.label);
   const filtradas = q.trim() ? opcoes.filter((o) => `${o.label} ${o.code}`.toLowerCase().includes(q.trim().toLowerCase())) : opcoes;
+  const MAX = 200; // listas longas (procedimentos): renderiza um teto e pede refino pela busca
+  const mostradas = filtradas.slice(0, MAX);
   const toggle = (code: string) => { const n = new Set(sel); if (n.has(code)) n.delete(code); else n.add(code); onChange(n); };
   const resumo = sel.size === 0 ? allLabel
     : sel.size === 1 ? (rotulo(opcoes.find((o) => o.code === [...sel][0]) ?? { code: [...sel][0], label: [...sel][0] }))
@@ -92,7 +94,7 @@ function MultiSelect({ titulo, opcoes, sel, onChange, allLabel = "Todos", comCod
                 className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-muted ${sel.size === 0 ? "font-semibold text-primary" : ""}`}>
                 {allLabel} {sel.size === 0 && <Check className="size-3.5" />}
               </button>
-              {filtradas.map((o) => (
+              {mostradas.map((o) => (
                 <button key={o.code} type="button" onClick={() => toggle(o.code)}
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted">
                   <span className={`flex size-4 shrink-0 items-center justify-center rounded border ${sel.has(o.code) ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
@@ -101,6 +103,7 @@ function MultiSelect({ titulo, opcoes, sel, onChange, allLabel = "Todos", comCod
                   <span className="truncate">{rotulo(o)}</span>
                 </button>
               ))}
+              {filtradas.length > MAX && <div className="px-2 py-1.5 text-[11px] text-muted-foreground">Mostrando {MAX} de {filtradas.length} — refine pela busca.</div>}
               {filtradas.length === 0 && <div className="px-2 py-2 text-xs text-muted-foreground">Nenhuma opção.</div>}
             </div>
           </div>
@@ -162,9 +165,15 @@ function RelatoriosPage() {
     setLoading(true);
     const producao = await carregarProducaoDashboardPeriodo(compDe, compAte);
     setRows(producao);
-    setNomesProc(await carregarNomesProcedimentos(producao.map((r) => r.procedimento)));
-    setNomesCid(await carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)));
-    setNomesCbo(await carregarDescricoesCbo(producao.map((r) => r.cbo).filter((c): c is string => !!c)));
+    // Nomes (procedimento/CID/CBO) em PARALELO — antes eram 3 buscas em série.
+    const [np, ncid, ncbo] = await Promise.all([
+      carregarNomesProcedimentos(producao.map((r) => r.procedimento)),
+      carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)),
+      carregarDescricoesCbo(producao.map((r) => r.cbo).filter((c): c is string => !!c)),
+    ]);
+    setNomesProc(np);
+    setNomesCid(ncid);
+    setNomesCbo(ncbo);
     setLoading(false);
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [compDe, compAte]);
@@ -208,72 +217,62 @@ function RelatoriosPage() {
   const rotuloCid = (c: string | null) => { if (!c) return "Sem CID"; const d = nomesCid[c]; return d ? `${c} — ${d}` : c; };
   const mapas: MapasNome = { nomeProc, rotuloCid, nomeCbo, nomeCarater };
 
-  // Filtro em CASCATA: cada lista de opções considera as linhas que casam com TODOS os
-  // outros filtros (menos o próprio). Assim, escolher a unidade já restringe as opções de
-  // profissional/procedimento/CID/caráter — e vice-versa, sucessivamente.
-  const uniq = <T,>(arr: T[]) => [...new Set(arr)];
-  // Cada filtro é um Set (vazio = todos). `exceto` ignora um filtro (para montar a lista de
-  // opções DELE já restrita pelos demais). Multi-seleção: casa se o Set está vazio OU contém o valor.
-  const casa = (r: ProducaoBpaRow, exceto: string) =>
-    (exceto === "cnes" || cnesSel.size === 0 || cnesSel.has(r.cnes ?? "")) &&
-    (exceto === "prof" || profSel.size === 0 || profSel.has(chaveProfissional(r))) &&
-    (exceto === "proc" || procSel.size === 0 || procSel.has(r.procedimento)) &&
-    (exceto === "tipo" || tipoSel.size === 0 || tipoSel.has(r.tipo)) &&
-    (exceto === "cid" || cidSel.size === 0 || cidSel.has(r.cid ?? "")) &&
-    (exceto === "carater" || caraterSel.size === 0 || caraterSel.has(r.carater ?? ""));
-  const rowsPara = (exceto: string) => rows.filter((r) => casa(r, exceto));
+  // Rótulos globais (a partir de TODAS as linhas) — assim uma opção SELECIONADA sempre tem
+  // rótulo, mesmo que a cascata a deixe sem linhas no momento.
+  const rotuloProf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of rows) { const k = chaveProfissional(r); if (!m.has(k)) m.set(k, nomeOuCodigo(r.profissional_nome, nomeCbo(r.cbo) || r.profissional_cns || r.cbo)); }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, nomesCbo]);
+
+  // CASCATA em UMA passada: para cada linha, conta quantos filtros ela REPROVA (e qual, se só
+  // um). filtradas = as que passam em todos; as opções de um filtro X = linhas que passam em
+  // todos MENOS (no máximo) o próprio X. Muito mais barato que refiltrar tudo por filtro, e
+  // sem o efeito de "poda" que causava as opções sumirem/piscarem.
   const depsFiltros = [cnesSel, profSel, procSel, tipoSel, cidSel, caraterSel];
-
-  const unidades = useMemo(() => {
-    const src = rowsPara("cnes");
-    return uniq(src.map((r) => r.cnes || "")).filter(Boolean)
-      .map((c) => ({ code: c, label: nomeUnidade(c) }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ...depsFiltros, nomesEstabCad, cnesOpcoes]);
-  const profissionais = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const r of rowsPara("prof")) { const k = chaveProfissional(r); if (!m.has(k)) m.set(k, nomeOuCodigo(r.profissional_nome, nomeCbo(r.cbo) || r.profissional_cns || r.cbo)); }
-    return [...m.entries()].map(([code, label]) => ({ code, label })).sort((a, b) => a.label.localeCompare(b.label));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ...depsFiltros, nomesCbo]);
-  const procedimentos = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const r of rowsPara("proc")) if (!m.has(r.procedimento)) m.set(r.procedimento, nomeProc(r.procedimento) || r.procedimento);
-    return [...m.entries()].map(([code, label]) => ({ code, label })).sort((a, b) => a.label.localeCompare(b.label));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ...depsFiltros, nomesProc]);
-  const tipos = useMemo(() => uniq(rowsPara("tipo").map((r) => r.tipo)).sort().map((t) => ({ code: t, label: t })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, ...depsFiltros]);
-  const cids = useMemo(() => uniq(rowsPara("cid").map((r) => r.cid).filter((c): c is string => !!c)).map((c) => ({ code: c, label: rotuloCid(c) })).sort((a, b) => a.label.localeCompare(b.label)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, ...depsFiltros, nomesCid]);
-  const carateres = useMemo(() => uniq(rowsPara("carater").map((r) => r.carater).filter((c): c is string => !!c)).map((c) => ({ code: c, label: nomeCarater(c) || `Caráter ${c}` })),
+  const anotadas = useMemo(() => rows.map((r) => {
+    let n = 0; let solo = "";
+    const chk = (reprova: boolean, campo: string) => { if (reprova) { n++; solo = n === 1 ? campo : ""; } };
+    chk(cnesSel.size > 0 && !cnesSel.has(r.cnes ?? ""), "cnes");
+    chk(profSel.size > 0 && !profSel.has(chaveProfissional(r)), "prof");
+    chk(procSel.size > 0 && !procSel.has(r.procedimento), "proc");
+    chk(tipoSel.size > 0 && !tipoSel.has(r.tipo), "tipo");
+    chk(cidSel.size > 0 && !cidSel.has(r.cid ?? ""), "cid");
+    chk(caraterSel.size > 0 && !caraterSel.has(r.carater ?? ""), "carater");
+    return { r, ok: n === 0, solo: n === 1 ? solo : "-" };
+  }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, ...depsFiltros]);
 
-  // Ao restringir por cascata, valores que saíram das opções são removidos do Set (só amplia
-  // as listas depois, então não há laço). Cobre a limpeza automática pedida.
-  useEffect(() => {
-    const podar = (sel: Set<string>, opts: { code: string }[], set: (s: Set<string>) => void) => {
-      if (sel.size === 0) return;
-      const validos = new Set(opts.map((o) => o.code));
-      const novo = new Set([...sel].filter((c) => validos.has(c)));
-      if (novo.size !== sel.size) set(novo);
-    };
-    podar(cnesSel, unidades, setCnesSel);
-    podar(profSel, profissionais, setProfSel);
-    podar(procSel, procedimentos, setProcSel);
-    podar(tipoSel, tipos, setTipoSel);
-    podar(cidSel, cids, setCidSel);
-    podar(caraterSel, carateres, setCaraterSel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unidades, profissionais, procedimentos, tipos, cids, carateres]);
+  const filtradas = useMemo(() => anotadas.filter((a) => a.ok).map((a) => a.r), [anotadas]);
 
-  const filtradas = useMemo(() => rows.filter((r) => casa(r, "")),
+  // Monta as opções de um filtro: valores das linhas que passam nos OUTROS filtros +
+  // os já selecionados (para nunca "sumirem"), rotulados e ordenados.
+  const opcoesDe = (campo: string, valor: (r: ProducaoBpaRow) => string, rotulo: (code: string) => string, sel: Set<string>) => {
+    const codes = new Set<string>();
+    for (const a of anotadas) if (a.ok || a.solo === campo) { const v = valor(a.r); if (v) codes.add(v); }
+    for (const c of sel) codes.add(c);
+    return [...codes].map((code) => ({ code, label: rotulo(code) })).sort((a, b) => a.label.localeCompare(b.label));
+  };
+  const unidades = useMemo(() => opcoesDe("cnes", (r) => r.cnes ?? "", nomeUnidade, cnesSel),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, ...depsFiltros]);
+    [anotadas, cnesSel, nomesEstabCad, cnesOpcoes]);
+  const profissionais = useMemo(() => opcoesDe("prof", chaveProfissional, (c) => rotuloProf.get(c) ?? c, profSel),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [anotadas, profSel, rotuloProf]);
+  const procedimentos = useMemo(() => opcoesDe("proc", (r) => r.procedimento, (c) => nomeProc(c) || c, procSel),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [anotadas, procSel, nomesProc]);
+  const tipos = useMemo(() => opcoesDe("tipo", (r) => r.tipo, (c) => c, tipoSel),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [anotadas, tipoSel]);
+  const cids = useMemo(() => opcoesDe("cid", (r) => r.cid ?? "", rotuloCid, cidSel),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [anotadas, cidSel, nomesCid]);
+  const carateres = useMemo(() => opcoesDe("carater", (r) => r.carater ?? "", (c) => nomeCarater(c) || `Caráter ${c}`, caraterSel),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [anotadas, caraterSel]);
 
   const totalQtd = filtradas.reduce((s, r) => s + r.quantidade, 0);
   const bpaC = filtradas.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
