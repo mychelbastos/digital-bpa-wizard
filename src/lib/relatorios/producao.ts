@@ -57,7 +57,8 @@ const ESCURO: [number, number, number] = [31, 41, 55];
 export interface DadosRelatorioProducao {
   rows: ProducaoBpaRow[];
   mapas: MapasNome;
-  competenciaMes: string;      // mês de produção selecionado (AAAAMM)
+  competenciaMes: string;      // mês de produção (AAAAMM) — início do período
+  periodo?: string;            // rótulo do período ("Jul/2026" ou "Jun/2026 a Ago/2026")
   filtros: string;             // resumo dos filtros ativos (subtítulo)
   logo?: string | null;
   cor?: string | null;         // cor de destaque da org (hex); null = verde padrão
@@ -131,7 +132,7 @@ export function construirPdfProducao(d: DadosRelatorioProducao): jsPDF {
     pdf.setFont("helvetica", "bold"); pdf.setFontSize(15);
     pdf.text("Relatório de Produção", M, 26);
     pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
-    pdf.text(`Mês de produção ${compLabel(d.competenciaMes)}`, M, 42);
+    pdf.text(`${d.periodo && d.periodo.includes(" a ") ? "Período de produção" : "Mês de produção"} ${d.periodo ?? compLabel(d.competenciaMes)}`, M, 42);
     pdf.setFontSize(8);
     pdf.text(`Gerado em ${geradoEm.toLocaleDateString("pt-BR")} ${geradoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`, xDir, 26, { align: "right" });
     pdf.text(`Página ${pagina}`, xDir, 42, { align: "right" });

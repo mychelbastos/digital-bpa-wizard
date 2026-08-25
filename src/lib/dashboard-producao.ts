@@ -55,6 +55,27 @@ export async function carregarProducaoDashboard(mesProducao?: string): Promise<P
   }
 }
 
+// Produção de um PERÍODO de meses de produção [de, ate] (AAAAMM, inclusive). Se de==ate,
+// equivale a um mês só. Ordena por (mes_producao, id) — estável para a paginação.
+export async function carregarProducaoDashboardPeriodo(de: string, ate: string): Promise<ProducaoBpaRow[]> {
+  if (!supabase || !/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate)) return [];
+  const [ini, fim] = de <= ate ? [de, ate] : [ate, de]; // tolera inversão
+  try {
+    return await buscarTodasPaginado<ProducaoBpaRow>((lo, hi) =>
+      supabase!
+        .from("producao_dashboard")
+        .select(COLS)
+        .gte("mes_producao", ini)
+        .lte("mes_producao", fim)
+        .order("mes_producao", { ascending: true })
+        .order("id", { ascending: true })
+        .range(lo, hi),
+    );
+  } catch {
+    return [];
+  }
+}
+
 // Vínculos ativos do usuário logado (RLS: a pessoa vê os próprios).
 export async function carregarVinculosUsuario(): Promise<VinculoResumo[]> {
   if (!supabase) return [];

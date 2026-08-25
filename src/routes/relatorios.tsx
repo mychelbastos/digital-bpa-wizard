@@ -4,7 +4,7 @@ import {
   FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX,
 } from "lucide-react";
 import {
-  carregarProducaoDashboard, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo,
+  carregarProducaoDashboardPeriodo, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo,
   carregarVinculosUsuario, type ProducaoBpaRow,
 } from "@/lib/dashboard-producao";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
@@ -51,7 +51,9 @@ const ultimosMeses = (n: number): string[] => {
 function RelatoriosPage() {
   const user = useAuthUser();
   const { abrirPreview, previewNode } = usePreviewPdf();
-  const [competencia, setCompetencia] = useState(competenciaAtual());
+  // Período de produção (AAAAMM). compDe==compAte = um mês só (comportamento antigo).
+  const [compDe, setCompDe] = useState(competenciaAtual());
+  const [compAte, setCompAte] = useState(competenciaAtual());
   const [rows, setRows] = useState<ProducaoBpaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [nomesProc, setNomesProc] = useState<Record<string, string>>({});
@@ -84,17 +86,23 @@ function RelatoriosPage() {
   const [cid, setCid] = useState("todos");
   const [carater, setCarater] = useState("todos");
 
+  // Mês de referência dos relatórios per-mês (crivo/inativos): o início do período.
+  const competencia = compDe;
+  // Rótulo do período (para PDFs/arquivos/labels): "Jul/2026" ou "Jun/2026 a Ago/2026".
+  const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
+  const periodoArq = compDe === compAte ? compDe : `${compDe}-${compAte}`;
+
   const carregar = async () => {
     setLoading(true);
-    const producao = await carregarProducaoDashboard(competencia);
+    const producao = await carregarProducaoDashboardPeriodo(compDe, compAte);
     setRows(producao);
     setNomesProc(await carregarNomesProcedimentos(producao.map((r) => r.procedimento)));
     setNomesCid(await carregarDescricoesCid(producao.map((r) => r.cid).filter((c): c is string => !!c)));
     setNomesCbo(await carregarDescricoesCbo(producao.map((r) => r.cbo).filter((c): c is string => !!c)));
     setLoading(false);
   };
-  useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [competencia]);
-  useEffect(() => { setCnes("todos"); setProf("todos"); setProc("todos"); setTipo("todos"); setCid("todos"); setCarater("todos"); setInativos(null); }, [competencia]);
+  useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [compDe, compAte]);
+  useEffect(() => { setCnes("todos"); setProf("todos"); setProc("todos"); setTipo("todos"); setCid("todos"); setCarater("todos"); setInativos(null); }, [compDe, compAte]);
   useEffect(() => {
     carregarLogoOrg().then(setLogo);
     carregarCorOrg().then(setCor);
@@ -111,34 +119,57 @@ function RelatoriosPage() {
   const rotuloCid = (c: string | null) => { if (!c) return "Sem CID"; const d = nomesCid[c]; return d ? `${c} — ${d}` : c; };
   const mapas: MapasNome = { nomeProc, rotuloCid, nomeCbo, nomeCarater };
 
-  // Listas de opções derivadas das linhas do mês.
+  // Filtro em CASCATA: cada lista de opções considera as linhas que casam com TODOS os
+  // outros filtros (menos o próprio). Assim, escolher a unidade já restringe as opções de
+  // profissional/procedimento/CID/caráter — e vice-versa, sucessivamente.
   const uniq = <T,>(arr: T[]) => [...new Set(arr)];
-  const unidades = useMemo(() => uniq(rows.map((r) => r.cnes || "")).filter(Boolean).map((c) => ({ code: c, label: nomeOuCodigo(rows.find((r) => r.cnes === c)?.estabelecimento_nome ?? null, c) })), [rows]);
+  const casa = (r: ProducaoBpaRow, exceto: string) =>
+    (exceto === "cnes" || cnes === "todos" || r.cnes === cnes) &&
+    (exceto === "prof" || prof === "todos" || chaveProfissional(r) === prof) &&
+    (exceto === "proc" || proc === "todos" || r.procedimento === proc) &&
+    (exceto === "tipo" || tipo === "todos" || r.tipo === tipo) &&
+    (exceto === "cid" || cid === "todos" || r.cid === cid) &&
+    (exceto === "carater" || carater === "todos" || r.carater === carater);
+  const rowsPara = (exceto: string) => rows.filter((r) => casa(r, exceto));
+
+  const unidades = useMemo(() => {
+    const src = rowsPara("cnes");
+    return uniq(src.map((r) => r.cnes || "")).filter(Boolean)
+      .map((c) => ({ code: c, label: nomeOuCodigo(src.find((r) => r.cnes === c)?.estabelecimento_nome ?? null, c) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, cnes, prof, proc, tipo, cid, carater]);
   const profissionais = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of rows) { const k = chaveProfissional(r); if (!m.has(k)) m.set(k, nomeOuCodigo(r.profissional_nome, nomeCbo(r.cbo) || r.profissional_cns || r.cbo)); }
+    for (const r of rowsPara("prof")) { const k = chaveProfissional(r); if (!m.has(k)) m.set(k, nomeOuCodigo(r.profissional_nome, nomeCbo(r.cbo) || r.profissional_cns || r.cbo)); }
     return [...m.entries()].map(([code, label]) => ({ code, label })).sort((a, b) => a.label.localeCompare(b.label));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, nomesCbo]);
+  }, [rows, cnes, prof, proc, tipo, cid, carater, nomesCbo]);
   const procedimentos = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of rows) if (!m.has(r.procedimento)) m.set(r.procedimento, nomeProc(r.procedimento) || r.procedimento);
+    for (const r of rowsPara("proc")) if (!m.has(r.procedimento)) m.set(r.procedimento, nomeProc(r.procedimento) || r.procedimento);
     return [...m.entries()].map(([code, label]) => ({ code, label })).sort((a, b) => a.label.localeCompare(b.label));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, nomesProc]);
-  const cids = useMemo(() => uniq(rows.map((r) => r.cid).filter((c): c is string => !!c)).map((c) => ({ code: c, label: rotuloCid(c) })).sort((a, b) => a.label.localeCompare(b.label)),
+  }, [rows, cnes, prof, proc, tipo, cid, carater, nomesProc]);
+  const cids = useMemo(() => uniq(rowsPara("cid").map((r) => r.cid).filter((c): c is string => !!c)).map((c) => ({ code: c, label: rotuloCid(c) })).sort((a, b) => a.label.localeCompare(b.label)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, nomesCid]);
-  const carateres = useMemo(() => uniq(rows.map((r) => r.carater).filter((c): c is string => !!c)).map((c) => ({ code: c, label: nomeCarater(c) || `Caráter ${c}` })), [rows]);
+    [rows, cnes, prof, proc, tipo, cid, carater, nomesCid]);
+  const carateres = useMemo(() => uniq(rowsPara("carater").map((r) => r.carater).filter((c): c is string => !!c)).map((c) => ({ code: c, label: nomeCarater(c) || `Caráter ${c}` })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, cnes, prof, proc, tipo, cid, carater]);
 
-  const filtradas = useMemo(() => rows.filter((r) =>
-    (cnes === "todos" || r.cnes === cnes) &&
-    (prof === "todos" || chaveProfissional(r) === prof) &&
-    (proc === "todos" || r.procedimento === proc) &&
-    (tipo === "todos" || r.tipo === tipo) &&
-    (cid === "todos" || r.cid === cid) &&
-    (carater === "todos" || r.carater === carater),
-  ), [rows, cnes, prof, proc, tipo, cid, carater]);
+  // Ao restringir por cascata, uma seleção anterior pode sair das opções — volta para "todos"
+  // (só amplia as listas, então não há laço). Cobre a limpeza automática pedida.
+  useEffect(() => {
+    if (cnes !== "todos" && !unidades.some((u) => u.code === cnes)) setCnes("todos");
+    if (prof !== "todos" && !profissionais.some((p) => p.code === prof)) setProf("todos");
+    if (proc !== "todos" && !procedimentos.some((p) => p.code === proc)) setProc("todos");
+    if (cid !== "todos" && !cids.some((c) => c.code === cid)) setCid("todos");
+    if (carater !== "todos" && !carateres.some((c) => c.code === carater)) setCarater("todos");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unidades, profissionais, procedimentos, cids, carateres]);
+
+  const filtradas = useMemo(() => rows.filter((r) => casa(r, "")), [rows, cnes, prof, proc, tipo, cid, carater]);
 
   const totalQtd = filtradas.reduce((s, r) => s + r.quantidade, 0);
   const bpaC = filtradas.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
@@ -153,7 +184,7 @@ function RelatoriosPage() {
     if (proc !== "todos") p.push(`Procedimento: ${procedimentos.find((x) => x.code === proc)?.label ?? proc}`);
     if (cid !== "todos") p.push(`CID: ${cids.find((x) => x.code === cid)?.label ?? cid}`);
     if (carater !== "todos") p.push(`Caráter: ${carateres.find((x) => x.code === carater)?.label ?? carater}`);
-    return p.length ? p.join("  ·  ") : "Sem filtros (toda a produção do mês)";
+    return p.length ? p.join("  ·  ") : "Sem filtros (toda a produção do período)";
   };
 
   // ---- Erros / crivo ----
@@ -197,7 +228,7 @@ function RelatoriosPage() {
   const baixarCsvInativos = () => { if (!inativos?.rows.length) return; baixarCsv(`${inaNomeArq()}.csv`, csvInativos(inativos.rows)); toast.success("CSV gerado."); };
   const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo, cor }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
 
-  const nomeArq = () => `producao-${competencia}${cnes !== "todos" ? `-${cnes}` : ""}`;
+  const nomeArq = () => `producao-${periodoArq}${cnes !== "todos" ? `-${cnes}` : ""}`;
   const baixarCsvProd = () => {
     if (filtradas.length === 0) return;
     baixarCsv(`${nomeArq()}.csv`, csvProducao(filtradas, mapas));
@@ -205,7 +236,7 @@ function RelatoriosPage() {
   };
   const baixarPdfProd = () => {
     if (filtradas.length === 0) return;
-    const pdf = construirPdfProducao({ rows: filtradas, mapas, competenciaMes: competencia, filtros: filtrosLabel(), logo, cor, responsavel: user?.nome ?? null });
+    const pdf = construirPdfProducao({ rows: filtradas, mapas, competenciaMes: compDe, periodo: periodoLabel, filtros: filtrosLabel(), logo, cor, responsavel: user?.nome ?? null });
     abrirPreview(pdf, `${nomeArq()}.pdf`, "Relatório de Produção");
   };
   const imprimirFichas = () => {
@@ -244,8 +275,14 @@ function RelatoriosPage() {
           {/* Filtros */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Mês de produção</span>
-              <select value={competencia} onChange={(e) => setCompetencia(e.target.value)} className={selCls}>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Mês de produção · de</span>
+              <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls}>
+                {ultimosMeses(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">até</span>
+              <select value={compAte} onChange={(e) => { const v = e.target.value; setCompAte(v); if (v < compDe) setCompDe(v); }} className={selCls}>
                 {ultimosMeses(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
               </select>
             </label>
