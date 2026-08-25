@@ -125,6 +125,9 @@ function RelatoriosPage() {
   const [cor, setCor] = useState<string | null>(null);
   const [podeTfd, setPodeTfd] = useState(false);
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
+  // Nome do estabelecimento pelo CADASTRO, para CNES cujas linhas vêm sem nome (ex.: RAAS
+  // importado) — evita exibir só o código do CNES nos filtros/relatórios.
+  const [nomesEstabCad, setNomesEstabCad] = useState<Record<string, string>>({});
   const [fpoOpen, setFpoOpen] = useState(false);
   const [tfdOpen, setTfdOpen] = useState(false);
   // Erros / crivo
@@ -177,6 +180,29 @@ function RelatoriosPage() {
     });
   }, []);
 
+  // Busca no cadastro o nome das unidades sem nome nas linhas (ex.: RAAS importado). Só as que faltam.
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const faltando = [...new Set(rows.filter((r) => r.cnes && !r.estabelecimento_nome?.trim()).map((r) => r.cnes as string))]
+        .filter((c) => !nomesEstabCad[c]);
+      if (faltando.length === 0) return;
+      const achados = await Promise.all(faltando.map(async (c) => [c, (await buscarEstabelecimento(c)) || ""] as const));
+      if (vivo) setNomesEstabCad((prev) => ({ ...prev, ...Object.fromEntries(achados.filter(([, n]) => n)) }));
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
+  // Melhor nome de cada CNES: nome embutido em alguma linha → cadastro → vínculo → código.
+  const melhorNomeRows = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const r of rows) { const c = r.cnes; if (c && r.estabelecimento_nome?.trim() && !m[c]) m[c] = r.estabelecimento_nome.trim(); }
+    return m;
+  }, [rows]);
+  const nomeUnidade = (c: string) =>
+    melhorNomeRows[c] || nomesEstabCad[c] || cnesOpcoes.find((u) => u.cnes === c)?.nome || c;
+
   const nomeProc = (c: string) => nomesProc[c] || null;
   const nomeCbo = (c: string | null) => (c ? (nomesCbo[c] ? nomesCbo[c].toUpperCase() : null) : null);
   const rotuloCid = (c: string | null) => { if (!c) return "Sem CID"; const d = nomesCid[c]; return d ? `${c} — ${d}` : c; };
@@ -201,10 +227,10 @@ function RelatoriosPage() {
   const unidades = useMemo(() => {
     const src = rowsPara("cnes");
     return uniq(src.map((r) => r.cnes || "")).filter(Boolean)
-      .map((c) => ({ code: c, label: nomeOuCodigo(src.find((r) => r.cnes === c)?.estabelecimento_nome ?? null, c) }))
+      .map((c) => ({ code: c, label: nomeUnidade(c) }))
       .sort((a, b) => a.label.localeCompare(b.label));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ...depsFiltros]);
+  }, [rows, ...depsFiltros, nomesEstabCad, cnesOpcoes]);
   const profissionais = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of rowsPara("prof")) { const k = chaveProfissional(r); if (!m.has(k)) m.set(k, nomeOuCodigo(r.profissional_nome, nomeCbo(r.cbo) || r.profissional_cns || r.cbo)); }
@@ -314,14 +340,16 @@ function RelatoriosPage() {
   const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo, cor }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
 
   const nomeArq = () => `producao-${periodoArq}${cnesSel.size === 1 ? `-${[...cnesSel][0]}` : ""}`;
+  // Linhas com o nome da unidade resolvido (cadastro) — para o nome sair nos relatórios, não o CNES.
+  const filtradasNomeadas = () => filtradas.map((r) => (r.cnes && !r.estabelecimento_nome?.trim() ? { ...r, estabelecimento_nome: nomeUnidade(r.cnes) } : r));
   const baixarCsvProd = () => {
     if (filtradas.length === 0) return;
-    baixarCsv(`${nomeArq()}.csv`, csvProducao(filtradas, mapas));
+    baixarCsv(`${nomeArq()}.csv`, csvProducao(filtradasNomeadas(), mapas));
     toast.success("CSV gerado.");
   };
   const baixarPdfProd = () => {
     if (filtradas.length === 0) return;
-    const pdf = construirPdfProducao({ rows: filtradas, mapas, competenciaMes: compDe, periodo: periodoLabel, filtros: filtrosLabel(), logo, cor, responsavel: user?.nome ?? null });
+    const pdf = construirPdfProducao({ rows: filtradasNomeadas(), mapas, competenciaMes: compDe, periodo: periodoLabel, filtros: filtrosLabel(), logo, cor, responsavel: user?.nome ?? null });
     abrirPreview(pdf, `${nomeArq()}.pdf`, "Relatório de Produção");
   };
   const imprimirFichas = () => {
