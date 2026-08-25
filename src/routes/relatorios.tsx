@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX,
+  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX, ChevronDown, Check,
 } from "lucide-react";
 import {
   carregarProducaoDashboardPeriodo, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo,
@@ -48,6 +48,68 @@ const ultimosMeses = (n: number): string[] => {
   return out;
 };
 
+// Filtro de múltipla escolha: botão com resumo ("Todas" / nome único / "N selecionados") que
+// abre um dropdown com checkboxes (busca quando há muitas opções). Set vazio = todos.
+function MultiSelect({ titulo, opcoes, sel, onChange, allLabel = "Todos", comCodigo = false }: {
+  titulo: string;
+  opcoes: { code: string; label: string }[];
+  sel: Set<string>;
+  onChange: (s: Set<string>) => void;
+  allLabel?: string;
+  comCodigo?: boolean; // mostra o código ao lado do nome (procedimentos)
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  const rotulo = (o: { code: string; label: string }) => (comCodigo && o.label !== o.code ? `${o.label} (${o.code})` : o.label);
+  const filtradas = q.trim() ? opcoes.filter((o) => `${o.label} ${o.code}`.toLowerCase().includes(q.trim().toLowerCase())) : opcoes;
+  const toggle = (code: string) => { const n = new Set(sel); if (n.has(code)) n.delete(code); else n.add(code); onChange(n); };
+  const resumo = sel.size === 0 ? allLabel
+    : sel.size === 1 ? (rotulo(opcoes.find((o) => o.code === [...sel][0]) ?? { code: [...sel][0], label: [...sel][0] }))
+      : `${sel.size} selecionados`;
+  const selCls = "w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm";
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</span>
+      <div className="relative" ref={ref}>
+        <button type="button" onClick={() => setAberto((a) => !a)} className={`${selCls} flex items-center justify-between gap-2 text-left`}>
+          <span className="truncate">{resumo}</span>
+          <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
+        </button>
+        {aberto && (
+          <div className="absolute z-30 mt-1 w-full min-w-[220px] rounded-md border border-border bg-popover shadow-lg">
+            {opcoes.length > 8 && (
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filtrar…" autoFocus data-nocaps
+                className="w-full border-b border-border bg-background px-2.5 py-1.5 text-xs outline-none" />
+            )}
+            <div className="max-h-60 overflow-auto p-1">
+              <button type="button" onClick={() => onChange(new Set())}
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-muted ${sel.size === 0 ? "font-semibold text-primary" : ""}`}>
+                {allLabel} {sel.size === 0 && <Check className="size-3.5" />}
+              </button>
+              {filtradas.map((o) => (
+                <button key={o.code} type="button" onClick={() => toggle(o.code)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted">
+                  <span className={`flex size-4 shrink-0 items-center justify-center rounded border ${sel.has(o.code) ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
+                    {sel.has(o.code) && <Check className="size-3" />}
+                  </span>
+                  <span className="truncate">{rotulo(o)}</span>
+                </button>
+              ))}
+              {filtradas.length === 0 && <div className="px-2 py-2 text-xs text-muted-foreground">Nenhuma opção.</div>}
+            </div>
+          </div>
+        )}
+      </div>
+    </label>
+  );
+}
+
 function RelatoriosPage() {
   const user = useAuthUser();
   const { abrirPreview, previewNode } = usePreviewPdf();
@@ -79,12 +141,13 @@ function RelatoriosPage() {
   const [inaLoading, setInaLoading] = useState(false);
 
   // Filtros
-  const [cnes, setCnes] = useState("todos");
-  const [prof, setProf] = useState("todos");
-  const [proc, setProc] = useState("todos");
-  const [tipo, setTipo] = useState<"todos" | "BPA-C" | "BPA-I" | "RAAS">("todos");
-  const [cid, setCid] = useState("todos");
-  const [carater, setCarater] = useState("todos");
+  // Filtros MULTI-seleção: cada um é um conjunto de códigos escolhidos. Vazio = "todos".
+  const [cnesSel, setCnesSel] = useState<Set<string>>(new Set());
+  const [profSel, setProfSel] = useState<Set<string>>(new Set());
+  const [procSel, setProcSel] = useState<Set<string>>(new Set());
+  const [tipoSel, setTipoSel] = useState<Set<string>>(new Set());
+  const [cidSel, setCidSel] = useState<Set<string>>(new Set());
+  const [caraterSel, setCaraterSel] = useState<Set<string>>(new Set());
 
   // Mês de referência dos relatórios per-mês (crivo/inativos): o início do período.
   const competencia = compDe;
@@ -102,7 +165,7 @@ function RelatoriosPage() {
     setLoading(false);
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [compDe, compAte]);
-  useEffect(() => { setCnes("todos"); setProf("todos"); setProc("todos"); setTipo("todos"); setCid("todos"); setCarater("todos"); setInativos(null); }, [compDe, compAte]);
+  useEffect(() => { setCnesSel(new Set()); setProfSel(new Set()); setProcSel(new Set()); setTipoSel(new Set()); setCidSel(new Set()); setCaraterSel(new Set()); setInativos(null); }, [compDe, compAte]);
   useEffect(() => {
     carregarLogoOrg().then(setLogo);
     carregarCorOrg().then(setCor);
@@ -123,14 +186,17 @@ function RelatoriosPage() {
   // outros filtros (menos o próprio). Assim, escolher a unidade já restringe as opções de
   // profissional/procedimento/CID/caráter — e vice-versa, sucessivamente.
   const uniq = <T,>(arr: T[]) => [...new Set(arr)];
+  // Cada filtro é um Set (vazio = todos). `exceto` ignora um filtro (para montar a lista de
+  // opções DELE já restrita pelos demais). Multi-seleção: casa se o Set está vazio OU contém o valor.
   const casa = (r: ProducaoBpaRow, exceto: string) =>
-    (exceto === "cnes" || cnes === "todos" || r.cnes === cnes) &&
-    (exceto === "prof" || prof === "todos" || chaveProfissional(r) === prof) &&
-    (exceto === "proc" || proc === "todos" || r.procedimento === proc) &&
-    (exceto === "tipo" || tipo === "todos" || r.tipo === tipo) &&
-    (exceto === "cid" || cid === "todos" || r.cid === cid) &&
-    (exceto === "carater" || carater === "todos" || r.carater === carater);
+    (exceto === "cnes" || cnesSel.size === 0 || cnesSel.has(r.cnes ?? "")) &&
+    (exceto === "prof" || profSel.size === 0 || profSel.has(chaveProfissional(r))) &&
+    (exceto === "proc" || procSel.size === 0 || procSel.has(r.procedimento)) &&
+    (exceto === "tipo" || tipoSel.size === 0 || tipoSel.has(r.tipo)) &&
+    (exceto === "cid" || cidSel.size === 0 || cidSel.has(r.cid ?? "")) &&
+    (exceto === "carater" || caraterSel.size === 0 || caraterSel.has(r.carater ?? ""));
   const rowsPara = (exceto: string) => rows.filter((r) => casa(r, exceto));
+  const depsFiltros = [cnesSel, profSel, procSel, tipoSel, cidSel, caraterSel];
 
   const unidades = useMemo(() => {
     const src = rowsPara("cnes");
@@ -138,52 +204,71 @@ function RelatoriosPage() {
       .map((c) => ({ code: c, label: nomeOuCodigo(src.find((r) => r.cnes === c)?.estabelecimento_nome ?? null, c) }))
       .sort((a, b) => a.label.localeCompare(b.label));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, cnes, prof, proc, tipo, cid, carater]);
+  }, [rows, ...depsFiltros]);
   const profissionais = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of rowsPara("prof")) { const k = chaveProfissional(r); if (!m.has(k)) m.set(k, nomeOuCodigo(r.profissional_nome, nomeCbo(r.cbo) || r.profissional_cns || r.cbo)); }
     return [...m.entries()].map(([code, label]) => ({ code, label })).sort((a, b) => a.label.localeCompare(b.label));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, cnes, prof, proc, tipo, cid, carater, nomesCbo]);
+  }, [rows, ...depsFiltros, nomesCbo]);
   const procedimentos = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of rowsPara("proc")) if (!m.has(r.procedimento)) m.set(r.procedimento, nomeProc(r.procedimento) || r.procedimento);
     return [...m.entries()].map(([code, label]) => ({ code, label })).sort((a, b) => a.label.localeCompare(b.label));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, cnes, prof, proc, tipo, cid, carater, nomesProc]);
+  }, [rows, ...depsFiltros, nomesProc]);
+  const tipos = useMemo(() => uniq(rowsPara("tipo").map((r) => r.tipo)).sort().map((t) => ({ code: t, label: t })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, ...depsFiltros]);
   const cids = useMemo(() => uniq(rowsPara("cid").map((r) => r.cid).filter((c): c is string => !!c)).map((c) => ({ code: c, label: rotuloCid(c) })).sort((a, b) => a.label.localeCompare(b.label)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, cnes, prof, proc, tipo, cid, carater, nomesCid]);
+    [rows, ...depsFiltros, nomesCid]);
   const carateres = useMemo(() => uniq(rowsPara("carater").map((r) => r.carater).filter((c): c is string => !!c)).map((c) => ({ code: c, label: nomeCarater(c) || `Caráter ${c}` })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, cnes, prof, proc, tipo, cid, carater]);
+    [rows, ...depsFiltros]);
 
-  // Ao restringir por cascata, uma seleção anterior pode sair das opções — volta para "todos"
-  // (só amplia as listas, então não há laço). Cobre a limpeza automática pedida.
+  // Ao restringir por cascata, valores que saíram das opções são removidos do Set (só amplia
+  // as listas depois, então não há laço). Cobre a limpeza automática pedida.
   useEffect(() => {
-    if (cnes !== "todos" && !unidades.some((u) => u.code === cnes)) setCnes("todos");
-    if (prof !== "todos" && !profissionais.some((p) => p.code === prof)) setProf("todos");
-    if (proc !== "todos" && !procedimentos.some((p) => p.code === proc)) setProc("todos");
-    if (cid !== "todos" && !cids.some((c) => c.code === cid)) setCid("todos");
-    if (carater !== "todos" && !carateres.some((c) => c.code === carater)) setCarater("todos");
+    const podar = (sel: Set<string>, opts: { code: string }[], set: (s: Set<string>) => void) => {
+      if (sel.size === 0) return;
+      const validos = new Set(opts.map((o) => o.code));
+      const novo = new Set([...sel].filter((c) => validos.has(c)));
+      if (novo.size !== sel.size) set(novo);
+    };
+    podar(cnesSel, unidades, setCnesSel);
+    podar(profSel, profissionais, setProfSel);
+    podar(procSel, procedimentos, setProcSel);
+    podar(tipoSel, tipos, setTipoSel);
+    podar(cidSel, cids, setCidSel);
+    podar(caraterSel, carateres, setCaraterSel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unidades, profissionais, procedimentos, cids, carateres]);
+  }, [unidades, profissionais, procedimentos, tipos, cids, carateres]);
 
-  const filtradas = useMemo(() => rows.filter((r) => casa(r, "")), [rows, cnes, prof, proc, tipo, cid, carater]);
+  const filtradas = useMemo(() => rows.filter((r) => casa(r, "")),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, ...depsFiltros]);
 
   const totalQtd = filtradas.reduce((s, r) => s + r.quantidade, 0);
   const bpaC = filtradas.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
   const bpaI = filtradas.filter((r) => r.tipo === "BPA-I").reduce((s, r) => s + r.quantidade, 0);
   const raas = filtradas.filter((r) => r.tipo === "RAAS").reduce((s, r) => s + r.quantidade, 0);
 
+  // Rótulo de um filtro multi: "1 valor" mostra o nome; ">1" lista os nomes separados por vírgula.
+  const rotuloSel = (titulo: string, sel: Set<string>, opts: { code: string; label: string }[]) => {
+    if (sel.size === 0) return null;
+    const nomes = [...sel].map((c) => opts.find((o) => o.code === c)?.label ?? c);
+    return `${titulo}: ${nomes.join(", ")}`;
+  };
   const filtrosLabel = () => {
-    const p: string[] = [];
-    if (tipo !== "todos") p.push(`Tipo: ${tipo}`);
-    if (cnes !== "todos") p.push(`Unidade: ${unidades.find((u) => u.code === cnes)?.label ?? cnes}`);
-    if (prof !== "todos") p.push(`Profissional: ${profissionais.find((x) => x.code === prof)?.label ?? prof}`);
-    if (proc !== "todos") p.push(`Procedimento: ${procedimentos.find((x) => x.code === proc)?.label ?? proc}`);
-    if (cid !== "todos") p.push(`CID: ${cids.find((x) => x.code === cid)?.label ?? cid}`);
-    if (carater !== "todos") p.push(`Caráter: ${carateres.find((x) => x.code === carater)?.label ?? carater}`);
+    const p = [
+      rotuloSel("Tipo", tipoSel, tipos),
+      rotuloSel("Unidade", cnesSel, unidades),
+      rotuloSel("Profissional", profSel, profissionais),
+      rotuloSel("Procedimento", procSel, procedimentos),
+      rotuloSel("CID", cidSel, cids),
+      rotuloSel("Caráter", caraterSel, carateres),
+    ].filter(Boolean);
     return p.length ? p.join("  ·  ") : "Sem filtros (toda a produção do período)";
   };
 
@@ -228,7 +313,7 @@ function RelatoriosPage() {
   const baixarCsvInativos = () => { if (!inativos?.rows.length) return; baixarCsv(`${inaNomeArq()}.csv`, csvInativos(inativos.rows)); toast.success("CSV gerado."); };
   const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo, cor }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
 
-  const nomeArq = () => `producao-${periodoArq}${cnes !== "todos" ? `-${cnes}` : ""}`;
+  const nomeArq = () => `producao-${periodoArq}${cnesSel.size === 1 ? `-${[...cnesSel][0]}` : ""}`;
   const baixarCsvProd = () => {
     if (filtradas.length === 0) return;
     baixarCsv(`${nomeArq()}.csv`, csvProducao(filtradas, mapas));
@@ -286,47 +371,12 @@ function RelatoriosPage() {
                 {ultimosMeses(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
               </select>
             </label>
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tipo</span>
-              <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls}>
-                <option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="BPA-C">BPA-C</option><option value="RAAS">RAAS</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Unidade</span>
-              <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls}>
-                <option value="todos">Todas</option>
-                {unidades.map((u) => <option key={u.code} value={u.code}>{u.label}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Profissional</span>
-              <select value={prof} onChange={(e) => setProf(e.target.value)} className={selCls}>
-                <option value="todos">Todos</option>
-                {profissionais.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
-              </select>
-            </label>
-            <label className="block lg:col-span-2">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Procedimento</span>
-              <select value={proc} onChange={(e) => setProc(e.target.value)} className={selCls}>
-                <option value="todos">Todos</option>
-                {procedimentos.map((p) => <option key={p.code} value={p.code}>{p.label !== p.code ? `${p.label} (${p.code})` : p.code}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">CID</span>
-              <select value={cid} onChange={(e) => setCid(e.target.value)} className={selCls}>
-                <option value="todos">Todos</option>
-                {cids.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Caráter</span>
-              <select value={carater} onChange={(e) => setCarater(e.target.value)} className={selCls}>
-                <option value="todos">Todos</option>
-                {carateres.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
-              </select>
-            </label>
+            <MultiSelect titulo="Tipo" allLabel="Todos" opcoes={tipos} sel={tipoSel} onChange={setTipoSel} />
+            <MultiSelect titulo="Unidade" allLabel="Todas" opcoes={unidades} sel={cnesSel} onChange={setCnesSel} />
+            <MultiSelect titulo="Profissional" allLabel="Todos" opcoes={profissionais} sel={profSel} onChange={setProfSel} />
+            <div className="lg:col-span-2"><MultiSelect titulo="Procedimento" allLabel="Todos" opcoes={procedimentos} comCodigo sel={procSel} onChange={setProcSel} /></div>
+            <MultiSelect titulo="CID" allLabel="Todos" opcoes={cids} sel={cidSel} onChange={setCidSel} />
+            <MultiSelect titulo="Caráter" allLabel="Todos" opcoes={carateres} sel={caraterSel} onChange={setCaraterSel} />
           </div>
 
           {/* Prévia */}
