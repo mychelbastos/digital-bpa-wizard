@@ -492,11 +492,14 @@ function RelatoriosPage() {
                 <option value={12}>Últimos 12 meses</option>
               </select>
             </label>
-            <label className="col-span-2 flex items-end gap-2 pb-1 text-xs text-muted-foreground sm:col-span-2">
-              <input type="checkbox" checked={inaIncluirRoster} onChange={(e) => setInaIncluirRoster(e.target.checked)} className="size-4 rounded border-border" />
-              Incluir cadastrados no CNES que <strong>nunca</strong> lançaram produção (já filtrados pelo CBO assistencial do vínculo).
-            </label>
           </div>
+          <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={inaIncluirRoster} onChange={(e) => setInaIncluirRoster(e.target.checked)} className="mt-0.5 size-4 shrink-0 rounded border-border" />
+            <span>
+              <span className="font-medium text-foreground">Incluir também quem nunca lançou produção.</span>{" "}
+              Além dos que sumiram no mês, lista os profissionais cadastrados no CNES que <strong>nunca</strong> lançaram nada (já filtrados pelo CBO assistencial do vínculo).
+            </span>
+          </label>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={verificarInativos} disabled={inaLoading || cnesOpcoes.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
