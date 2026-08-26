@@ -1,10 +1,11 @@
+import { useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { motion, useReducedMotion, type Variants } from "motion/react";
+import { motion, useReducedMotion, useScroll, useTransform, useSpring, type Variants, type MotionValue } from "motion/react";
 import {
   Stethoscope, Files, HeartPulse, ClipboardCheck, BedDouble, Ambulance, CalendarCheck,
   ShieldCheck, Database, TrendingUp, Gauge, FileBarChart, Upload, Building2,
-  PenLine, Lock, Send, ArrowRight, Check, LogIn, Tag,
+  PenLine, Lock, Send, ArrowRight, Check, LogIn, Tag, AlertTriangle,
 } from "lucide-react";
 import spaEmblem from "@/assets/spa-emblem.png";
 
@@ -45,6 +46,102 @@ const PASSOS = [
 ];
 
 const gradPrimario = { background: "linear-gradient(135deg, oklch(0.62 0.17 250), oklch(0.55 0.19 278))" };
+
+// Seção "por dentro" com PARALLAX DE CAMADAS (inspirado no motion.dev/ui hero-parallax-layers):
+// conforme a seção passa pela viewport, cada camada (fundo, mockup central, cards flutuantes)
+// se move em velocidade diferente. Usa scroll-progress da própria seção, suavizado com spring.
+function ParallaxShowcase({ semMovimento }: { semMovimento: boolean | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const suave = (mv: MotionValue<number>) => useSpring(mv, { stiffness: 90, damping: 22, mass: 0.4 });
+  // Camadas: quanto maior a amplitude, mais "à frente" a camada parece (move mais).
+  const yBg = suave(useTransform(scrollYProgress, [0, 1], [-40, 40]));
+  const yMid = suave(useTransform(scrollYProgress, [0, 1], [90, -90]));
+  const yFrontA = suave(useTransform(scrollYProgress, [0, 1], [160, -140]));
+  const yFrontB = suave(useTransform(scrollYProgress, [0, 1], [200, -180]));
+  const rotMid = suave(useTransform(scrollYProgress, [0, 1], [2.5, -2.5]));
+  // Com redução de movimento, tudo fica parado (0).
+  const off = (mv: MotionValue<number>) => (semMovimento ? (0 as unknown as MotionValue<number>) : mv);
+
+  const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  return (
+    <section ref={ref} className="relative overflow-hidden border-y border-border/60 bg-muted/20">
+      {/* Aurora de fundo (camada mais lenta) */}
+      <motion.div style={{ y: off(yBg) }} className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute left-1/4 top-10 size-[32rem] rounded-full opacity-40 blur-3xl" style={{ background: "radial-gradient(circle, oklch(0.62 0.17 250 / 0.30), transparent 60%)" }} />
+        <div className="absolute right-1/4 bottom-0 size-[28rem] rounded-full opacity-40 blur-3xl" style={{ background: "radial-gradient(circle, oklch(0.55 0.16 275 / 0.30), transparent 60%)" }} />
+      </motion.div>
+
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+        <motion.div initial={semMovimento ? undefined : { opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ type: "spring", stiffness: 120, damping: 18 }} className="mx-auto max-w-2xl text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Veja o SPA Digital por dentro</h2>
+          <p className="mt-3 text-muted-foreground">Produção, consistência e teto na mesma tela — role para ver as camadas ganharem vida.</p>
+        </motion.div>
+
+        {/* Palco do parallax */}
+        <div className="relative mx-auto mt-14 h-[420px] max-w-4xl sm:h-[460px]">
+          {/* Camada central: mockup do Dashboard */}
+          <motion.div style={{ y: off(yMid), rotate: off(rotMid) }}
+            className="absolute left-1/2 top-4 w-[min(680px,92%)] -translate-x-1/2 rounded-2xl border border-border bg-card p-5 shadow-2xl">
+            <div className="mb-4 flex items-center gap-2">
+              <img src={spaEmblem} alt="" className="size-6 object-contain" />
+              <span className="text-sm font-bold">Dashboard · produção</span>
+            </div>
+            {/* KPIs */}
+            <div className="grid grid-cols-4 gap-2">
+              {[["Procedimentos", "4.026"], ["Atendimentos", "3.322"], ["Unidades", "6"], ["Profissionais", "28"]].map(([l, v], i) => (
+                <div key={l} className={`rounded-xl border p-2.5 ${i === 0 ? "border-primary/30 bg-primary/5" : "border-border bg-muted/40"}`}>
+                  <div className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{l}</div>
+                  <div className={`mt-1 text-base font-bold tabular-nums ${i === 0 ? "text-primary" : "text-foreground"}`}>{v}</div>
+                </div>
+              ))}
+            </div>
+            {/* Barras "produção por unidade" */}
+            <div className="mt-4 flex h-24 items-end gap-2">
+              {[80, 60, 42, 30, 22, 14].map((h, i) => (
+                <div key={i} className="flex-1 rounded-t-md" style={{ height: `${h}%`, background: `var(--color-chart-${(i % 5) + 1})`, opacity: 0.9 }} />
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Camada da frente A: card de Consistência (esquerda) */}
+          <motion.div style={{ y: off(yFrontA) }}
+            className="absolute -left-2 bottom-6 w-56 rounded-2xl border border-border bg-card p-4 shadow-xl sm:left-4">
+            <div className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="size-4" />
+              <span className="text-xs font-bold text-foreground">Consistência da produção</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {["CID obrigatório ausente", "Serviço/classificação faltando", "Folha duplicada"].map((t) => (
+                <div key={t} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="size-1.5 shrink-0 rounded-full bg-amber-500" /> {t}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">Corrija antes de transmitir</div>
+          </motion.div>
+
+          {/* Camada da frente B: card FPO × Produção (direita) */}
+          <motion.div style={{ y: off(yFrontB) }}
+            className="absolute -right-2 top-2 w-60 overflow-hidden rounded-2xl p-4 text-white shadow-xl sm:right-4">
+            <div className="absolute inset-0 -z-10" style={{ background: "linear-gradient(120deg, oklch(0.30 0.07 258), oklch(0.44 0.13 240))" }} />
+            <div className="flex items-center gap-2 text-white/90">
+              <Gauge className="size-4" />
+              <span className="text-xs font-bold">FPO × Produção</span>
+            </div>
+            <div className="mt-3 text-[10px] uppercase tracking-wide text-white/60">Produzido</div>
+            <div className="text-lg font-bold tabular-nums">{brl(5970)}</div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
+              <div className="h-full rounded-full bg-gradient-to-r from-emerald-300 to-emerald-400" style={{ width: "8%" }} />
+            </div>
+            <div className="mt-1 text-[10px] text-white/70">8% do teto · saldo {brl(67004)}</div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function Apresentacao() {
   const semMovimento = useReducedMotion();
@@ -162,6 +259,9 @@ function Apresentacao() {
           ))}
         </motion.div>
       </section>
+
+      {/* ===== Showcase com parallax de camadas ===== */}
+      <ParallaxShowcase semMovimento={semMovimento} />
 
       {/* ===== Módulos ===== */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
