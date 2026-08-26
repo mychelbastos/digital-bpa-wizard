@@ -323,18 +323,21 @@ function Apresentacao() {
         </motion.div>
       </section>
 
-      {/* ===== Faixa de credibilidade ===== */}
-      <section className="border-y border-border/60 bg-muted/30">
-        <motion.div {...reveal} variants={container} className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-8 text-center sm:grid-cols-4 sm:px-6">
+      {/* ===== Faixa de credibilidade (banda azul, degradê padrão do sistema) ===== */}
+      <section className="relative overflow-hidden text-white" style={{ background: "linear-gradient(120deg, oklch(0.30 0.07 258), oklch(0.38 0.11 268), oklch(0.46 0.14 250))" }}>
+        {/* brilho sutil que se move */}
+        <div className="spa-blob pointer-events-none absolute -right-16 -top-24 size-72 rounded-full" style={{ background: "radial-gradient(circle, oklch(0.85 0.1 235 / 0.22), transparent 70%)" }} />
+        <div className="spa-blob spa-blob-2 pointer-events-none absolute -left-16 bottom-[-6rem] size-72 rounded-full" style={{ background: "radial-gradient(circle, oklch(0.72 0.12 178 / 0.18), transparent 70%)" }} />
+        <motion.div {...reveal} variants={container} className="mx-auto grid max-w-6xl grid-cols-2 divide-white/10 px-4 py-10 text-center sm:grid-cols-4 sm:divide-x sm:px-6">
           {[
             ["7 formulários", "num só sistema"],
             ["Layout DATASUS", "arquivo magnético pronto"],
             ["Valida no SIGTAP", "antes de transmitir"],
             ["Multi-prefeitura", "com permissões por vínculo"],
           ].map(([a, b]) => (
-            <motion.div variants={item} key={a}>
-              <div className="text-base font-bold text-foreground sm:text-lg">{a}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{b}</div>
+            <motion.div variants={item} key={a} className="px-2">
+              <div className="text-lg font-bold sm:text-xl">{a}</div>
+              <div className="mt-1 text-xs text-white/70">{b}</div>
             </motion.div>
           ))}
         </motion.div>
