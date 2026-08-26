@@ -1,7 +1,7 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { motion, useReducedMotion, useScroll, useTransform, useSpring, type Variants, type MotionValue } from "motion/react";
+import { motion, useReducedMotion, useScroll, useTransform, useSpring, useInView, useMotionValue, animate, type Variants, type MotionValue } from "motion/react";
 import {
   Stethoscope, Files, HeartPulse, ClipboardCheck, BedDouble, Ambulance, CalendarCheck,
   ShieldCheck, Database, TrendingUp, Gauge, FileBarChart, Upload, Building2,
@@ -47,6 +47,83 @@ const PASSOS = [
 
 const gradPrimario = { background: "linear-gradient(135deg, oklch(0.62 0.17 250), oklch(0.55 0.19 278))" };
 
+// ---- Componentes de animação (padrões do motion.dev/ui) ----
+
+// Scroll-in Counter: conta de 0 até `to` quando entra na viewport (uma vez).
+function CountUp({ to, format, className }: { to: number; format?: (n: number) => string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  const semMovimento = useReducedMotion();
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    if (semMovimento) { setVal(to); return; }
+    const controls = animate(0, to, { duration: 1.4, ease: [0.16, 1, 0.3, 1], onUpdate: (v) => setVal(v) });
+    return () => controls.stop();
+  }, [inView, to, semMovimento]);
+  const fmt = format ?? ((n: number) => Math.round(n).toLocaleString("pt-BR"));
+  return <span ref={ref} className={className}>{fmt(val)}</span>;
+}
+
+// Border Beam: um arco de luz que percorre a borda arredondada de um painel (offset-path).
+function BorderBeam({ radius = 16, duration = 6, size = 90 }: { radius?: number; duration?: number; size?: number }) {
+  const semMovimento = useReducedMotion();
+  if (semMovimento) return null;
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+      <motion.span
+        className="absolute aspect-square rounded-full"
+        style={{
+          width: size,
+          offsetPath: `rect(0 auto auto 0 round ${radius}px)`,
+          background: "radial-gradient(circle, oklch(0.72 0.14 250 / 0.9), oklch(0.6 0.18 280 / 0.35) 40%, transparent 70%)",
+          filter: "blur(2px)",
+        } as React.CSSProperties}
+        animate={{ offsetDistance: ["0%", "100%"] }}
+        transition={{ duration, ease: "linear", repeat: Infinity }}
+      />
+    </div>
+  );
+}
+
+// Spotlight card: um brilho radial segue o cursor dentro do card (scroll-linked spotlight / glow).
+function SpotlightCard({ children, className = "", glow = "oklch(0.62 0.17 250 / 0.14)" }: { children: ReactNode; className?: string; glow?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = ref.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    el.style.setProperty("--my", `${e.clientY - r.top}px`);
+  };
+  return (
+    <div ref={ref} onMouseMove={onMove} className={`group/spot relative ${className}`}>
+      <div className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-300 group-hover/spot:opacity-100"
+        style={{ background: `radial-gradient(240px circle at var(--mx, 50%) var(--my, 0%), ${glow}, transparent 60%)` }} />
+      {children}
+    </div>
+  );
+}
+
+// Magnetic: o elemento é "puxado" na direção do cursor, com mola.
+function Magnetic({ children, strength = 0.35 }: { children: ReactNode; strength?: number }) {
+  const semMovimento = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useSpring(useMotionValue(0), { stiffness: 200, damping: 14, mass: 0.3 });
+  const y = useSpring(useMotionValue(0), { stiffness: 200, damping: 14, mass: 0.3 });
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = ref.current; if (!el || semMovimento) return;
+    const r = el.getBoundingClientRect();
+    x.set((e.clientX - (r.left + r.width / 2)) * strength);
+    y.set((e.clientY - (r.top + r.height / 2)) * strength);
+  };
+  const reset = () => { x.set(0); y.set(0); };
+  return (
+    <motion.div ref={ref} onMouseMove={onMove} onMouseLeave={reset} style={semMovimento ? undefined : { x, y }} className="inline-flex">
+      {children}
+    </motion.div>
+  );
+}
+
 // Seção "por dentro" com PARALLAX DE CAMADAS (inspirado no motion.dev/ui hero-parallax-layers):
 // conforme a seção passa pela viewport, cada camada (fundo, mockup central, cards flutuantes)
 // se move em velocidade diferente. Usa scroll-progress da própria seção, suavizado com spring.
@@ -88,12 +165,12 @@ function ParallaxShowcase({ semMovimento }: { semMovimento: boolean | null }) {
               <img src={spaEmblem} alt="" className="size-6 object-contain" />
               <span className="text-sm font-bold">Dashboard · produção</span>
             </div>
-            {/* KPIs */}
+            {/* KPIs com scroll-in counter */}
             <div className="grid grid-cols-4 gap-2">
-              {[["Procedimentos", "4.026"], ["Atendimentos", "3.322"], ["Unidades", "6"], ["Profissionais", "28"]].map(([l, v], i) => (
+              {([["Procedimentos", 4026], ["Atendimentos", 3322], ["Unidades", 6], ["Profissionais", 28]] as const).map(([l, v], i) => (
                 <div key={l} className={`rounded-xl border p-2.5 ${i === 0 ? "border-primary/30 bg-primary/5" : "border-border bg-muted/40"}`}>
                   <div className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{l}</div>
-                  <div className={`mt-1 text-base font-bold tabular-nums ${i === 0 ? "text-primary" : "text-foreground"}`}>{v}</div>
+                  <CountUp to={v} className={`mt-1 block text-base font-bold tabular-nums ${i === 0 ? "text-primary" : "text-foreground"}`} />
                 </div>
               ))}
             </div>
@@ -126,12 +203,13 @@ function ParallaxShowcase({ semMovimento }: { semMovimento: boolean | null }) {
           <motion.div style={{ y: off(yFrontB) }}
             className="absolute -right-2 top-2 w-60 overflow-hidden rounded-2xl p-4 text-white shadow-xl sm:right-4">
             <div className="absolute inset-0 -z-10" style={{ background: "linear-gradient(120deg, oklch(0.30 0.07 258), oklch(0.44 0.13 240))" }} />
+            <BorderBeam radius={16} duration={5} />
             <div className="flex items-center gap-2 text-white/90">
               <Gauge className="size-4" />
               <span className="text-xs font-bold">FPO × Produção</span>
             </div>
             <div className="mt-3 text-[10px] uppercase tracking-wide text-white/60">Produzido</div>
-            <div className="text-lg font-bold tabular-nums">{brl(5970)}</div>
+            <CountUp to={5970} format={brl} className="block text-lg font-bold tabular-nums" />
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
               <div className="h-full rounded-full bg-gradient-to-r from-emerald-300 to-emerald-400" style={{ width: "8%" }} />
             </div>
@@ -229,14 +307,16 @@ function Apresentacao() {
               BPA-I, BPA-C, RAAS, APAC, AIH, TFD e FPO. O SPA Digital valida sua produção contra o SIGTAP <strong className="text-foreground">antes</strong> de transmitir, gera o arquivo magnético no layout oficial e mostra sua produção em tempo real — reduzindo glosa e retrabalho.
             </motion.p>
             <motion.div variants={item} className="mt-9 flex flex-wrap items-center justify-center gap-3">
-              <motion.button whileHover={semMovimento ? undefined : { y: -3, scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={consultarPreco} className={btnPrimario} style={gradPrimario}>
-                <Tag className="size-4" /> Consultar preço
-              </motion.button>
-              <motion.div whileHover={semMovimento ? undefined : { y: -3 }} whileTap={{ scale: 0.97 }}>
+              <Magnetic>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={consultarPreco} className={btnPrimario} style={gradPrimario}>
+                  <Tag className="size-4" /> Consultar preço
+                </motion.button>
+              </Magnetic>
+              <Magnetic strength={0.25}>
                 <Link to="/" className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted">
                   <LogIn className="size-4" /> Área de membros
                 </Link>
-              </motion.div>
+              </Magnetic>
             </motion.div>
             <motion.p variants={item} className="mt-4 text-xs text-muted-foreground">Acesso restrito a usuários criados pela administração.</motion.p>
           </div>
@@ -271,15 +351,16 @@ function Apresentacao() {
         </motion.div>
         <motion.div {...reveal} variants={container} className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {MODULOS.map((m) => (
-            <motion.div variants={item} whileHover={semMovimento ? undefined : { y: -6 }} key={m.nome}
-              className="group rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-xl">
-              <div className="flex items-center gap-3">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                  <m.icon className="size-5" />
-                </span>
-                <h3 className="text-lg font-bold">{m.nome}</h3>
-              </div>
-              <p className="mt-3 text-sm text-muted-foreground">{m.desc}</p>
+            <motion.div variants={item} whileHover={semMovimento ? undefined : { y: -6 }} key={m.nome}>
+              <SpotlightCard className="group h-full rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-xl">
+                <div className="flex items-center gap-3">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                    <m.icon className="size-5" />
+                  </span>
+                  <h3 className="text-lg font-bold">{m.nome}</h3>
+                </div>
+                <p className="mt-3 text-sm text-muted-foreground">{m.desc}</p>
+              </SpotlightCard>
             </motion.div>
           ))}
         </motion.div>
@@ -294,12 +375,14 @@ function Apresentacao() {
           </motion.div>
           <motion.div {...reveal} variants={container} className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {DIFERENCIAIS.map((d) => (
-              <motion.div variants={item} whileHover={semMovimento ? undefined : { y: -6 }} key={d.titulo} className="rounded-2xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-xl">
-                <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <d.icon className="size-5" />
-                </span>
-                <h3 className="mt-4 text-base font-bold">{d.titulo}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{d.desc}</p>
+              <motion.div variants={item} whileHover={semMovimento ? undefined : { y: -6 }} key={d.titulo}>
+                <SpotlightCard className="h-full rounded-2xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-xl">
+                  <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <d.icon className="size-5" />
+                  </span>
+                  <h3 className="mt-4 text-base font-bold">{d.titulo}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{d.desc}</p>
+                </SpotlightCard>
               </motion.div>
             ))}
           </motion.div>
@@ -372,18 +455,21 @@ function Apresentacao() {
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <motion.div {...reveal} variants={item} className="relative overflow-hidden rounded-3xl px-6 py-16 text-center text-white shadow-[0_24px_60px_-24px_oklch(0.3_0.1_260/0.6)] sm:px-10"
           style={{ background: "linear-gradient(120deg, oklch(0.30 0.07 258), oklch(0.38 0.11 268), oklch(0.46 0.14 250))" }}>
+          <BorderBeam radius={24} duration={7} size={120} />
           <div className="spa-blob pointer-events-none absolute -right-10 -top-16 size-64 rounded-full" style={{ background: "radial-gradient(circle, oklch(0.85 0.1 235 / 0.28), transparent 70%)" }} />
           <h2 className="relative text-3xl font-bold tracking-tight sm:text-4xl">Pronto para reduzir glosa e retrabalho?</h2>
           <p className="relative mx-auto mt-3 max-w-xl text-white/80">Conheça os planos do SPA Digital ou entre na área de membros se você já tem acesso.</p>
           <div className="relative mt-8 flex flex-wrap items-center justify-center gap-3">
-            <motion.button whileHover={semMovimento ? undefined : { y: -3, scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={consultarPreco} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[oklch(0.35_0.1_262)] shadow-lg">
-              <Tag className="size-4" /> Consultar preço
-            </motion.button>
-            <motion.div whileHover={semMovimento ? undefined : { y: -3 }} whileTap={{ scale: 0.97 }}>
+            <Magnetic>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={consultarPreco} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[oklch(0.35_0.1_262)] shadow-lg">
+                <Tag className="size-4" /> Consultar preço
+              </motion.button>
+            </Magnetic>
+            <Magnetic strength={0.25}>
               <Link to="/" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/20">
                 <LogIn className="size-4" /> Área de membros
               </Link>
-            </motion.div>
+            </Magnetic>
           </div>
         </motion.div>
       </section>
