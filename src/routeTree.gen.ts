@@ -25,6 +25,7 @@ import { Route as BpaIV3RouteImport } from './routes/bpa-i-v3'
 import { Route as BpaIV2RouteImport } from './routes/bpa-i-v2'
 import { Route as BpaCV3RouteImport } from './routes/bpa-c-v3'
 import { Route as BpaCV2RouteImport } from './routes/bpa-c-v2'
+import { Route as ApresentacaoRouteImport } from './routes/apresentacao'
 import { Route as ApacRouteImport } from './routes/apac'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -109,6 +110,11 @@ const BpaCV2Route = BpaCV2RouteImport.update({
   path: '/bpa-c-v2',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApresentacaoRoute = ApresentacaoRouteImport.update({
+  id: '/apresentacao',
+  path: '/apresentacao',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApacRoute = ApacRouteImport.update({
   id: '/apac',
   path: '/apac',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/apac': typeof ApacRoute
+  '/apresentacao': typeof ApresentacaoRoute
   '/bpa-c-v2': typeof BpaCV2Route
   '/bpa-c-v3': typeof BpaCV3Route
   '/bpa-i-v2': typeof BpaIV2Route
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/apac': typeof ApacRoute
+  '/apresentacao': typeof ApresentacaoRoute
   '/bpa-c-v2': typeof BpaCV2Route
   '/bpa-c-v3': typeof BpaCV3Route
   '/bpa-i-v2': typeof BpaIV2Route
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/apac': typeof ApacRoute
+  '/apresentacao': typeof ApresentacaoRoute
   '/bpa-c-v2': typeof BpaCV2Route
   '/bpa-c-v3': typeof BpaCV3Route
   '/bpa-i-v2': typeof BpaIV2Route
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/apac'
+    | '/apresentacao'
     | '/bpa-c-v2'
     | '/bpa-c-v3'
     | '/bpa-i-v2'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/apac'
+    | '/apresentacao'
     | '/bpa-c-v2'
     | '/bpa-c-v3'
     | '/bpa-i-v2'
@@ -237,6 +248,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/apac'
+    | '/apresentacao'
     | '/bpa-c-v2'
     | '/bpa-c-v3'
     | '/bpa-i-v2'
@@ -259,6 +271,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   ApacRoute: typeof ApacRoute
+  ApresentacaoRoute: typeof ApresentacaoRoute
   BpaCV2Route: typeof BpaCV2Route
   BpaCV3Route: typeof BpaCV3Route
   BpaIV2Route: typeof BpaIV2Route
@@ -391,6 +404,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BpaCV2RouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/apresentacao': {
+      id: '/apresentacao'
+      path: '/apresentacao'
+      fullPath: '/apresentacao'
+      preLoaderRoute: typeof ApresentacaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/apac': {
       id: '/apac'
       path: '/apac'
@@ -419,6 +439,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   ApacRoute: ApacRoute,
+  ApresentacaoRoute: ApresentacaoRoute,
   BpaCV2Route: BpaCV2Route,
   BpaCV3Route: BpaCV3Route,
   BpaIV2Route: BpaIV2Route,

@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -139,22 +140,32 @@ function AuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// Rotas PÚBLICAS (fora do AuthGate e sem sidebar): a landing page de apresentação.
+// Qualquer outra rota continua exigindo login.
+const ROTAS_PUBLICAS = ["/apresentacao"];
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const publica = ROTAS_PUBLICAS.includes(pathname);
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <AuthGate>
-        <div className="flex min-h-screen">
-          <AppSidebar />
-          {/* pt-[52px] no mobile abre espaço para a barra superior fixa (some no desktop).
-              overflow-x-clip: nenhuma página rola horizontalmente (não quebra o sticky). */}
-          <div className="min-w-0 flex-1 overflow-x-clip pt-[52px] md:pt-0">
-            <Outlet />
+      {publica ? (
+        <Outlet />
+      ) : (
+        <AuthGate>
+          <div className="flex min-h-screen">
+            <AppSidebar />
+            {/* pt-[52px] no mobile abre espaço para a barra superior fixa (some no desktop).
+                overflow-x-clip: nenhuma página rola horizontalmente (não quebra o sticky). */}
+            <div className="min-w-0 flex-1 overflow-x-clip pt-[52px] md:pt-0">
+              <Outlet />
+            </div>
           </div>
-        </div>
-      </AuthGate>
+        </AuthGate>
+      )}
       <Toaster />
     </QueryClientProvider>
   );
