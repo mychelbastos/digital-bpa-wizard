@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX, ChevronDown, Check,
+  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX, ChevronDown, Check, Users,
 } from "lucide-react";
 import {
   carregarProducaoDashboardPeriodo, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo,
@@ -20,6 +20,8 @@ import { coletarErros, resolverRevisaoPaciente, ROTULO_CATEGORIA, type Categoria
 import { csvErros, construirPdfErros } from "@/lib/relatorios/erros-pdf";
 import { carregarInativos, type InativosResultado } from "@/lib/relatorios/inativos";
 import { csvInativos, construirPdfInativos } from "@/lib/relatorios/inativos-pdf";
+import { carregarPerfilCadastro, agregarCid, agregarProcedimentos, agregarPorUnidade } from "@/lib/relatorios/perfil";
+import { construirPdfPerfil } from "@/lib/relatorios/perfil-pdf";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { AlertTriangle } from "lucide-react";
 import {
@@ -133,6 +135,7 @@ function RelatoriosPage() {
   const [nomesEstabCad, setNomesEstabCad] = useState<Record<string, string>>({});
   const [fpoOpen, setFpoOpen] = useState(false);
   const [tfdOpen, setTfdOpen] = useState(false);
+  const [perfilOpen, setPerfilOpen] = useState(false);
   // Erros / crivo
   const TODAS_CATS: CategoriaErro[] = ["producao-sigtap", "ficha-incompleta", "paciente-revisao", "duplicidade"];
   const [categoriasErro, setCategoriasErro] = useState<Set<CategoriaErro>>(new Set(TODAS_CATS));
@@ -602,11 +605,15 @@ function RelatoriosPage() {
               desc="Por unidade e faixa de competência, com agrupamentos. Gera CSV e PDF (timbre)."
               onClick={() => setTfdOpen(true)} />
           )}
+          <RelatorioCard icon={<Users className="size-5" />} titulo="Perfil de pacientes"
+            desc="Faixa etária, sexo, raça/cor, situação de rua + CID e procedimentos. Agregado e anonimizado (LGPD)."
+            onClick={() => setPerfilOpen(true)} />
         </div>
       </div>
 
       {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} cor={cor} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
       {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} cor={cor} onClose={() => setTfdOpen(false)} />}
+      {perfilOpen && <PerfilModal logo={logo} cor={cor} nomeUnidade={nomeUnidade} onClose={() => setPerfilOpen(false)} />}
       {previewNode}
     </div>
   );
@@ -736,6 +743,70 @@ function FpoModal({ unidades, logo, cor, responsavel, onClose }: { unidades: { c
       </div>
       <div className="mt-4 flex justify-end">
         <button onClick={gerar} disabled={gerando || !cnes} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          {gerando ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Gerar PDF (timbre)
+        </button>
+      </div>
+    </ModalRel>
+  );
+}
+
+// ---- Perfil de pacientes (agregado/anonimizado, LGPD): cadastro + perfil clínico do período ----
+function PerfilModal({ logo, cor, nomeUnidade, onClose }: { logo: string | null; cor: string | null; nomeUnidade: (c: string) => string; onClose: () => void }) {
+  const { abrirPreview, previewNode } = usePreviewPdf();
+  const [compDe, setCompDe] = useState(competenciaAtual());
+  const [compAte, setCompAte] = useState(competenciaAtual());
+  const [gerando, setGerando] = useState(false);
+  const K = 5; // limiar de supressão (< 5)
+  const gerar = async () => {
+    setGerando(true);
+    try {
+      const [cadastro, prod] = await Promise.all([
+        carregarPerfilCadastro(),
+        carregarProducaoDashboardPeriodo(compDe, compAte),
+      ]);
+      if (!cadastro) { toast.error("Não foi possível carregar o perfil do cadastro."); return; }
+      const [nomesProc, nomesCid] = await Promise.all([
+        carregarNomesProcedimentos(prod.map((r) => r.procedimento)),
+        carregarDescricoesCid(prod.map((r) => r.cid).filter((c): c is string => !!c)),
+      ]);
+      const nomeProc = (c: string) => nomesProc[c] || null;
+      const rotuloCid = (c: string | null) => { if (!c) return "Sem CID"; const dd = nomesCid[c]; return dd ? `${c} — ${dd}` : c; };
+      const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
+      const pdf = construirPdfPerfil({
+        cadastro,
+        cidTop: agregarCid(prod, rotuloCid),
+        procTop: agregarProcedimentos(prod, nomeProc),
+        porUnidade: agregarPorUnidade(prod, nomeUnidade),
+        periodoLabel, k: K, logo, cor,
+      });
+      abrirPreview(pdf, `perfil-pacientes-${compDe === compAte ? compDe : `${compDe}-${compAte}`}.pdf`, "Perfil de pacientes e atendimentos");
+    } catch { toast.error("Falha ao gerar o relatório de perfil."); }
+    finally { setGerando(false); }
+  };
+  return (
+    <ModalRel titulo="Perfil de pacientes (agregado · anonimizado)" onClose={onClose}>
+      {previewNode}
+      <p className="mb-3 text-xs text-muted-foreground">
+        <strong>Cadastro</strong>: faixa etária, sexo, raça/cor e situação de rua de todos os pacientes.{" "}
+        <strong>Perfil clínico</strong> (CID e procedimentos): do período abaixo. Dados agregados e anonimizados —
+        contagens abaixo de {K} aparecem como “&lt; {K}” (LGPD, art. 12).
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className={lblCls2}>Mês de produção · de</span>
+          <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls2}>
+            {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className={lblCls2}>até</span>
+          <select value={compAte} onChange={(e) => { const v = e.target.value; setCompAte(v); if (v < compDe) setCompDe(v); }} className={selCls2}>
+            {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button onClick={gerar} disabled={gerando} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
           {gerando ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Gerar PDF (timbre)
         </button>
       </div>
