@@ -619,7 +619,7 @@ function RelatoriosPage() {
 
       {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} cor={cor} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
       {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} cor={cor} onClose={() => setTfdOpen(false)} />}
-      {perfilOpen && <PerfilModal logo={logo} cor={cor} nomeUnidade={nomeUnidade} onClose={() => setPerfilOpen(false)} />}
+      {perfilOpen && <PerfilModal logo={logo} cor={cor} unidades={cnesOpcoes} nomeUnidade={nomeUnidade} onClose={() => setPerfilOpen(false)} />}
       {previewNode}
     </div>
   );
@@ -766,21 +766,42 @@ function FpoModal({ unidades, logo, cor, responsavel, onClose }: { unidades: { c
   );
 }
 
-// ---- Perfil de pacientes (agregado/anonimizado, LGPD): cadastro + perfil clínico do período ----
-function PerfilModal({ logo, cor, nomeUnidade, onClose }: { logo: string | null; cor: string | null; nomeUnidade: (c: string) => string; onClose: () => void }) {
+// ---- Perfil de pacientes (agregado/anonimizado, LGPD): seções + filtros ----
+const SECOES_PERFIL = [
+  { key: "faixaSexo", grupo: "Cadastro", label: "Faixa etária × Sexo" },
+  { key: "raca", grupo: "Cadastro", label: "Raça/Cor" },
+  { key: "situacaoRua", grupo: "Cadastro", label: "Situação de rua" },
+  { key: "cid", grupo: "Clínico (período)", label: "CID mais frequentes" },
+  { key: "proc", grupo: "Clínico (período)", label: "Procedimentos mais realizados" },
+  { key: "porUnidade", grupo: "Clínico (período)", label: "Produção por unidade" },
+] as const;
+type SecaoPerfil = (typeof SECOES_PERFIL)[number]["key"];
+
+function PerfilModal({ logo, cor, unidades, nomeUnidade, onClose }: { logo: string | null; cor: string | null; unidades: { cnes: string; nome: string }[]; nomeUnidade: (c: string) => string; onClose: () => void }) {
   const { abrirPreview, previewNode } = usePreviewPdf();
   const [compDe, setCompDe] = useState(competenciaAtual());
   const [compAte, setCompAte] = useState(competenciaAtual());
+  const [cnes, setCnes] = useState("todas");
+  const [tipo, setTipo] = useState<"todos" | "BPA-I" | "BPA-C" | "RAAS">("todos");
+  const [secoes, setSecoes] = useState<Set<SecaoPerfil>>(new Set(SECOES_PERFIL.map((s) => s.key)));
   const [gerando, setGerando] = useState(false);
   const K = 5; // limiar de supressão (< 5)
+  const clinicoSelecionado = secoes.has("cid") || secoes.has("proc") || secoes.has("porUnidade");
+  const toggle = (k: SecaoPerfil) => setSecoes((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+
   const gerar = async () => {
+    if (secoes.size === 0) { toast.error("Selecione ao menos uma informação."); return; }
     setGerando(true);
     try {
-      const [cadastro, prod] = await Promise.all([
-        carregarPerfilCadastro(),
-        carregarProducaoDashboardPeriodo(compDe, compAte),
+      const precisaCadastro = secoes.has("faixaSexo") || secoes.has("raca") || secoes.has("situacaoRua");
+      const [cadastro, prodBruta] = await Promise.all([
+        precisaCadastro ? carregarPerfilCadastro() : Promise.resolve({ total: 0, faixaSexo: [], raca: [], situacaoRua: [] }),
+        clinicoSelecionado ? carregarProducaoDashboardPeriodo(compDe, compAte) : Promise.resolve([]),
       ]);
-      if (!cadastro) { toast.error("Não foi possível carregar o perfil do cadastro."); return; }
+      if (precisaCadastro && !cadastro) { toast.error("Não foi possível carregar o perfil do cadastro."); return; }
+      // Filtros do perfil clínico: unidade e tipo.
+      const prod = prodBruta.filter((r) =>
+        (cnes === "todas" || r.cnes === cnes) && (tipo === "todos" || r.tipo === tipo));
       const [nomesProc, nomesCid] = await Promise.all([
         carregarNomesProcedimentos(prod.map((r) => r.procedimento)),
         carregarDescricoesCid(prod.map((r) => r.cid).filter((c): c is string => !!c)),
@@ -788,41 +809,78 @@ function PerfilModal({ logo, cor, nomeUnidade, onClose }: { logo: string | null;
       const nomeProc = (c: string) => nomesProc[c] || null;
       const rotuloCid = (c: string | null) => { if (!c) return "Sem CID"; const dd = nomesCid[c]; return dd ? `${c} — ${dd}` : c; };
       const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
+      const filtros = [
+        cnes !== "todas" ? `Unidade: ${unidades.find((u) => u.cnes === cnes)?.nome ?? cnes}` : null,
+        tipo !== "todos" ? `Tipo: ${tipo}` : null,
+      ].filter(Boolean).join("  ·  ");
       const pdf = construirPdfPerfil({
-        cadastro,
+        cadastro: cadastro!,
         cidTop: agregarCid(prod, rotuloCid),
         procTop: agregarProcedimentos(prod, nomeProc),
         porUnidade: agregarPorUnidade(prod, nomeUnidade),
-        periodoLabel, k: K, logo, cor,
+        periodoLabel, filtros: filtros || undefined,
+        incluir: { faixaSexo: secoes.has("faixaSexo"), raca: secoes.has("raca"), situacaoRua: secoes.has("situacaoRua"), cid: secoes.has("cid"), proc: secoes.has("proc"), porUnidade: secoes.has("porUnidade") },
+        k: K, logo, cor,
       });
       abrirPreview(pdf, `perfil-pacientes-${compDe === compAte ? compDe : `${compDe}-${compAte}`}.pdf`, "Perfil de pacientes e atendimentos");
     } catch { toast.error("Falha ao gerar o relatório de perfil."); }
     finally { setGerando(false); }
   };
+
   return (
     <ModalRel titulo="Perfil de pacientes (agregado · anonimizado)" onClose={onClose}>
       {previewNode}
       <p className="mb-3 text-xs text-muted-foreground">
-        <strong>Cadastro</strong>: faixa etária, sexo, raça/cor e situação de rua de todos os pacientes.{" "}
-        <strong>Perfil clínico</strong> (CID e procedimentos): do período abaixo. Dados agregados e anonimizados —
-        contagens abaixo de {K} aparecem como “&lt; {K}” (LGPD, art. 12).
+        Escolha as informações e os filtros. Dados agregados e anonimizados — contagens abaixo de {K} aparecem como “&lt; {K}” (LGPD, art. 12).
       </p>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className={lblCls2}>Mês de produção · de</span>
-          <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls2}>
-            {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className={lblCls2}>até</span>
-          <select value={compAte} onChange={(e) => { const v = e.target.value; setCompAte(v); if (v < compDe) setCompDe(v); }} className={selCls2}>
-            {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
-          </select>
-        </label>
+
+      {/* Seleção de seções */}
+      <div className="mb-3">
+        <span className={lblCls2}>Informações no relatório</span>
+        <div className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {SECOES_PERFIL.map((s) => (
+            <label key={s.key} className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm">
+              <input type="checkbox" checked={secoes.has(s.key)} onChange={() => toggle(s.key)} className="size-4 rounded border-border" />
+              <span className="flex-1">{s.label}</span>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.grupo}</span>
+            </label>
+          ))}
+        </div>
       </div>
+
+      {/* Filtros do perfil clínico (só quando alguma seção clínica está marcada) */}
+      {clinicoSelecionado && (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className={lblCls2}>Mês de produção · de</span>
+            <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls2}>
+              {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className={lblCls2}>até</span>
+            <select value={compAte} onChange={(e) => { const v = e.target.value; setCompAte(v); if (v < compDe) setCompDe(v); }} className={selCls2}>
+              {ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className={lblCls2}>Unidade</span>
+            <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}>
+              <option value="todas">Todas as unidades</option>
+              {unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className={lblCls2}>Tipo</span>
+            <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls2}>
+              <option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="BPA-C">BPA-C</option><option value="RAAS">RAAS</option>
+            </select>
+          </label>
+        </div>
+      )}
+
       <div className="mt-4 flex justify-end">
-        <button onClick={gerar} disabled={gerando} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+        <button onClick={gerar} disabled={gerando || secoes.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
           {gerando ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Gerar PDF (timbre)
         </button>
       </div>

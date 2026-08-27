@@ -8,12 +8,18 @@ import { RACAS } from "@/lib/bpa-i-v2/racas";
 const RACA_LABEL = new Map(RACAS.map((r) => [r.code, r.label]));
 const int = (n: number) => n.toLocaleString("pt-BR");
 
+export interface IncluirPerfil {
+  faixaSexo: boolean; raca: boolean; situacaoRua: boolean;
+  cid: boolean; proc: boolean; porUnidade: boolean;
+}
 export interface DadosPerfil {
   cadastro: PerfilCadastro;
   cidTop: ItemContagem[];
   procTop: ItemContagem[];
   porUnidade: ItemContagem[];
   periodoLabel: string;   // rótulo do período da produção (CID/procedimentos)
+  filtros?: string;       // rótulo dos filtros aplicados (unidade/tipo)
+  incluir: IncluirPerfil; // quais seções entram no PDF
   k: number;              // limiar de supressão (ex.: 5)
   logo?: string | null;
   cor?: string | RGB | null;
@@ -31,10 +37,11 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   // Supressão de célula pequena: valores 1..k-1 viram "< k" (0 permanece 0). Anonimização.
   const sup = (n: number) => (n > 0 && n < k ? `< ${k}` : int(n));
 
+  const inc = d.incluir;
   let y = desenharCabecalhoPdf(pdf, {
     logo: d.logo,
     titulo: "Perfil de pacientes e atendimentos",
-    subtitulo: `Cadastro (total) · Perfil clínico: ${d.periodoLabel}`,
+    subtitulo: `Cadastro (total) · Perfil clínico: ${d.periodoLabel}${d.filtros ? `  ·  ${d.filtros}` : ""}`,
     geradoEm: d.geradoEm ?? new Date(),
     cor: d.cor,
   });
@@ -85,7 +92,7 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   const pct = (n: number, tot: number) => (tot > 0 ? `${((n / tot) * 100).toFixed(1).replace(".", ",")}%` : "—");
 
   // ===== 1) Faixa etária × Sexo =====
-  {
+  if (inc.faixaSexo) {
     const sexos = ["F", "M", "-"]; // feminino, masculino, não informado
     const rotSexo: Record<string, string> = { F: "Feminino", M: "Masculino", "-": "Não inf." };
     const mat = new Map<string, Map<string, number>>();
@@ -109,7 +116,7 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   }
 
   // ===== 2) Raça/Cor =====
-  {
+  if (inc.raca) {
     const tot = d.cadastro.raca.reduce((s, r) => s + r.n, 0);
     const linhas = [...d.cadastro.raca].sort((a, b) => b.n - a.n).map((r) => [RACA_LABEL.get(r.raca) ?? (r.raca === "-" ? "Não informado" : r.raca), sup(r.n), r.n < k ? "—" : pct(r.n, tot)]);
     linhas.push(["TOTAL", int(tot), "100%"]);
@@ -118,7 +125,7 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   }
 
   // ===== 3) Situação de rua =====
-  {
+  if (inc.situacaoRua) {
     const map = new Map(d.cadastro.situacaoRua.map((r) => [r.sit, r.n]));
     const tot = d.cadastro.situacaoRua.reduce((s, r) => s + r.n, 0);
     const linhas = [["Em situação de rua", sup(map.get("S") ?? 0), (map.get("S") ?? 0) < k ? "—" : pct(map.get("S") ?? 0, tot)], ["Não", int(map.get("N") ?? 0), pct(map.get("N") ?? 0, tot)]];
@@ -127,19 +134,19 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   }
 
   // ===== 4) CID mais frequentes (produção do período) =====
-  if (d.cidTop.length > 0) {
+  if (inc.cid && d.cidTop.length > 0) {
     tituloSecao("CID mais frequentes", d.periodoLabel);
     const linhas = d.cidTop.map((c) => [c.rotulo, sup(c.n)]);
     desenharTabela([{ titulo: "CID", w: disp - 90, align: "left" }, { titulo: "Qtd.", w: 90, align: "right" }], linhas);
   }
 
   // ===== 5) Procedimentos mais realizados + por unidade =====
-  if (d.procTop.length > 0) {
+  if (inc.proc && d.procTop.length > 0) {
     tituloSecao("Procedimentos mais realizados", d.periodoLabel);
     const linhas = d.procTop.map((p) => [p.rotulo, p.chave, sup(p.n)]);
     desenharTabela([{ titulo: "Procedimento", w: disp - 180, align: "left" }, { titulo: "Código", w: 90, align: "left" }, { titulo: "Qtd.", w: 90, align: "right" }], linhas);
   }
-  if (d.porUnidade.length > 0) {
+  if (inc.porUnidade && d.porUnidade.length > 0) {
     tituloSecao("Produção por unidade", d.periodoLabel);
     const totU = d.porUnidade.reduce((s, u) => s + u.n, 0);
     const linhas = d.porUnidade.map((u) => [u.rotulo, sup(u.n)]);
