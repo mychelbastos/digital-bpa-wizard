@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { jsPDF } from "jspdf";
-import { Download, Printer, X, Loader2 } from "lucide-react";
+import { Download, X, Loader2 } from "lucide-react";
 
 // Modal ÚNICO de pré-visualização de PDF: mostra o relatório num iframe ANTES de baixar.
-// Recebe um jsPDF já construído + o nome do arquivo. Botões: Baixar e Imprimir.
-// Usado por todos os relatórios do sistema para padronizar "ver antes de baixar".
+// O próprio visualizador do navegador (dentro do iframe) já traz Imprimir e Baixar, então o
+// cabeçalho fica só com o título + fechar. Há um "Baixar PDF" de fallback quando a prévia não
+// consegue renderizar (ex.: alguns navegadores mobile).
 export function PreviewPdfModal({ pdf, filename, titulo = "Pré-visualização do relatório", onClose }: {
   pdf: jsPDF;
   filename: string;
@@ -24,10 +25,6 @@ export function PreviewPdfModal({ pdf, filename, titulo = "Pré-visualização d
   }, [onClose, url]);
 
   const baixar = () => { try { pdf.save(filename); } catch { /* noop */ } };
-  const imprimir = () => {
-    // Imprime a partir da própria visualização (mesma URL do blob), sem baixar.
-    try { pdf.autoPrint(); const w = window.open(url, "_blank"); if (!w) baixar(); } catch { baixar(); }
-  };
 
   return (
     <div className="fixed inset-0 z-[90] flex flex-col bg-foreground/50 backdrop-blur-sm sm:p-4" onMouseDown={onClose}>
@@ -36,15 +33,7 @@ export function PreviewPdfModal({ pdf, filename, titulo = "Pré-visualização d
           <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold text-foreground">
             <span className="truncate">{titulo}</span>
           </h2>
-          <div className="flex shrink-0 items-center gap-2">
-            <button onClick={imprimir} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted">
-              <Printer className="size-4" /> <span className="hidden sm:inline">Imprimir</span>
-            </button>
-            <button onClick={baixar} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-              <Download className="size-4" /> Baixar PDF
-            </button>
-            <button onClick={onClose} className="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
-          </div>
+          <button onClick={onClose} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
         </header>
         <div className="relative min-h-0 flex-1 bg-muted/40">
           {carregando && (
@@ -62,7 +51,7 @@ export function PreviewPdfModal({ pdf, filename, titulo = "Pré-visualização d
           )}
         </div>
         <p className="border-t border-border px-4 py-2 text-center text-[11px] text-muted-foreground">
-          Confira o conteúdo antes de baixar. No celular, se a prévia não abrir, use “Baixar PDF”.
+          Use os controles do visualizador acima para imprimir ou baixar o PDF.
         </p>
       </div>
     </div>
