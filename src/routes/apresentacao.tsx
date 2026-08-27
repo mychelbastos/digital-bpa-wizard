@@ -124,6 +124,63 @@ function Magnetic({ children, strength = 0.35 }: { children: ReactNode; strength
   );
 }
 
+// Textura de grão sutil (dá profundidade às seções escuras, como nos sites de referência).
+const GRAO_URI = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E\")";
+function Grao({ opacity = 0.06 }: { opacity?: number }) {
+  return <div aria-hidden className="pointer-events-none absolute inset-0 mix-blend-soft-light" style={{ backgroundImage: GRAO_URI, opacity }} />;
+}
+
+// Eyebrow editorial: rótulo monospace com número (01 · MÓDULOS). `light` para fundos escuros.
+function Eyebrow({ n, children, light = false }: { n: string; children: ReactNode; light?: boolean }) {
+  return (
+    <div className={`inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] ${light ? "text-white/50" : "text-primary/70"}`}>
+      <span className={light ? "text-white/80" : "text-primary"}>{n}</span>
+      <span className={`h-px w-6 ${light ? "bg-white/25" : "bg-primary/30"}`} />
+      {children}
+    </div>
+  );
+}
+
+// Título com revelação por PALAVRA (stagger + blur-in), estilo editorial dos sites de referência.
+function WordReveal({ text, className, gradientFrom }: { text: string; className?: string; gradientFrom?: number }) {
+  const semMovimento = useReducedMotion();
+  const palavras = text.split(" ");
+  return (
+    <motion.h1 className={className} initial="h" whileInView="s" viewport={{ once: true, margin: "-80px" }}
+      transition={{ staggerChildren: semMovimento ? 0 : 0.06 }}>
+      {palavras.map((p, i) => {
+        const grad = gradientFrom != null && i >= gradientFrom;
+        return (
+          <span key={i} className="inline-block overflow-hidden pb-[0.08em] align-top">
+            <motion.span className="inline-block"
+              variants={{ h: semMovimento ? { opacity: 0 } : { opacity: 0, y: "0.5em", filter: "blur(8px)" }, s: { opacity: 1, y: 0, filter: "blur(0px)" } }}
+              transition={{ type: "spring", stiffness: 130, damping: 20 }}>
+              <span className={grad ? "bg-gradient-to-r from-[oklch(0.72_0.15_250)] via-[oklch(0.68_0.18_285)] to-[oklch(0.78_0.13_190)] bg-clip-text text-transparent" : undefined}>{p}</span>
+              {i < palavras.length - 1 ? " " : ""}
+            </motion.span>
+          </span>
+        );
+      })}
+    </motion.h1>
+  );
+}
+
+// Marquee infinito (faixa de palavras que desliza sem parar) — muito usado nos sites de referência.
+function Marquee({ itens }: { itens: string[] }) {
+  const lista = [...itens, ...itens];
+  return (
+    <div className="relative flex overflow-hidden py-4" style={{ maskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)" }}>
+      <div className="flex shrink-0 animate-[spa-marquee_28s_linear_infinite] items-center gap-8 pr-8">
+        {lista.map((t, i) => (
+          <span key={i} className="flex items-center gap-8 whitespace-nowrap text-sm font-semibold uppercase tracking-wider text-white/60">
+            {t} <span className="text-white/25">✦</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Seção "por dentro" com PARALLAX DE CAMADAS (inspirado no motion.dev/ui hero-parallax-layers):
 // conforme a seção passa pela viewport, cada camada (fundo, mockup central, cards flutuantes)
 // se move em velocidade diferente. Usa scroll-progress da própria seção, suavizado com spring.
@@ -152,7 +209,8 @@ function ParallaxShowcase({ semMovimento }: { semMovimento: boolean | null }) {
 
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
         <motion.div initial={semMovimento ? undefined : { opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ type: "spring", stiffness: 120, damping: 18 }} className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Veja o SPA Digital por dentro</h2>
+          <Eyebrow n="00">Por dentro</Eyebrow>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Veja o SPA Digital por dentro</h2>
           <p className="mt-3 text-muted-foreground">Produção, consistência e teto na mesma tela — role para ver as camadas ganharem vida.</p>
         </motion.div>
 
@@ -223,6 +281,14 @@ function ParallaxShowcase({ semMovimento }: { semMovimento: boolean | null }) {
 
 function Apresentacao() {
   const semMovimento = useReducedMotion();
+  // Nav adaptativa: transparente (texto claro) sobre o hero escuro; vira glass clara ao rolar.
+  const [rolou, setRolou] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setRolou(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Variants de revelação no scroll (fade + rise), com stagger para os filhos.
   const container: Variants = {
@@ -251,16 +317,18 @@ function Apresentacao() {
       <style>{`
         @keyframes spa-float { 0%,100%{transform:translate3d(0,0,0) scale(1)} 50%{transform:translate3d(0,-24px,0) scale(1.06)} }
         @keyframes spa-drift { 0%,100%{transform:translate3d(0,0,0)} 50%{transform:translate3d(30px,20px,0)} }
+        @keyframes spa-marquee { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+        @keyframes spa-shimmer { 0%,100%{opacity:.5} 50%{opacity:1} }
         .spa-blob{ will-change: transform; animation: spa-float 12s ease-in-out infinite; }
         .spa-blob-2{ animation: spa-drift 16s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce){ .spa-blob,.spa-blob-2{ animation:none } }
+        @media (prefers-reduced-motion: reduce){ .spa-blob,.spa-blob-2,[class*="spa-marquee"]{ animation:none } }
       `}</style>
 
-      {/* ===== Nav ===== */}
+      {/* ===== Nav (adaptativa) ===== */}
       <motion.header
         initial={semMovimento ? false : { y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 120, damping: 20 }}
-        className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+        className={`fixed inset-x-0 top-0 z-40 transition-colors duration-300 ${rolou ? "border-b border-border/60 bg-background/70 text-foreground backdrop-blur-xl" : "border-b border-transparent bg-transparent text-white"}`}>
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2.5">
             <img src={spaEmblem} alt="SPA Digital" className="size-9 shrink-0 object-contain" />
@@ -268,11 +336,11 @@ function Apresentacao() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={consultarPreco}
-              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex">
+              className={`hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:inline-flex ${rolou ? "text-muted-foreground hover:bg-muted hover:text-foreground" : "text-white/80 hover:bg-white/10 hover:text-white"}`}>
               <Tag className="size-4" /> Consultar preço
             </button>
             <motion.div whileHover={semMovimento ? undefined : { y: -2 }} whileTap={{ scale: 0.97 }}>
-              <Link to="/" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted">
+              <Link to="/" className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-semibold shadow-sm transition-colors ${rolou ? "border-border bg-card text-foreground hover:bg-muted" : "border-white/25 bg-white/10 text-white backdrop-blur hover:bg-white/20"}`}>
                 <LogIn className="size-4" /> Área de membros
               </Link>
             </motion.div>
@@ -280,31 +348,33 @@ function Apresentacao() {
         </nav>
       </motion.header>
 
-      {/* ===== Hero ===== */}
-      <section className="relative overflow-hidden">
-        {/* Aurora animada (blobs que flutuam) */}
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="spa-blob absolute -left-24 -top-24 size-[38rem] rounded-full opacity-60 blur-3xl"
-            style={{ background: "radial-gradient(circle, oklch(0.62 0.17 250 / 0.35), transparent 60%)" }} />
-          <div className="spa-blob spa-blob-2 absolute -right-20 top-10 size-[34rem] rounded-full opacity-50 blur-3xl"
-            style={{ background: "radial-gradient(circle, oklch(0.55 0.16 275 / 0.35), transparent 60%)" }} />
-          <div className="spa-blob absolute bottom-0 left-1/3 size-[28rem] rounded-full opacity-40 blur-3xl"
-            style={{ background: "radial-gradient(circle, oklch(0.72 0.12 178 / 0.30), transparent 60%)", animationDelay: "-6s" }} />
-          {/* grade sutil */}
-          <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "linear-gradient(oklch(0.21 0.03 262) 1px, transparent 1px), linear-gradient(90deg, oklch(0.21 0.03 262) 1px, transparent 1px)", backgroundSize: "44px 44px", maskImage: "radial-gradient(70% 60% at 50% 30%, #000, transparent)" }} />
+      {/* ===== Hero (seção escura dramática) ===== */}
+      <section className="relative overflow-hidden text-white" style={{ background: "linear-gradient(165deg, oklch(0.23 0.05 262), oklch(0.27 0.08 270) 45%, oklch(0.21 0.05 250))" }}>
+        {/* Aurora animada mais viva sobre o escuro */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="spa-blob absolute -left-24 -top-16 size-[40rem] rounded-full opacity-70 blur-3xl"
+            style={{ background: "radial-gradient(circle, oklch(0.62 0.19 255 / 0.55), transparent 60%)" }} />
+          <div className="spa-blob spa-blob-2 absolute -right-24 top-0 size-[38rem] rounded-full opacity-60 blur-3xl"
+            style={{ background: "radial-gradient(circle, oklch(0.55 0.2 290 / 0.5), transparent 60%)" }} />
+          <div className="spa-blob absolute -bottom-10 left-1/3 size-[30rem] rounded-full opacity-50 blur-3xl"
+            style={{ background: "radial-gradient(circle, oklch(0.72 0.14 190 / 0.4), transparent 60%)", animationDelay: "-6s" }} />
+          {/* grade fina + grão */}
+          <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "48px 48px", maskImage: "radial-gradient(75% 65% at 50% 30%, #000, transparent)" }} />
         </div>
+        <Grao opacity={0.08} />
 
-        <motion.div {...reveal} variants={container} className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+        <motion.div {...reveal} variants={container} className="relative mx-auto max-w-6xl px-4 pb-24 pt-32 sm:px-6 sm:pb-32 sm:pt-40">
           <div className="mx-auto max-w-3xl text-center">
-            <motion.span variants={item} className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary">
-              <span className="size-1.5 animate-pulse rounded-full bg-primary" /> Produção ambulatorial do SUS, sem retrabalho
-            </motion.span>
-            <motion.h1 variants={item} className="mt-5 text-4xl font-bold leading-[1.1] tracking-tight sm:text-6xl">
-              Digite, valide e transmita sua produção do SUS{" "}
-              <span className="bg-gradient-to-r from-[oklch(0.62_0.17_250)] via-[oklch(0.55_0.19_278)] to-[oklch(0.72_0.12_178)] bg-clip-text text-transparent">num só lugar</span>
-            </motion.h1>
-            <motion.p variants={item} className="mx-auto mt-6 max-w-2xl text-base text-muted-foreground sm:text-lg">
-              BPA-I, BPA-C, RAAS, APAC, AIH, TFD e FPO. O SPA Digital valida sua produção contra o SIGTAP <strong className="text-foreground">antes</strong> de transmitir, gera o arquivo magnético no layout oficial e mostra sua produção em tempo real — reduzindo glosa e retrabalho.
+            <motion.div variants={item}>
+              <Eyebrow n="•" light>Produção ambulatorial do SUS</Eyebrow>
+            </motion.div>
+            <div className="mt-6">
+              <WordReveal gradientFrom={6}
+                className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl md:text-7xl"
+                text="Digite, valide e transmita sua produção num só lugar" />
+            </div>
+            <motion.p variants={item} className="mx-auto mt-6 max-w-2xl text-base text-white/70 sm:text-lg">
+              BPA-I, BPA-C, RAAS, APAC, AIH, TFD e FPO. O SPA Digital valida sua produção contra o SIGTAP <strong className="text-white">antes</strong> de transmitir, gera o arquivo magnético no layout oficial e mostra sua produção em tempo real — reduzindo glosa e retrabalho.
             </motion.p>
             <motion.div variants={item} className="mt-9 flex flex-wrap items-center justify-center gap-3">
               <Magnetic>
@@ -313,14 +383,19 @@ function Apresentacao() {
                 </motion.button>
               </Magnetic>
               <Magnetic strength={0.25}>
-                <Link to="/" className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted">
+                <Link to="/" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/20">
                   <LogIn className="size-4" /> Área de membros
                 </Link>
               </Magnetic>
             </motion.div>
-            <motion.p variants={item} className="mt-4 text-xs text-muted-foreground">Acesso restrito a usuários criados pela administração.</motion.p>
+            <motion.p variants={item} className="mt-4 text-xs text-white/50">Acesso restrito a usuários criados pela administração.</motion.p>
           </div>
         </motion.div>
+
+        {/* Marquee de palavras-chave desliza no rodapé do hero */}
+        <div className="relative border-t border-white/10">
+          <Marquee itens={["BPA-I", "BPA-C", "RAAS", "APAC", "AIH", "TFD", "FPO", "SIGTAP", "Arquivo magnético", "Menos glosa"]} />
+        </div>
       </section>
 
       {/* ===== Faixa de credibilidade (banda azul, degradê padrão do sistema) ===== */}
@@ -349,7 +424,8 @@ function Apresentacao() {
       {/* ===== Módulos ===== */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <motion.div {...reveal} variants={container} className="mx-auto max-w-2xl text-center">
-          <motion.h2 variants={item} className="text-3xl font-bold tracking-tight sm:text-4xl">Tudo o que sua produção precisa</motion.h2>
+          <motion.div variants={item}><Eyebrow n="01">Módulos</Eyebrow></motion.div>
+          <motion.h2 variants={item} className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Tudo o que sua produção precisa</motion.h2>
           <motion.p variants={item} className="mt-3 text-muted-foreground">Os formulários do dia a dia da atenção ambulatorial, cada um com as regras e o layout oficial.</motion.p>
         </motion.div>
         <motion.div {...reveal} variants={container} className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -369,22 +445,28 @@ function Apresentacao() {
         </motion.div>
       </section>
 
-      {/* ===== Diferenciais ===== */}
-      <section className="border-y border-border/60 bg-muted/30">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+      {/* ===== Diferenciais (seção escura) ===== */}
+      <section className="relative overflow-hidden text-white" style={{ background: "linear-gradient(180deg, oklch(0.22 0.05 262), oklch(0.25 0.07 268) 50%, oklch(0.2 0.04 258))" }}>
+        <div className="pointer-events-none absolute inset-0">
+          <div className="spa-blob absolute -left-20 top-1/4 size-[32rem] rounded-full opacity-40 blur-3xl" style={{ background: "radial-gradient(circle, oklch(0.6 0.19 258 / 0.5), transparent 60%)" }} />
+          <div className="spa-blob spa-blob-2 absolute -right-20 bottom-0 size-[30rem] rounded-full opacity-40 blur-3xl" style={{ background: "radial-gradient(circle, oklch(0.55 0.2 290 / 0.45), transparent 60%)" }} />
+        </div>
+        <Grao opacity={0.08} />
+        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
           <motion.div {...reveal} variants={container} className="mx-auto max-w-2xl text-center">
-            <motion.h2 variants={item} className="text-3xl font-bold tracking-tight sm:text-4xl">Por que o SPA Digital</motion.h2>
-            <motion.p variants={item} className="mt-3 text-muted-foreground">Não é só digitar: é fechar o mês com a produção certa e o menor risco de glosa.</motion.p>
+            <motion.div variants={item}><Eyebrow n="02" light>Diferenciais</Eyebrow></motion.div>
+            <motion.h2 variants={item} className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Por que o SPA Digital</motion.h2>
+            <motion.p variants={item} className="mt-3 text-white/60">Não é só digitar: é fechar o mês com a produção certa e o menor risco de glosa.</motion.p>
           </motion.div>
           <motion.div {...reveal} variants={container} className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {DIFERENCIAIS.map((d) => (
               <motion.div variants={item} whileHover={semMovimento ? undefined : { y: -6 }} key={d.titulo}>
-                <SpotlightCard className="h-full rounded-2xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-xl">
-                  <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <SpotlightCard glow="oklch(0.72 0.16 255 / 0.22)" className="h-full rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-lg backdrop-blur-sm transition-colors hover:border-white/20">
+                  <span className="flex size-11 items-center justify-center rounded-xl bg-white/10 text-[oklch(0.82_0.1_240)]">
                     <d.icon className="size-5" />
                   </span>
-                  <h3 className="mt-4 text-base font-bold">{d.titulo}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{d.desc}</p>
+                  <h3 className="mt-4 text-base font-bold text-white">{d.titulo}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">{d.desc}</p>
                 </SpotlightCard>
               </motion.div>
             ))}
@@ -395,7 +477,8 @@ function Apresentacao() {
       {/* ===== Como funciona ===== */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <motion.div {...reveal} variants={container} className="mx-auto max-w-2xl text-center">
-          <motion.h2 variants={item} className="text-3xl font-bold tracking-tight sm:text-4xl">Do atendimento à transmissão</motion.h2>
+          <motion.div variants={item}><Eyebrow n="03">Como funciona</Eyebrow></motion.div>
+          <motion.h2 variants={item} className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Do atendimento à transmissão</motion.h2>
           <motion.p variants={item} className="mt-3 text-muted-foreground">Um fluxo simples, com a validação no meio do caminho.</motion.p>
         </motion.div>
         <motion.div {...reveal} variants={container} className="relative mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -417,7 +500,8 @@ function Apresentacao() {
         <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
           <div className="grid items-center gap-10 lg:grid-cols-2">
             <motion.div {...reveal} variants={container}>
-              <motion.h2 variants={item} className="text-3xl font-bold tracking-tight sm:text-4xl">Feito para a gestão municipal de saúde</motion.h2>
+              <motion.div variants={item}><Eyebrow n="04">Para quem</Eyebrow></motion.div>
+              <motion.h2 variants={item} className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Feito para a gestão municipal de saúde</motion.h2>
               <motion.p variants={item} className="mt-4 text-muted-foreground">
                 Secretarias e fundações municipais, CAPS, unidades de especialidades e ambulatórios. Cada unidade digita a sua produção; a gestão acompanha tudo, com permissões por vínculo — e a identidade visual da prefeitura nos relatórios.
               </motion.p>
