@@ -168,7 +168,7 @@ export function construirPdfFpo({ nomeUnidade, cnes, competencia, rows, geradoEm
     if (i % 2 === 1) { pdf.setFillColor(247, 248, 250); pdf.rect(x0, y, totalW, 16, "F"); }
     const valores = [
       r.descricao,
-      r.codigoFpo ?? r.procedimento,
+      r.procedimento, // 10 díg. (SIGTAP resolvido); cai no FPO só se não resolveu
       int(r.qtdOrcada),
       int(r.produzido),
       int(r.saldo),
@@ -334,9 +334,11 @@ export function construirPdfFpoPorUnidade({ unidades, competencia, logo, respons
     let y = cabecalhoTabela(108);
     pdf.setFont("helvetica", "normal");
     u.rows.forEach((r, i) => {
-      if (y + 16 > rodapeLimite) { faixaTopo(); y = cabecalhoTabela(24); }
+      // Continuação: começa ABAIXO da faixa verde (0–54). y=70 evita a sobreposição do cabeçalho.
+      if (y + 16 > rodapeLimite) { faixaTopo(); y = cabecalhoTabela(70); }
       if (i % 2 === 1) { pdf.setFillColor(247, 248, 250); pdf.rect(x0, y, totalW, 16, "F"); }
-      const valores = [r.descricao, r.codigoFpo ?? r.procedimento, int(r.qtdOrcada), int(r.produzido), int(r.saldo), brl(r.valorUnitario), brl(r.tetoRS), brl(r.produzidoRS), brl(r.saldoRS)];
+      // Código do procedimento com 10 dígitos (SIGTAP resolvido); cai no FPO só se não resolveu.
+      const valores = [r.descricao, r.procedimento, int(r.qtdOrcada), int(r.produzido), int(r.saldo), brl(r.valorUnitario), brl(r.tetoRS), brl(r.produzidoRS), brl(r.saldoRS)];
       let x = x0;
       COLS.forEach((col, ci) => {
         if ((ci === 4 && r.saldo < 0) || (ci === 8 && r.saldoRS < 0)) pdf.setTextColor(...ROSA);
@@ -346,7 +348,7 @@ export function construirPdfFpoPorUnidade({ unidades, competencia, logo, respons
       pdf.setDrawColor(230, 232, 236); pdf.line(x0, y + 16, x0 + totalW, y + 16);
       y += 16;
     });
-    if (y + 18 > rodapeLimite) { faixaTopo(); y = cabecalhoTabela(24); }
+    if (y + 18 > rodapeLimite) { faixaTopo(); y = cabecalhoTabela(70); }
     linhaTotais(y, "SUBTOTAL " + u.nome.toUpperCase(), somaFpo(u.rows));
   });
 

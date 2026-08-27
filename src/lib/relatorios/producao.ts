@@ -91,7 +91,9 @@ export function construirPdfProducao(d: DadosRelatorioProducao): jsPDF {
     const a = mapa.get(r.procedimento) ?? { cod: r.procedimento, nome: mapas.nomeProc(r.procedimento) || r.procedimento, qtd: 0, atend: 0 };
     a.qtd += r.quantidade; a.atend += 1; mapa.set(r.procedimento, a);
   }
-  const agg = [...mapa.values()].sort((a, b) => b.qtd - a.qtd);
+  // Ordena por CÓDIGO do procedimento (crescente). Os tipos (BPA-I/C/RAAS) ficam juntos numa
+  // lista só — um procedimento é o mesmo procedimento independente do tipo.
+  const agg = [...mapa.values()].sort((a, b) => a.cod.localeCompare(b.cod));
   const totalQtd = rows.reduce((s, r) => s + r.quantidade, 0);
   const totalAtend = rows.length;
   const bpaC = rows.filter((r) => r.tipo === "BPA-C").reduce((s, r) => s + r.quantidade, 0);
