@@ -848,6 +848,12 @@ function PerfilModal({ logo, cor, unidades, nomeUnidade, onClose }: { logo: stri
         </div>
       </div>
 
+      {/* Aviso: filtros só valem para as tabelas clínicas. */}
+      {clinicoSelecionado && (
+        <p className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+          Os filtros abaixo valem só para as tabelas <strong>clínicas</strong> (CID, procedimentos, produção por unidade). As tabelas de <strong>cadastro</strong> (faixa etária, raça/cor, situação de rua) são sempre de todos os pacientes da organização.
+        </p>
+      )}
       {/* Filtros do perfil clínico (só quando alguma seção clínica está marcada) */}
       {clinicoSelecionado && (
         <div className="grid grid-cols-2 gap-3">

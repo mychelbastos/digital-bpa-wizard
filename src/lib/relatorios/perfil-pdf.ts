@@ -111,7 +111,7 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
       linhas.push([f, ...sexos.map((sx) => sup(row.get(sx) ?? 0)), int(totLinha)]);
     }
     linhas.push(["TOTAL", ...sexos.map((sx) => int(totCol[sx])), int(totGeral)]);
-    tituloSecao("Faixa etária × Sexo", `${int(d.cadastro.total)} pacientes cadastrados`);
+    tituloSecao("Faixa etária × Sexo", `${int(d.cadastro.total)} pacientes cadastrados · toda a organização`);
     desenharTabela(cols, linhas, true);
   }
 
