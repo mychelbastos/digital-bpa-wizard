@@ -41,11 +41,13 @@ export function agregarCid(rows: ProducaoBpaRow[], rotuloCid: (c: string | null)
   return [...m.entries()].map(([c, n]) => ({ chave: c, rotulo: rotuloCid(c), n })).sort((a, b) => b.n - a.n).slice(0, topN);
 }
 
-// Procedimentos mais realizados (top N).
+// Procedimentos: seleciona os top N por quantidade, mas EXIBE em ordem crescente de código.
 export function agregarProcedimentos(rows: ProducaoBpaRow[], nomeProc: (c: string) => string | null, topN = 25): ItemContagem[] {
   const m = new Map<string, number>();
   for (const r of rows) { if (!r.procedimento) continue; m.set(r.procedimento, (m.get(r.procedimento) ?? 0) + r.quantidade); }
-  return [...m.entries()].map(([c, n]) => ({ chave: c, rotulo: nomeProc(c) || c, n })).sort((a, b) => b.n - a.n).slice(0, topN);
+  return [...m.entries()].map(([c, n]) => ({ chave: c, rotulo: nomeProc(c) || c, n }))
+    .sort((a, b) => b.n - a.n).slice(0, topN)
+    .sort((a, b) => a.chave.localeCompare(b.chave));
 }
 
 // Produção total por unidade (CNES).

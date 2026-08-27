@@ -17,7 +17,6 @@ export const CODIGOS_TFD: { codigo: string; rotulo: string }[] = [
   { codigo: COD_TFD.ALIM_SEM_PERNOITE_ACOMP, rotulo: "Alimentação s/ pernoite — acompanhante" },
 ];
 const ROTULO_PROC = new Map(CODIGOS_TFD.map((c) => [c.codigo, c.rotulo]));
-const ORDEM_PROC = CODIGOS_TFD.map((c) => c.codigo);
 
 export type AgrupamentoRel = "detalhado" | "competencia" | "paciente" | "profissional" | "destino" | "procedimento";
 export const AGRUPAMENTOS: { valor: AgrupamentoRel; rotulo: string }[] = [
@@ -70,7 +69,8 @@ export function montarRelatorioTfd(rows: TfdRelatorioRow[], status: "" | TfdStat
         gp.set(l.codigo, cur);
       }
     }
-    const linhasProc = [...gp.entries()].sort((a, b) => ORDEM_PROC.indexOf(a[0]) - ORDEM_PROC.indexOf(b[0]));
+    // Ordem crescente do código do procedimento (padrão dos relatórios).
+    const linhasProc = [...gp.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     return {
       colunas: ["Procedimento", "Código", "Quantidade", "Total"],
       dados: linhasProc.map(([cod, v]) => [ROTULO_PROC.get(cod) ?? cod, cod, String(v.qtd), brl(v.total)]),
