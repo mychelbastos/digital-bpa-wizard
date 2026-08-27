@@ -2,11 +2,11 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   Home, FileText, FolderOpen, CalendarCheck, FileSpreadsheet, Database, UserCog, LogOut,
-  ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X, PanelLeftClose, PanelLeftOpen,
+  ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X, PanelLeftClose, PanelLeftOpen, Lock,
 } from "lucide-react";
 import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
 import spaEmblem from "@/assets/spa-emblem.png";
-import { souAdmin } from "@/lib/permissoes";
+import { souAdmin, usePermissoes } from "@/lib/permissoes";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { CNES_TFD } from "@/lib/tfd/tfd";
 
@@ -33,6 +33,7 @@ const linkBase = "flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13.5p
 function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onColapsar?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useAuthUser();
+  const { pode } = usePermissoes();
   const [formOpen, setFormOpen] = useState(true);
   const [podeAdmin, setPodeAdmin] = useState(false);
   const [podeTfd, setPodeTfd] = useState(false);
@@ -49,6 +50,25 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
     `${linkBase} ${active ? "font-semibold text-white shadow-[0_8px_18px_-10px_oklch(0.5_0.18_262/0.8)]" : "text-slate-300/90 hover:bg-white/5 hover:text-white"}`;
   const styleAtivo = (active: boolean) => (active ? { background: BG_ATIVO } : undefined);
   const tituloSecao = "px-3 pb-2.5 pt-1 text-[10.5px] font-bold uppercase tracking-[0.08em] text-slate-400/70";
+
+  // Entrada de menu que respeita permissão: com acesso vira Link; sem acesso fica com cadeado,
+  // não navega e mostra tooltip (padrão "não clica + tooltip").
+  const Entrada = ({ to, perm, icon, label, search }: { to: string; perm: string; icon: React.ReactNode; label: string; search?: Record<string, unknown> }) => {
+    if (!pode(perm)) {
+      return (
+        <div title="Sem permissão — fale com o gestor" aria-disabled="true"
+          className={`${linkBase} cursor-not-allowed text-slate-500/60`}>
+          {icon} <span className="flex-1">{label}</span> <Lock className="size-3.5 shrink-0 opacity-70" />
+        </div>
+      );
+    }
+    const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
+    return (
+      <Link to={to} search={search as never} onClick={onNavegar} className={item(active)} style={styleAtivo(active)}>
+        {icon} {label}
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -71,22 +91,28 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto">
-        <Link to="/" onClick={onNavegar} className={item(pathname === "/")} style={styleAtivo(pathname === "/")}>
-          <Home className="size-4 shrink-0" /> Início
-        </Link>
+        <Entrada to="/" perm="ver_dashboard" icon={<Home className="size-4 shrink-0" />} label="Início" />
 
         <div className="pt-3">
-          <button type="button" onClick={() => setFormOpen((o) => !o)} className={`${item(formActive && !formOpen)} w-full justify-between`} style={styleAtivo(formActive && !formOpen)}>
-            <span className="flex items-center gap-2.5"><Files className="size-4 shrink-0" /> Formulários</span>
-            <ChevronDown className={`size-4 shrink-0 transition-transform ${formOpen ? "" : "-rotate-90"}`} />
-          </button>
-          {formOpen && (
-            <div className="mt-0.5 space-y-0.5">
-              {formularios.map((f) => (
-                <Link key={f.to} to={f.to} onClick={onNavegar} className={`${item(pathname.startsWith(f.to))} pl-8`} style={styleAtivo(pathname.startsWith(f.to))}>
-                  <FileText className="size-4 shrink-0" /> {f.label}
-                </Link>
-              ))}
+          {pode("ver_formularios") ? (
+            <>
+              <button type="button" onClick={() => setFormOpen((o) => !o)} className={`${item(formActive && !formOpen)} w-full justify-between`} style={styleAtivo(formActive && !formOpen)}>
+                <span className="flex items-center gap-2.5"><Files className="size-4 shrink-0" /> Formulários</span>
+                <ChevronDown className={`size-4 shrink-0 transition-transform ${formOpen ? "" : "-rotate-90"}`} />
+              </button>
+              {formOpen && (
+                <div className="mt-0.5 space-y-0.5">
+                  {formularios.map((f) => (
+                    <Link key={f.to} to={f.to} onClick={onNavegar} className={`${item(pathname.startsWith(f.to))} pl-8`} style={styleAtivo(pathname.startsWith(f.to))}>
+                      <FileText className="size-4 shrink-0" /> {f.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div title="Sem permissão — fale com o gestor" aria-disabled="true" className={`${linkBase} cursor-not-allowed text-slate-500/60`}>
+              <Files className="size-4 shrink-0" /> <span className="flex-1">Formulários</span> <Lock className="size-3.5 shrink-0 opacity-70" />
             </div>
           )}
         </div>
@@ -94,11 +120,11 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
         {podeTfd && <Link to="/tfd" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/tfd"))} style={styleAtivo(pathname.startsWith("/tfd"))}><Ambulance className="size-4 shrink-0" /> TFD</Link>}
 
         <div className="mt-3 space-y-0.5 border-t border-white/10 pt-3">
-          <Link to="/minhas-fichas" onClick={onNavegar} className={item(pathname.startsWith("/minhas-fichas"))} style={styleAtivo(pathname.startsWith("/minhas-fichas"))}><FolderOpen className="size-4 shrink-0" /> Minhas fichas</Link>
-          <Link to="/relatorios" onClick={onNavegar} className={item(pathname.startsWith("/relatorios"))} style={styleAtivo(pathname.startsWith("/relatorios"))}><FileBarChart className="size-4 shrink-0" /> Relatórios</Link>
-          <Link to="/fpo" search={{}} onClick={onNavegar} className={item(pathname.startsWith("/fpo"))} style={styleAtivo(pathname.startsWith("/fpo"))}><FileSpreadsheet className="size-4 shrink-0" /> FPO (Orçamento)</Link>
-          <Link to="/fechamento" onClick={onNavegar} className={item(pathname.startsWith("/fechamento"))} style={styleAtivo(pathname.startsWith("/fechamento"))}><CalendarCheck className="size-4 shrink-0" /> Exportar produção</Link>
-          <Link to="/importar" onClick={onNavegar} className={item(pathname.startsWith("/importar"))} style={styleAtivo(pathname.startsWith("/importar"))}><Database className="size-4 shrink-0" /> Importar produção</Link>
+          <Entrada to="/minhas-fichas" perm="ver_minhas_fichas" icon={<FolderOpen className="size-4 shrink-0" />} label="Minhas fichas" />
+          <Entrada to="/relatorios" perm="ver_relatorios" icon={<FileBarChart className="size-4 shrink-0" />} label="Relatórios" />
+          <Entrada to="/fpo" perm="ver_fpo" search={{}} icon={<FileSpreadsheet className="size-4 shrink-0" />} label="FPO (Orçamento)" />
+          <Entrada to="/fechamento" perm="ver_exportar" icon={<CalendarCheck className="size-4 shrink-0" />} label="Exportar produção" />
+          <Entrada to="/importar" perm="ver_importar" icon={<Database className="size-4 shrink-0" />} label="Importar produção" />
           {podeAdmin && <Link to="/admin" onClick={onNavegar} className={item(pathname.startsWith("/admin"))} style={styleAtivo(pathname.startsWith("/admin"))}><ShieldCheck className="size-4 shrink-0" /> Administração</Link>}
         </div>
         <div className={tituloSecao + " sr-only"}>fim</div>

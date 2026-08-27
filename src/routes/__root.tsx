@@ -17,6 +17,8 @@ import { useAuthState } from "@/lib/bpa-i-v2/auth";
 import { LoginScreen } from "@/components/LoginScreen";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { usePermissoes } from "@/lib/permissoes";
+import { Lock } from "lucide-react";
 
 function NotFoundComponent() {
   return (
@@ -144,6 +146,44 @@ function AuthGate({ children }: { children: ReactNode }) {
 // Qualquer outra rota continua exigindo login.
 const ROTAS_PUBLICAS = ["/apresentacao"];
 
+// Mapa rota → permissão de menu exigida. Rotas ausentes não exigem permissão nova.
+const FORMULARIOS_PREFIXOS = ["/laudo-aih", "/apac", "/bpa-c-v3", "/bpa-i-v3", "/raas"];
+function permDaRota(pathname: string): string | null {
+  if (pathname === "/") return "ver_dashboard";
+  if (pathname.startsWith("/minhas-fichas")) return "ver_minhas_fichas";
+  if (pathname.startsWith("/relatorios")) return "ver_relatorios";
+  if (pathname.startsWith("/fpo")) return "ver_fpo";
+  if (pathname.startsWith("/fechamento")) return "ver_exportar";
+  if (pathname.startsWith("/importar")) return "ver_importar";
+  if (FORMULARIOS_PREFIXOS.some((p) => pathname.startsWith(p))) return "ver_formularios";
+  return null;
+}
+
+// Bloqueia a rota se o usuário não tem a permissão exigida. Enquanto carrega mostra spinner
+// (não pisca conteúdo p/ quem está bloqueado). Sem permissão → tela "Sem acesso".
+function GateRota({ children }: { children: ReactNode }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { pode, carregando } = usePermissoes();
+  const perm = permDaRota(pathname);
+  if (!perm) return <>{children}</>;
+  if (carregando) {
+    return <div className="flex min-h-[60vh] items-center justify-center"><div className="size-7 animate-spin rounded-full border-2 border-muted border-t-primary" /></div>;
+  }
+  if (!pode(perm)) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground"><Lock className="size-7" /></div>
+          <h1 className="mt-5 text-xl font-bold text-foreground">Sem acesso a esta página</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Seu perfil não tem permissão para acessar esta seção. Se precisar, fale com o gestor/administrador da sua organização para liberar o acesso.</p>
+          <Link to="/" className="mt-6 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Voltar ao início</Link>
+        </div>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -161,7 +201,7 @@ function RootComponent() {
             {/* pt-[52px] no mobile abre espaço para a barra superior fixa (some no desktop).
                 overflow-x-clip: nenhuma página rola horizontalmente (não quebra o sticky). */}
             <div className="min-w-0 flex-1 overflow-x-clip pt-[52px] md:pt-0">
-              <Outlet />
+              <GateRota><Outlet /></GateRota>
             </div>
           </div>
         </AuthGate>

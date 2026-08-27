@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX, ChevronDown, Check, Users,
+  FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX, ChevronDown, Check, Users, Lock,
 } from "lucide-react";
+import { usePermissoes } from "@/lib/permissoes";
 import {
   carregarProducaoDashboardPeriodo, carregarNomesProcedimentos, carregarDescricoesCid, carregarDescricoesCbo,
   carregarVinculosUsuario, type ProducaoBpaRow,
@@ -117,6 +118,7 @@ function MultiSelect({ titulo, opcoes, sel, onChange, allLabel = "Todos", comCod
 
 function RelatoriosPage() {
   const user = useAuthUser();
+  const { pode } = usePermissoes();
   const { abrirPreview, previewNode } = usePreviewPdf();
   // Período de produção (AAAAMM). compDe==compAte = um mês só (comportamento antigo).
   const [compDe, setCompDe] = useState(competenciaAtual());
@@ -427,15 +429,18 @@ function RelatoriosPage() {
 
           {/* Ações */}
           <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={baixarCsvProd} disabled={loading || filtradas.length === 0}
+            {!pode("emitir_rel_producao") && (
+              <span className="inline-flex items-center gap-1.5 self-center rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground" title="Sem permissão — fale com o gestor"><Lock className="size-3.5" /> Sem permissão para emitir</span>
+            )}
+            <button onClick={baixarCsvProd} disabled={loading || filtradas.length === 0 || !pode("emitir_rel_producao")}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50">
               <Download className="size-4" /> Baixar CSV
             </button>
-            <button onClick={baixarPdfProd} disabled={loading || filtradas.length === 0}
+            <button onClick={baixarPdfProd} disabled={loading || filtradas.length === 0 || !pode("emitir_rel_producao")}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
               <FileText className="size-4" /> Gerar PDF (timbre)
             </button>
-            <button onClick={imprimirFichas} disabled={loading || filtradas.length === 0}
+            <button onClick={imprimirFichas} disabled={loading || filtradas.length === 0 || !pode("emitir_rel_producao")}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50">
               <Printer className="size-4" /> Imprimir fichas
             </button>
@@ -471,8 +476,9 @@ function RelatoriosPage() {
                 <select value={filtroGrav} onChange={(e) => setFiltroGrav(e.target.value as typeof filtroGrav)} className={selCls + " ml-auto max-w-[10rem]"}>
                   <option value="todas">Todos</option><option value="erro">Só erros</option><option value="aviso">Só avisos</option>
                 </select>
-                <button onClick={baixarCsvErros} disabled={errosFiltrados.length === 0} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><Download className="size-4" /> CSV</button>
-                <button onClick={baixarPdfErros} disabled={errosFiltrados.length === 0} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><FileText className="size-4" /> PDF</button>
+                {!pode("emitir_rel_consistencia") && <span className="inline-flex items-center gap-1 self-center text-xs text-muted-foreground" title="Sem permissão — fale com o gestor"><Lock className="size-3.5" /> sem permissão</span>}
+                <button onClick={baixarCsvErros} disabled={errosFiltrados.length === 0 || !pode("emitir_rel_consistencia")} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><Download className="size-4" /> CSV</button>
+                <button onClick={baixarPdfErros} disabled={errosFiltrados.length === 0 || !pode("emitir_rel_consistencia")} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><FileText className="size-4" /> PDF</button>
               </>
             )}
           </div>
@@ -550,8 +556,8 @@ function RelatoriosPage() {
                   <b className="text-amber-600">{inativos.rows.filter((r) => r.situacao === "sumiu").length}</b> sem produção no mês
                   {inaIncluirRoster && <> · <b className="text-muted-foreground">{inativos.rows.filter((r) => r.situacao === "nunca").length}</b> nunca lançaram</>}
                 </span>
-                <button onClick={baixarCsvInativos} disabled={!inativos.rows.length} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><Download className="size-4" /> CSV</button>
-                <button onClick={baixarPdfInativos} disabled={!inativos.rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><FileText className="size-4" /> PDF</button>
+                <button onClick={baixarCsvInativos} disabled={!inativos.rows.length || !pode("emitir_rel_inativos")} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><Download className="size-4" /> CSV</button>
+                <button onClick={baixarPdfInativos} disabled={!inativos.rows.length || !pode("emitir_rel_inativos")} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><FileText className="size-4" /> PDF</button>
               </>
             )}
           </div>
@@ -599,15 +605,15 @@ function RelatoriosPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <RelatorioCard icon={<FileSpreadsheet className="size-5" />} titulo="FPO × Produção"
             desc="Orçamento vs. produção por unidade e competência. Gera PDF (timbre)."
-            onClick={() => setFpoOpen(true)} />
+            bloqueado={!pode("emitir_rel_fpo")} onClick={() => setFpoOpen(true)} />
           {podeTfd && (
             <RelatorioCard icon={<Ambulance className="size-5" />} titulo="TFD"
               desc="Por unidade e faixa de competência, com agrupamentos. Gera CSV e PDF (timbre)."
-              onClick={() => setTfdOpen(true)} />
+              bloqueado={!pode("emitir_rel_tfd")} onClick={() => setTfdOpen(true)} />
           )}
           <RelatorioCard icon={<Users className="size-5" />} titulo="Perfil de pacientes"
             desc="Faixa etária, sexo, raça/cor, situação de rua + CID e procedimentos. Agregado e anonimizado (LGPD)."
-            onClick={() => setPerfilOpen(true)} />
+            bloqueado={!pode("emitir_rel_perfil")} onClick={() => setPerfilOpen(true)} />
         </div>
       </div>
 
@@ -630,7 +636,17 @@ function MiniStat({ label, value, destaque = false, loading = false }: { label: 
   );
 }
 
-function RelatorioCard({ icon, titulo, desc, onClick }: { icon: React.ReactNode; titulo: string; desc: string; onClick: () => void }) {
+function RelatorioCard({ icon, titulo, desc, onClick, bloqueado = false }: { icon: React.ReactNode; titulo: string; desc: string; onClick: () => void; bloqueado?: boolean }) {
+  if (bloqueado) {
+    return (
+      <div title="Sem permissão — fale com o gestor" className="relative flex cursor-not-allowed flex-col rounded-2xl border border-border bg-muted/40 p-5 text-left opacity-70">
+        <span className="mb-2 flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">{icon}</span>
+        <span className="text-sm font-bold text-muted-foreground">{titulo}</span>
+        <span className="mt-1 text-xs text-muted-foreground">{desc}</span>
+        <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground"><Lock className="size-3.5" /> Sem permissão</span>
+      </div>
+    );
+  }
   return (
     <button type="button" onClick={onClick} className="group flex flex-col rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5">
       <span className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">{icon}</span>
