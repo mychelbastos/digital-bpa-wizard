@@ -17,6 +17,7 @@ import {
   Plus,
   X,
   Landmark,
+  Trash2,
 } from "lucide-react";
 import {
   listarVinculosAdmin,
@@ -29,6 +30,7 @@ import {
   estabelecimentosOrg,
   vincularUnidade,
   desvincularUnidade,
+  excluirPessoa,
   criarConta,
   listarOrganizacoes,
   salvarOrganizacao,
@@ -290,6 +292,27 @@ function Admin() {
     }
   };
 
+  // Exclui a pessoa (remove todos os vínculos da org). Ação destrutiva — dupla confirmação.
+  const excluir = async (pessoa: PessoaAdmin) => {
+    if (protegido(pessoa.user_id)) return avisarProtegido();
+    if (!window.confirm(
+      `Excluir o usuário ${pessoa.email} desta organização?\n\n` +
+      "Todos os vínculos e permissões dele serão REMOVIDOS e o acesso, encerrado. " +
+      "A conta de login continua existindo, mas sem acesso a nada. Esta ação não pode ser desfeita aqui.",
+    )) return;
+    const chave = `${pessoa.user_id}:excluir`;
+    setSalvando(chave);
+    try {
+      await excluirPessoa(pessoa.user_id, pessoa.organizacao_id);
+      await recarregar();
+      toast.success(`Usuário ${pessoa.email} excluído da organização.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao excluir o usuário.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
   const criarContaNova = async (email: string, senha: string, cnes: string, papel: string) => {
     setSalvando("criar-conta");
     try {
@@ -492,6 +515,7 @@ function Admin() {
                           onToggleVinculo={toggleVinculo}
                           onVincular={vincular}
                           onDesvincular={desvincular}
+                          onExcluir={excluir}
                         />
                       ))
                     )}
@@ -1229,6 +1253,7 @@ function PessoaCard({
   onToggleVinculo,
   onVincular,
   onDesvincular,
+  onExcluir,
 }: {
   pessoa: PessoaAdmin;
   ehDono: boolean;
@@ -1245,6 +1270,7 @@ function PessoaCard({
   onToggleVinculo: (v: VinculoAdmin, perm: PermissaoCat) => void;
   onVincular: (p: PessoaAdmin, cnes: string, papel: string) => void;
   onDesvincular: (p: PessoaAdmin, cnes: string) => void;
+  onExcluir: (p: PessoaAdmin) => void;
 }) {
   const [abrirUnidades, setAbrirUnidades] = useState(false);
   const [addAberto, setAddAberto] = useState(false);
@@ -1277,6 +1303,16 @@ function PessoaCard({
             )}
           </div>
           <div className="text-xs text-muted-foreground">{pessoa.org_nome}</div>
+          {!ehDono && (
+            <button
+              type="button"
+              onClick={() => onExcluir(pessoa)}
+              disabled={salvando === `${pessoa.user_id}:excluir`}
+              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 transition-colors hover:text-rose-700 hover:underline disabled:opacity-50"
+            >
+              <Trash2 className="size-3.5" /> Excluir usuário
+            </button>
+          )}
         </div>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Cargo

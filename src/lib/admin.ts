@@ -254,6 +254,13 @@ export async function trocarCargoPessoa(
   if (error) throw new Error(error.message);
 }
 
+// Exclui a pessoa da organização: remove TODOS os vínculos (revoga acesso e some da lista).
+export async function excluirPessoa(userId: string, orgId: string): Promise<void> {
+  if (!supabase) throw new Error("Sem conexão.");
+  const { error } = await supabase.rpc("admin_excluir_pessoa", { _user: userId, _org: orgId });
+  if (error) throw new Error(error.message);
+}
+
 // concedida: true = concede override; false = revoga override; null = limpa (volta ao papel).
 export async function definirPermissao(
   vinculoId: string,
