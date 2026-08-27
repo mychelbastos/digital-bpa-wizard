@@ -11,18 +11,38 @@ export interface PerfilCadastro {
   situacaoRua: { sit: string; n: number }[];
 }
 
+// Normaliza o jsonb devolvido pelas RPCs de perfil (mesmo formato nas duas).
+function normalizarPerfil(data: unknown): PerfilCadastro {
+  const d = data as { total: number; faixa_sexo: { faixa: string; sexo: string; n: number }[]; raca: { raca: string; n: number }[]; situacao_rua: { sit: string; n: number }[] };
+  return {
+    total: d.total ?? 0,
+    faixaSexo: (d.faixa_sexo ?? []).map((r) => ({ faixa: r.faixa, sexo: r.sexo, n: Number(r.n) })),
+    raca: (d.raca ?? []).map((r) => ({ raca: r.raca, n: Number(r.n) })),
+    situacaoRua: (d.situacao_rua ?? []).map((r) => ({ sit: r.sit, n: Number(r.n) })),
+  };
+}
+
+// Perfil de TODOS os pacientes cadastrados na organização.
 export async function carregarPerfilCadastro(): Promise<PerfilCadastro | null> {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase.rpc("perfil_pacientes_agregado");
-    if (error || !data) return null;
-    const d = data as { total: number; faixa_sexo: { faixa: string; sexo: string; n: number }[]; raca: { raca: string; n: number }[]; situacao_rua: { sit: string; n: number }[] };
-    return {
-      total: d.total ?? 0,
-      faixaSexo: (d.faixa_sexo ?? []).map((r) => ({ faixa: r.faixa, sexo: r.sexo, n: Number(r.n) })),
-      raca: (d.raca ?? []).map((r) => ({ raca: r.raca, n: Number(r.n) })),
-      situacaoRua: (d.situacao_rua ?? []).map((r) => ({ sit: r.sit, n: Number(r.n) })),
-    };
+    return error || !data ? null : normalizarPerfil(data);
+  } catch {
+    return null;
+  }
+}
+
+// Perfil dos pacientes ATENDIDOS no recorte (unidade/competência/tipo). BPA-I + RAAS; cada
+// paciente conta uma vez (distinct por CNS). cnesList vazio = todas as unidades.
+export async function carregarPerfilAtendidos(cnesList: string[], de: string, ate: string, tipo: string): Promise<PerfilCadastro | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.rpc("perfil_atendidos_agregado", {
+      _cnes: cnesList.length ? cnesList : null,
+      _de: de, _ate: ate, _tipo: tipo,
+    });
+    return error || !data ? null : normalizarPerfil(data);
   } catch {
     return null;
   }

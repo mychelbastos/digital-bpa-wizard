@@ -19,6 +19,7 @@ export interface DadosPerfil {
   porUnidade: ItemContagem[];
   periodoLabel: string;   // rótulo do período da produção (CID/procedimentos)
   filtros?: string;       // rótulo dos filtros aplicados (unidade/tipo)
+  cadastroEscopo?: string; // "toda a organização" (padrão) | "atendidos no filtro"
   incluir: IncluirPerfil; // quais seções entram no PDF
   k: number;              // limiar de supressão (ex.: 5)
   logo?: string | null;
@@ -111,7 +112,8 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
       linhas.push([f, ...sexos.map((sx) => sup(row.get(sx) ?? 0)), int(totLinha)]);
     }
     linhas.push(["TOTAL", ...sexos.map((sx) => int(totCol[sx])), int(totGeral)]);
-    tituloSecao("Faixa etária × Sexo", `${int(d.cadastro.total)} pacientes cadastrados · toda a organização`);
+    const escopo = d.cadastroEscopo ?? "toda a organização";
+    tituloSecao("Faixa etária × Sexo", `${int(d.cadastro.total)} pacientes · ${escopo}`);
     desenharTabela(cols, linhas, true);
   }
 

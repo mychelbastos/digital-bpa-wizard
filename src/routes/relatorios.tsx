@@ -21,7 +21,7 @@ import { coletarErros, resolverRevisaoPaciente, ROTULO_CATEGORIA, type Categoria
 import { csvErros, construirPdfErros } from "@/lib/relatorios/erros-pdf";
 import { carregarInativos, type InativosResultado } from "@/lib/relatorios/inativos";
 import { csvInativos, construirPdfInativos } from "@/lib/relatorios/inativos-pdf";
-import { carregarPerfilCadastro, agregarCid, agregarProcedimentos, agregarPorUnidade } from "@/lib/relatorios/perfil";
+import { carregarPerfilCadastro, carregarPerfilAtendidos, agregarCid, agregarProcedimentos, agregarPorUnidade } from "@/lib/relatorios/perfil";
 import { construirPdfPerfil } from "@/lib/relatorios/perfil-pdf";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { AlertTriangle } from "lucide-react";
@@ -783,19 +783,30 @@ function PerfilModal({ logo, cor, unidades, nomeUnidade, onClose }: { logo: stri
   const [compAte, setCompAte] = useState(competenciaAtual());
   const [cnes, setCnes] = useState("todas");
   const [tipo, setTipo] = useState<"todos" | "BPA-I" | "BPA-C" | "RAAS">("todos");
+  const [baseCad, setBaseCad] = useState<"org" | "atendidos">("org");
   const [secoes, setSecoes] = useState<Set<SecaoPerfil>>(new Set(SECOES_PERFIL.map((s) => s.key)));
   const [gerando, setGerando] = useState(false);
   const K = 5; // limiar de supressão (< 5)
   const clinicoSelecionado = secoes.has("cid") || secoes.has("proc") || secoes.has("porUnidade");
+  const cadastroSelecionado = secoes.has("faixaSexo") || secoes.has("raca") || secoes.has("situacaoRua");
+  // Os filtros (período/unidade/tipo) aparecem quando há seção clínica OU quando o cadastro
+  // usa a base "atendidos no filtro".
+  const mostrarFiltros = clinicoSelecionado || (cadastroSelecionado && baseCad === "atendidos");
   const toggle = (k: SecaoPerfil) => setSecoes((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
   const gerar = async () => {
     if (secoes.size === 0) { toast.error("Selecione ao menos uma informação."); return; }
     setGerando(true);
     try {
-      const precisaCadastro = secoes.has("faixaSexo") || secoes.has("raca") || secoes.has("situacaoRua");
+      const cnesList = cnes === "todas" ? [] : [cnes];
+      const precisaCadastro = cadastroSelecionado;
+      const cadastroPromise = !precisaCadastro
+        ? Promise.resolve({ total: 0, faixaSexo: [], raca: [], situacaoRua: [] })
+        : baseCad === "atendidos"
+          ? carregarPerfilAtendidos(cnesList, compDe, compAte, tipo)
+          : carregarPerfilCadastro();
       const [cadastro, prodBruta] = await Promise.all([
-        precisaCadastro ? carregarPerfilCadastro() : Promise.resolve({ total: 0, faixaSexo: [], raca: [], situacaoRua: [] }),
+        cadastroPromise,
         clinicoSelecionado ? carregarProducaoDashboardPeriodo(compDe, compAte) : Promise.resolve([]),
       ]);
       if (precisaCadastro && !cadastro) { toast.error("Não foi possível carregar o perfil do cadastro."); return; }
@@ -819,6 +830,7 @@ function PerfilModal({ logo, cor, unidades, nomeUnidade, onClose }: { logo: stri
         procTop: agregarProcedimentos(prod, nomeProc),
         porUnidade: agregarPorUnidade(prod, nomeUnidade),
         periodoLabel, filtros: filtros || undefined,
+        cadastroEscopo: baseCad === "atendidos" ? `atendidos no filtro${filtros ? ` (${filtros})` : ""}` : "toda a organização",
         incluir: { faixaSexo: secoes.has("faixaSexo"), raca: secoes.has("raca"), situacaoRua: secoes.has("situacaoRua"), cid: secoes.has("cid"), proc: secoes.has("proc"), porUnidade: secoes.has("porUnidade") },
         k: K, logo, cor,
       });
@@ -848,14 +860,33 @@ function PerfilModal({ logo, cor, unidades, nomeUnidade, onClose }: { logo: stri
         </div>
       </div>
 
-      {/* Aviso: filtros só valem para as tabelas clínicas. */}
-      {clinicoSelecionado && (
+      {/* Base das tabelas de cadastro (faixa etária/raça/situação de rua). */}
+      {cadastroSelecionado && (
+        <div className="mb-3">
+          <span className={lblCls2}>Base do cadastro (faixa etária, raça/cor, situação de rua)</span>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            <label className={`flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs ${baseCad === "org" ? "border-primary bg-primary/5" : "border-border"}`}>
+              <input type="radio" name="baseCad" checked={baseCad === "org"} onChange={() => setBaseCad("org")} className="mt-0.5" />
+              <span><strong className="text-foreground">Toda a organização</strong><br />todos os pacientes cadastrados</span>
+            </label>
+            <label className={`flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs ${baseCad === "atendidos" ? "border-primary bg-primary/5" : "border-border"}`}>
+              <input type="radio" name="baseCad" checked={baseCad === "atendidos"} onChange={() => setBaseCad("atendidos")} className="mt-0.5" />
+              <span><strong className="text-foreground">Atendidos no filtro</strong><br />quem teve produção (BPA-I/RAAS) na unidade/período</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso conforme a base do cadastro. */}
+      {mostrarFiltros && (
         <p className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
-          Os filtros abaixo valem só para as tabelas <strong>clínicas</strong> (CID, procedimentos, produção por unidade). As tabelas de <strong>cadastro</strong> (faixa etária, raça/cor, situação de rua) são sempre de todos os pacientes da organização.
+          {baseCad === "atendidos"
+            ? <>Os filtros valem para as tabelas clínicas <strong>e</strong> para o cadastro (base “atendidos”). Atendidos consideram só <strong>BPA-I e RAAS</strong> — o BPA-C não registra paciente.</>
+            : <>Os filtros valem só para as tabelas <strong>clínicas</strong>. O cadastro está na base “toda a organização”.</>}
         </p>
       )}
-      {/* Filtros do perfil clínico (só quando alguma seção clínica está marcada) */}
-      {clinicoSelecionado && (
+      {/* Filtros (período/unidade/tipo) */}
+      {mostrarFiltros && (
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className={lblCls2}>Mês de produção · de</span>
