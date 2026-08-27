@@ -98,6 +98,16 @@ const LABEL_PERM: Record<string, string> = {
 };
 const nomePerm = (p: PermissaoCat) => LABEL_PERM[p.codigo] ?? p.descricao ?? p.codigo;
 
+// Grupo de uma permissão de ORGANIZAÇÃO (para separar a UI): menu, relatório ou gestão/acessos.
+const MENU_PERMS = new Set(["ver_dashboard", "ver_minhas_fichas", "ver_relatorios", "ver_fpo", "ver_exportar", "ver_importar", "ver_formularios"]);
+function grupoOrg(codigo: string): "menu" | "relatorio" | "gestao" {
+  if (codigo.startsWith("emitir_rel_")) return "relatorio";
+  if (MENU_PERMS.has(codigo)) return "menu";
+  return "gestao";
+}
+// Rótulo curto dentro do grupo (tira o prefixo "Menu · " / "Relatório · ").
+const rotuloCurto = (p: PermissaoCat) => nomePerm(p).replace(/^Menu\s·\s/, "").replace(/^Relatório\s·\s/, "");
+
 // Estado de uma permissão numa pessoa, derivado de quantos vínculos a têm vs. o total.
 type EstadoPerm = {
   ativa: boolean; // todos os vínculos têm
@@ -208,6 +218,22 @@ function Admin() {
       await recarregar();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao alterar permissão.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  // Aplica um mesmo alvo (true=liberar, false=bloquear, null=padrão do cargo) a várias
+  // permissões de uma vez (ações em massa por grupo). Recarrega uma vez ao fim.
+  const definirGrupo = async (pessoa: PessoaAdmin, codigos: string[], alvo: boolean | null) => {
+    if (protegido(pessoa.user_id)) return avisarProtegido();
+    if (codigos.length === 0) return;
+    setSalvando(`${pessoa.user_id}:grupo`);
+    try {
+      for (const c of codigos) await definirPermissaoPessoa(pessoa.user_id, pessoa.organizacao_id, c, alvo);
+      await recarregar();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao alterar permissões.");
     } finally {
       setSalvando(null);
     }
@@ -516,6 +542,7 @@ function Admin() {
                           onVincular={vincular}
                           onDesvincular={desvincular}
                           onExcluir={excluir}
+                          onDefinirGrupo={definirGrupo}
                         />
                       ))
                     )}
@@ -1254,6 +1281,7 @@ function PessoaCard({
   onVincular,
   onDesvincular,
   onExcluir,
+  onDefinirGrupo,
 }: {
   pessoa: PessoaAdmin;
   ehDono: boolean;
@@ -1271,6 +1299,7 @@ function PessoaCard({
   onVincular: (p: PessoaAdmin, cnes: string, papel: string) => void;
   onDesvincular: (p: PessoaAdmin, cnes: string) => void;
   onExcluir: (p: PessoaAdmin) => void;
+  onDefinirGrupo: (p: PessoaAdmin, codigos: string[], alvo: boolean | null) => void;
 }) {
   const [abrirUnidades, setAbrirUnidades] = useState(false);
   const [addAberto, setAddAberto] = useState(false);
@@ -1430,49 +1459,50 @@ function PessoaCard({
         </div>
       )}
 
-      {permsOrg.length > 0 && (
-        <div className="mt-3">
-          <div className="text-[11px] font-medium text-muted-foreground">
-            Permissão da organização
-          </div>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {permsOrg.map((p) => {
-              const est = estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults);
-              return (
-                <PermPill
-                  key={p.codigo}
-                  label={nomePerm(p)}
-                  title={p.codigo}
-                  est={est}
-                  loading={salvando === `${pessoa.user_id}:${p.codigo}`}
-                  onClick={() => onTogglePessoa(pessoa, p, est)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="mt-3">
-        <div className="text-[11px] font-medium text-muted-foreground">
-          Permissões de unidade (valem para todas)
-        </div>
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {permsCnes.map((p) => {
-            const est = estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults);
-            return (
-              <PermPill
-                key={p.codigo}
-                label={nomePerm(p)}
-                title={p.codigo}
-                est={est}
-                loading={salvando === `${pessoa.user_id}:${p.codigo}`}
-                onClick={() => onTogglePessoa(pessoa, p, est)}
-              />
-            );
-          })}
-        </div>
-      </div>
+      {(() => {
+        const grupos: { chave: string; titulo: string; curto: boolean; perms: PermissaoCat[] }[] = [
+          { chave: "menu", titulo: "Menu (páginas)", curto: true, perms: permsOrg.filter((p) => grupoOrg(p.codigo) === "menu") },
+          { chave: "relatorio", titulo: "Relatórios", curto: true, perms: permsOrg.filter((p) => grupoOrg(p.codigo) === "relatorio") },
+          { chave: "gestao", titulo: "Gestão e acessos", curto: false, perms: permsOrg.filter((p) => grupoOrg(p.codigo) === "gestao") },
+          { chave: "cnes", titulo: "Fichas e produção (todas as unidades)", curto: false, perms: permsCnes },
+        ];
+        const grpBusy = salvando === `${pessoa.user_id}:grupo`;
+        return grupos.filter((g) => g.perms.length > 0).map((g) => {
+          const codigos = g.perms.map((p) => p.codigo);
+          const todasAtivas = g.perms.every((p) => estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults).ativa);
+          const nenhumaAtiva = g.perms.every((p) => !estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults).ativa);
+          return (
+            <div key={g.chave} className="mt-3 rounded-lg border border-border/70 bg-muted/20 p-2.5">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{g.titulo} <span className="font-normal normal-case text-muted-foreground/70">· {g.perms.length}</span></span>
+                {g.chave !== "gestao" && (
+                  <span className="flex items-center gap-1">
+                    <button type="button" disabled={grpBusy || todasAtivas} onClick={() => onDefinirGrupo(pessoa, codigos, true)}
+                      className="rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">Liberar tudo</button>
+                    <button type="button" disabled={grpBusy || nenhumaAtiva} onClick={() => onDefinirGrupo(pessoa, codigos, false)}
+                      className="rounded border border-rose-300 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40">Bloquear tudo</button>
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {g.perms.map((p) => {
+                  const est = estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults);
+                  return (
+                    <PermPill
+                      key={p.codigo}
+                      label={g.curto ? rotuloCurto(p) : nomePerm(p)}
+                      title={p.codigo}
+                      est={est}
+                      loading={salvando === `${pessoa.user_id}:${p.codigo}` || grpBusy}
+                      onClick={() => onTogglePessoa(pessoa, p, est)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        });
+      })()}
 
       {vinculos.length > 1 && (
         <div className="mt-3 border-t border-border pt-2">
