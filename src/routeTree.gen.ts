@@ -29,6 +29,15 @@ import { Route as ApresentacaoRouteImport } from './routes/apresentacao'
 import { Route as ApacRouteImport } from './routes/apac'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RelatoriosIndexRouteImport } from './routes/relatorios.index'
+import { Route as RelatoriosTfdRouteImport } from './routes/relatorios.tfd'
+import { Route as RelatoriosTabulacaoRouteImport } from './routes/relatorios.tabulacao'
+import { Route as RelatoriosRelacaoRouteImport } from './routes/relatorios.relacao'
+import { Route as RelatoriosProducaoRouteImport } from './routes/relatorios.producao'
+import { Route as RelatoriosPerfilRouteImport } from './routes/relatorios.perfil'
+import { Route as RelatoriosInativosRouteImport } from './routes/relatorios.inativos'
+import { Route as RelatoriosFpoRouteImport } from './routes/relatorios.fpo'
+import { Route as RelatoriosConsistenciaRouteImport } from './routes/relatorios.consistencia'
 
 const TfdRoute = TfdRouteImport.update({
   id: '/tfd',
@@ -130,6 +139,51 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RelatoriosIndexRoute = RelatoriosIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosTfdRoute = RelatoriosTfdRouteImport.update({
+  id: '/tfd',
+  path: '/tfd',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosTabulacaoRoute = RelatoriosTabulacaoRouteImport.update({
+  id: '/tabulacao',
+  path: '/tabulacao',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosRelacaoRoute = RelatoriosRelacaoRouteImport.update({
+  id: '/relacao',
+  path: '/relacao',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosProducaoRoute = RelatoriosProducaoRouteImport.update({
+  id: '/producao',
+  path: '/producao',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosPerfilRoute = RelatoriosPerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosInativosRoute = RelatoriosInativosRouteImport.update({
+  id: '/inativos',
+  path: '/inativos',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosFpoRoute = RelatoriosFpoRouteImport.update({
+  id: '/fpo',
+  path: '/fpo',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
+const RelatoriosConsistenciaRoute = RelatoriosConsistenciaRouteImport.update({
+  id: '/consistencia',
+  path: '/consistencia',
+  getParentRoute: () => RelatoriosRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -150,8 +204,17 @@ export interface FileRoutesByFullPath {
   '/perfil': typeof PerfilRoute
   '/raas': typeof RaasRoute
   '/raas-folha': typeof RaasFolhaRoute
-  '/relatorios': typeof RelatoriosRoute
+  '/relatorios': typeof RelatoriosRouteWithChildren
   '/tfd': typeof TfdRoute
+  '/relatorios/consistencia': typeof RelatoriosConsistenciaRoute
+  '/relatorios/fpo': typeof RelatoriosFpoRoute
+  '/relatorios/inativos': typeof RelatoriosInativosRoute
+  '/relatorios/perfil': typeof RelatoriosPerfilRoute
+  '/relatorios/producao': typeof RelatoriosProducaoRoute
+  '/relatorios/relacao': typeof RelatoriosRelacaoRoute
+  '/relatorios/tabulacao': typeof RelatoriosTabulacaoRoute
+  '/relatorios/tfd': typeof RelatoriosTfdRoute
+  '/relatorios/': typeof RelatoriosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -172,8 +235,16 @@ export interface FileRoutesByTo {
   '/perfil': typeof PerfilRoute
   '/raas': typeof RaasRoute
   '/raas-folha': typeof RaasFolhaRoute
-  '/relatorios': typeof RelatoriosRoute
   '/tfd': typeof TfdRoute
+  '/relatorios/consistencia': typeof RelatoriosConsistenciaRoute
+  '/relatorios/fpo': typeof RelatoriosFpoRoute
+  '/relatorios/inativos': typeof RelatoriosInativosRoute
+  '/relatorios/perfil': typeof RelatoriosPerfilRoute
+  '/relatorios/producao': typeof RelatoriosProducaoRoute
+  '/relatorios/relacao': typeof RelatoriosRelacaoRoute
+  '/relatorios/tabulacao': typeof RelatoriosTabulacaoRoute
+  '/relatorios/tfd': typeof RelatoriosTfdRoute
+  '/relatorios': typeof RelatoriosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -195,8 +266,17 @@ export interface FileRoutesById {
   '/perfil': typeof PerfilRoute
   '/raas': typeof RaasRoute
   '/raas-folha': typeof RaasFolhaRoute
-  '/relatorios': typeof RelatoriosRoute
+  '/relatorios': typeof RelatoriosRouteWithChildren
   '/tfd': typeof TfdRoute
+  '/relatorios/consistencia': typeof RelatoriosConsistenciaRoute
+  '/relatorios/fpo': typeof RelatoriosFpoRoute
+  '/relatorios/inativos': typeof RelatoriosInativosRoute
+  '/relatorios/perfil': typeof RelatoriosPerfilRoute
+  '/relatorios/producao': typeof RelatoriosProducaoRoute
+  '/relatorios/relacao': typeof RelatoriosRelacaoRoute
+  '/relatorios/tabulacao': typeof RelatoriosTabulacaoRoute
+  '/relatorios/tfd': typeof RelatoriosTfdRoute
+  '/relatorios/': typeof RelatoriosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -221,6 +301,15 @@ export interface FileRouteTypes {
     | '/raas-folha'
     | '/relatorios'
     | '/tfd'
+    | '/relatorios/consistencia'
+    | '/relatorios/fpo'
+    | '/relatorios/inativos'
+    | '/relatorios/perfil'
+    | '/relatorios/producao'
+    | '/relatorios/relacao'
+    | '/relatorios/tabulacao'
+    | '/relatorios/tfd'
+    | '/relatorios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -241,8 +330,16 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/raas'
     | '/raas-folha'
-    | '/relatorios'
     | '/tfd'
+    | '/relatorios/consistencia'
+    | '/relatorios/fpo'
+    | '/relatorios/inativos'
+    | '/relatorios/perfil'
+    | '/relatorios/producao'
+    | '/relatorios/relacao'
+    | '/relatorios/tabulacao'
+    | '/relatorios/tfd'
+    | '/relatorios'
   id:
     | '__root__'
     | '/'
@@ -265,6 +362,15 @@ export interface FileRouteTypes {
     | '/raas-folha'
     | '/relatorios'
     | '/tfd'
+    | '/relatorios/consistencia'
+    | '/relatorios/fpo'
+    | '/relatorios/inativos'
+    | '/relatorios/perfil'
+    | '/relatorios/producao'
+    | '/relatorios/relacao'
+    | '/relatorios/tabulacao'
+    | '/relatorios/tfd'
+    | '/relatorios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -286,7 +392,7 @@ export interface RootRouteChildren {
   PerfilRoute: typeof PerfilRoute
   RaasRoute: typeof RaasRoute
   RaasFolhaRoute: typeof RaasFolhaRoute
-  RelatoriosRoute: typeof RelatoriosRoute
+  RelatoriosRoute: typeof RelatoriosRouteWithChildren
   TfdRoute: typeof TfdRoute
 }
 
@@ -432,8 +538,99 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/relatorios/': {
+      id: '/relatorios/'
+      path: '/'
+      fullPath: '/relatorios/'
+      preLoaderRoute: typeof RelatoriosIndexRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/tfd': {
+      id: '/relatorios/tfd'
+      path: '/tfd'
+      fullPath: '/relatorios/tfd'
+      preLoaderRoute: typeof RelatoriosTfdRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/tabulacao': {
+      id: '/relatorios/tabulacao'
+      path: '/tabulacao'
+      fullPath: '/relatorios/tabulacao'
+      preLoaderRoute: typeof RelatoriosTabulacaoRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/relacao': {
+      id: '/relatorios/relacao'
+      path: '/relacao'
+      fullPath: '/relatorios/relacao'
+      preLoaderRoute: typeof RelatoriosRelacaoRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/producao': {
+      id: '/relatorios/producao'
+      path: '/producao'
+      fullPath: '/relatorios/producao'
+      preLoaderRoute: typeof RelatoriosProducaoRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/perfil': {
+      id: '/relatorios/perfil'
+      path: '/perfil'
+      fullPath: '/relatorios/perfil'
+      preLoaderRoute: typeof RelatoriosPerfilRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/inativos': {
+      id: '/relatorios/inativos'
+      path: '/inativos'
+      fullPath: '/relatorios/inativos'
+      preLoaderRoute: typeof RelatoriosInativosRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/fpo': {
+      id: '/relatorios/fpo'
+      path: '/fpo'
+      fullPath: '/relatorios/fpo'
+      preLoaderRoute: typeof RelatoriosFpoRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
+    '/relatorios/consistencia': {
+      id: '/relatorios/consistencia'
+      path: '/consistencia'
+      fullPath: '/relatorios/consistencia'
+      preLoaderRoute: typeof RelatoriosConsistenciaRouteImport
+      parentRoute: typeof RelatoriosRoute
+    }
   }
 }
+
+interface RelatoriosRouteChildren {
+  RelatoriosConsistenciaRoute: typeof RelatoriosConsistenciaRoute
+  RelatoriosFpoRoute: typeof RelatoriosFpoRoute
+  RelatoriosInativosRoute: typeof RelatoriosInativosRoute
+  RelatoriosPerfilRoute: typeof RelatoriosPerfilRoute
+  RelatoriosProducaoRoute: typeof RelatoriosProducaoRoute
+  RelatoriosRelacaoRoute: typeof RelatoriosRelacaoRoute
+  RelatoriosTabulacaoRoute: typeof RelatoriosTabulacaoRoute
+  RelatoriosTfdRoute: typeof RelatoriosTfdRoute
+  RelatoriosIndexRoute: typeof RelatoriosIndexRoute
+}
+
+const RelatoriosRouteChildren: RelatoriosRouteChildren = {
+  RelatoriosConsistenciaRoute: RelatoriosConsistenciaRoute,
+  RelatoriosFpoRoute: RelatoriosFpoRoute,
+  RelatoriosInativosRoute: RelatoriosInativosRoute,
+  RelatoriosPerfilRoute: RelatoriosPerfilRoute,
+  RelatoriosProducaoRoute: RelatoriosProducaoRoute,
+  RelatoriosRelacaoRoute: RelatoriosRelacaoRoute,
+  RelatoriosTabulacaoRoute: RelatoriosTabulacaoRoute,
+  RelatoriosTfdRoute: RelatoriosTfdRoute,
+  RelatoriosIndexRoute: RelatoriosIndexRoute,
+}
+
+const RelatoriosRouteWithChildren = RelatoriosRoute._addFileChildren(
+  RelatoriosRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -454,7 +651,7 @@ const rootRouteChildren: RootRouteChildren = {
   PerfilRoute: PerfilRoute,
   RaasRoute: RaasRoute,
   RaasFolhaRoute: RaasFolhaRoute,
-  RelatoriosRoute: RelatoriosRoute,
+  RelatoriosRoute: RelatoriosRouteWithChildren,
   TfdRoute: TfdRoute,
 }
 export const routeTree = rootRouteImport
