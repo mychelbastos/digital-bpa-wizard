@@ -21,8 +21,8 @@ export function construirPdfTabulacao(d: {
   const H = pdf.internal.pageSize.getHeight();
   const M = 32;
   const { accent, accentClaro } = paletaRelatorio(d.cor);
-  const k = d.k;
-  const sup = (n: number) => (n > 0 && n < k ? `< ${k}` : int(n));
+  // Relatório de uso interno/gestão: valores REAIS (sem supressão).
+  const sup = (n: number) => int(n);
   const pct = (n: number) => (d.tab.total > 0 ? `${((n / d.tab.total) * 100).toFixed(1).replace(".", ",")}%` : "—");
   const rotSexo = (s: string) => (s === "F" ? "Feminino" : s === "M" ? "Masculino" : "Não inf.");
   const rotRaca = (r: string) => RACA.get(r) ?? (r === "-" ? "Não informado" : r || "—");
@@ -63,7 +63,7 @@ export function construirPdfTabulacao(d: {
 
   const rankNum = (rotulo: string, itens: { k: string; n: number }[], rot?: (k: string) => string) => {
     const ord = [...itens].sort((a, b) => b.n - a.n);
-    const linhas = ord.map((it) => [rot ? rot(it.k) : it.k, sup(it.n), it.n < k ? "—" : pct(it.n)]);
+    const linhas = ord.map((it) => [rot ? rot(it.k) : it.k, sup(it.n), pct(it.n)]);
     linhas.push(["TOTAL", int(ord.reduce((s, it) => s + it.n, 0)), "100%"]);
     secao(rotulo);
     tabela([{ t: rotulo, w: disp - 200 }, { t: "Atendimentos", w: 100, r: true }, { t: "%", w: 100, r: true }], linhas);
@@ -72,7 +72,7 @@ export function construirPdfTabulacao(d: {
   for (const dim of d.dims) {
     if (dim === "faixa") {
       const ord = FAIXAS.filter((f) => d.tab.faixa.some((x) => x.k === f)).map((f) => ({ k: f, n: d.tab.faixa.find((x) => x.k === f)!.n }));
-      const linhas = ord.map((it) => [it.k, sup(it.n), it.n < k ? "—" : pct(it.n)]);
+      const linhas = ord.map((it) => [it.k, sup(it.n), pct(it.n)]);
       linhas.push(["TOTAL", int(ord.reduce((s, it) => s + it.n, 0)), "100%"]);
       secao("Por faixa etária"); tabela([{ t: "Faixa etária", w: disp - 200 }, { t: "Atendimentos", w: 100, r: true }, { t: "%", w: 100, r: true }], linhas);
     } else if (dim === "sexo") rankNum("Por sexo", d.tab.sexo, rotSexo);
@@ -91,7 +91,7 @@ export function construirPdfTabulacao(d: {
   }
 
   novaPag(30); pdf.setFont("helvetica", "italic"); pdf.setFontSize(7.5); pdf.setTextColor(130);
-  pdf.text(`Dados agregados e anonimizados (LGPD, art. 12). Contagens abaixo de ${k} exibidas como "< ${k}". Contagem por ATENDIMENTO (quantidade), BPA-I e RAAS.`, M, y, { maxWidth: W - 2 * M });
+  pdf.text("Relatório de uso interno / gestão em saúde (LGPD, art. 11, II). Contagem por ATENDIMENTO (quantidade); valores reais. Cobre BPA-I e RAAS.", M, y, { maxWidth: W - 2 * M });
   carimbarRodapeSpa(pdf);
   return pdf;
 }

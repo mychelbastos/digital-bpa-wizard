@@ -34,9 +34,8 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   const H = pdf.internal.pageSize.getHeight();
   const M = 32;
   const { accent, accentClaro } = paletaRelatorio(d.cor);
-  const k = d.k;
-  // Supressão de célula pequena: valores 1..k-1 viram "< k" (0 permanece 0). Anonimização.
-  const sup = (n: number) => (n > 0 && n < k ? `< ${k}` : int(n));
+  // Relatório de uso interno/gestão: mostra os VALORES REAIS (sem supressão de célula).
+  const sup = (n: number) => int(n);
 
   const inc = d.incluir;
   let y = desenharCabecalhoPdf(pdf, {
@@ -120,7 +119,7 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   // ===== 2) Raça/Cor =====
   if (inc.raca) {
     const tot = d.cadastro.raca.reduce((s, r) => s + r.n, 0);
-    const linhas = [...d.cadastro.raca].sort((a, b) => b.n - a.n).map((r) => [RACA_LABEL.get(r.raca) ?? (r.raca === "-" ? "Não informado" : r.raca), sup(r.n), r.n < k ? "—" : pct(r.n, tot)]);
+    const linhas = [...d.cadastro.raca].sort((a, b) => b.n - a.n).map((r) => [RACA_LABEL.get(r.raca) ?? (r.raca === "-" ? "Não informado" : r.raca), sup(r.n), pct(r.n, tot)]);
     linhas.push(["TOTAL", int(tot), "100%"]);
     tituloSecao("Raça/Cor");
     desenharTabela([{ titulo: "Raça/Cor", w: disp - 200, align: "left" }, { titulo: "Pacientes", w: 100, align: "right" }, { titulo: "%", w: 100, align: "right" }], linhas, true);
@@ -130,7 +129,7 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   if (inc.situacaoRua) {
     const map = new Map(d.cadastro.situacaoRua.map((r) => [r.sit, r.n]));
     const tot = d.cadastro.situacaoRua.reduce((s, r) => s + r.n, 0);
-    const linhas = [["Em situação de rua", sup(map.get("S") ?? 0), (map.get("S") ?? 0) < k ? "—" : pct(map.get("S") ?? 0, tot)], ["Não", int(map.get("N") ?? 0), pct(map.get("N") ?? 0, tot)]];
+    const linhas = [["Em situação de rua", sup(map.get("S") ?? 0), pct(map.get("S") ?? 0, tot)], ["Não", int(map.get("N") ?? 0), pct(map.get("N") ?? 0, tot)]];
     tituloSecao("Situação de rua");
     desenharTabela([{ titulo: "Situação", w: disp - 200, align: "left" }, { titulo: "Pacientes", w: 100, align: "right" }, { titulo: "%", w: 100, align: "right" }], linhas);
   }
@@ -159,7 +158,7 @@ export function construirPdfPerfil(d: DadosPerfil): jsPDF {
   // Nota LGPD no rodapé de conteúdo.
   novaPaginaSePreciso(40);
   pdf.setFont("helvetica", "italic"); pdf.setFontSize(7.5); pdf.setTextColor(130);
-  pdf.text(`Dados agregados e anonimizados (LGPD, art. 12). Contagens abaixo de ${k} são exibidas como "< ${k}" para impedir a reidentificação.`, M, y, { maxWidth: W - 2 * M });
+  pdf.text("Relatório de uso interno / gestão em saúde (LGPD, base legal art. 11, II). Dados agregados; valores reais.", M, y, { maxWidth: W - 2 * M });
 
   carimbarRodapeSpa(pdf);
   return pdf;
