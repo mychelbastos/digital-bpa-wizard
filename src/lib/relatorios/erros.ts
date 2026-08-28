@@ -208,7 +208,7 @@ async function errosTfdSemProfissional(): Promise<ErroItem[]> {
 export interface OpcoesErros { de: string; ate: string; categorias: Set<CategoriaErro> }
 
 // Meses AAAAMM no intervalo [de, ate] (inclusive). Ex.: 202607..202608 -> ["202607","202608"].
-function mesesNoIntervalo(de: string, ate: string): string[] {
+export function mesesNoIntervalo(de: string, ate: string): string[] {
   if (!/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate) || ate < de) return /^\d{6}$/.test(de) ? [de] : [];
   const out: string[] = [];
   let a = Number(de.slice(0, 4)), m = Number(de.slice(4, 6));

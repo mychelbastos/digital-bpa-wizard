@@ -108,15 +108,20 @@ interface ProdLinha { profissional_cns: string | null; profissional_nome: string
 export async function carregarInativos(opts: {
   cnesList: string[];
   nomesUnidade: Record<string, string>;
-  competencia: string;
+  competencia: string;                 // mês de referência (base da janela anterior)
+  mesesReferencia?: string[];          // período que conta como "com produção" (default: [competencia])
   janelaMeses: number;
   incluirRosterSemProducao: boolean;
 }): Promise<InativosResultado> {
   const { competencia, janelaMeses, nomesUnidade, incluirRosterSemProducao } = opts;
   const cnesList = [...new Set(opts.cnesList.filter(Boolean))];
-  const historico = mesesAntes(competencia, janelaMeses);
+  // Meses do período que contam como "produziu". A janela anterior parte do MENOR deles.
+  const mesesRefArr = (opts.mesesReferencia?.length ? opts.mesesReferencia : [competencia]).filter((m) => /^\d{6}$/.test(m));
+  const mesesRef = new Set(mesesRefArr);
+  const baseJanela = [...mesesRefArr].sort()[0] ?? competencia;
+  const historico = mesesAntes(baseJanela, janelaMeses).filter((m) => !mesesRef.has(m));
   const vazio: InativosResultado = { rows: [], excluidosNaoClinico: 0, semCboCount: 0, janelaMeses: historico };
-  if (!supabase || cnesList.length === 0 || !/^\d{6}$/.test(competencia)) return vazio;
+  if (!supabase || cnesList.length === 0 || mesesRef.size === 0) return vazio;
 
   // Produção do mês de referência + da janela anterior, no escopo das unidades.
   // ===== Crivo por CBO ÚNICO na unidade =====
@@ -166,7 +171,7 @@ export async function carregarInativos(opts: {
       const g = ultimoGlobal.get(cns);
       if (!g || mes > g.mes) ultimoGlobal.set(cns, { mes, cbo: r.cbo || g?.cbo || null, cnes: cnesLinha || g?.cnes || "" });
 
-      if (mes === competencia) { ativosNoMes.add(cns); continue; }
+      if (mesesRef.has(mes)) { ativosNoMes.add(cns); continue; }
       if (!janelaSet.has(mes)) continue; // fora da janela: conta só p/ ultimoGlobal
       const cur = hist.get(cns);
       if (!cur) hist.set(cns, { nome: nomeLinha, cbo: r.cbo || null, cnes: cnesLinha, ultimoMes: mes, qtd: r.quantidade || 0 });

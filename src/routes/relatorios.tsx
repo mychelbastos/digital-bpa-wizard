@@ -17,7 +17,7 @@ import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
 import { construirPdfFpo, construirPdfFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
 import { construirPdfTfd, construirPdfTfdPorUnidade } from "@/lib/tfd/relatorio-tfd";
 import { csvProducao, baixarCsv, construirPdfProducao, type MapasNome } from "@/lib/relatorios/producao";
-import { coletarErros, resolverRevisaoPaciente, ROTULO_CATEGORIA, type CategoriaErro, type ErroItem } from "@/lib/relatorios/erros";
+import { coletarErros, mesesNoIntervalo, resolverRevisaoPaciente, ROTULO_CATEGORIA, type CategoriaErro, type ErroItem } from "@/lib/relatorios/erros";
 import { csvErros, construirPdfErros } from "@/lib/relatorios/erros-pdf";
 import { carregarInativos, type InativosResultado } from "@/lib/relatorios/inativos";
 import { csvInativos, construirPdfInativos } from "@/lib/relatorios/inativos-pdf";
@@ -47,6 +47,20 @@ const chaveProfissional = (r: ProducaoBpaRow) => r.profissional_cns || r.profiss
 const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const mesLabel = (comp: string) => (comp.length === 6 ? `${meses[Number(comp.slice(4, 6)) - 1] ?? comp.slice(4, 6)}/${comp.slice(0, 4)}` : comp);
 const competenciaAtual = () => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`; };
+// Desloca um AAAAMM em n meses (n<0 = passado). Ex.: mesOffset("202608", -2) = "202606".
+const mesOffset = (base: string, n: number): string => {
+  let a = Number(base.slice(0, 4)); let m = Number(base.slice(4, 6)) + n;
+  a += Math.floor((m - 1) / 12); m = ((((m - 1) % 12) + 12) % 12) + 1;
+  return `${a}${String(m).padStart(2, "0")}`;
+};
+// Presets do seletor de período (rege a página). range() devolve [de, ate].
+const PRESETS_PERIODO: { key: string; label: string; range: () => [string, string] }[] = [
+  { key: "atual", label: "Mês atual", range: () => { const a = competenciaAtual(); return [a, a]; } },
+  { key: "ultimo", label: "Último mês", range: () => { const a = mesOffset(competenciaAtual(), -1); return [a, a]; } },
+  { key: "3m", label: "Últimos 3 meses", range: () => { const a = competenciaAtual(); return [mesOffset(a, -2), a]; } },
+  { key: "6m", label: "Últimos 6 meses", range: () => { const a = competenciaAtual(); return [mesOffset(a, -5), a]; } },
+  { key: "12m", label: "Último ano", range: () => { const a = competenciaAtual(); return [mesOffset(a, -11), a]; } },
+];
 // Últimos 12 meses de produção (AAAAMM), do atual para trás.
 const ultimosMeses = (n: number): string[] => {
   const d = new Date();
@@ -345,14 +359,14 @@ function RelatoriosPage() {
     if (cnesList.length === 0) { toast.error("Sem unidade vinculada."); return; }
     setInaLoading(true);
     try {
-      setInativos(await carregarInativos({ cnesList, nomesUnidade, competencia, janelaMeses: inaJanela, incluirRosterSemProducao: inaIncluirRoster }));
+      setInativos(await carregarInativos({ cnesList, nomesUnidade, competencia: compDe, mesesReferencia: mesesNoIntervalo(compDe, compAte), janelaMeses: inaJanela, incluirRosterSemProducao: inaIncluirRoster }));
     } finally { setInaLoading(false); }
   };
   const inaSubtitulo = () => {
     const uni = inaCnes === "todos" ? `Todas as unidades (${cnesOpcoes.length})` : (nomesUnidade[inaCnes] ?? inaCnes);
-    return `${uni} · sem produção em ${mesLabel(competencia)} · janela ${inaJanela} ${inaJanela === 1 ? "mês" : "meses"} anteriores`;
+    return `${uni} · sem produção em ${periodoLabel} · janela ${inaJanela} ${inaJanela === 1 ? "mês" : "meses"} anteriores`;
   };
-  const inaNomeArq = () => `sem-producao-${competencia}${inaCnes !== "todos" ? `-${inaCnes}` : ""}`;
+  const inaNomeArq = () => `sem-producao-${periodoArq}${inaCnes !== "todos" ? `-${inaCnes}` : ""}`;
   const baixarCsvInativos = () => { if (!inativos?.rows.length) return; baixarCsv(`${inaNomeArq()}.csv`, csvInativos(inativos.rows)); toast.success("CSV gerado."); };
   const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo, cor }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
 
@@ -395,6 +409,27 @@ function RelatoriosPage() {
 
         {/* ============ PERÍODO — seletor único que rege TODA a página ============ */}
         <section className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          {/* Presets rápidos */}
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            {PRESETS_PERIODO.map((p) => {
+              const [d, a] = p.range();
+              const ativo = compDe === d && compAte === a;
+              return (
+                <button key={p.key} type="button" onClick={() => { setCompDe(d); setCompAte(a); }}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-muted"}`}>
+                  {p.label}
+                </button>
+              );
+            })}
+            {(() => {
+              const ehPreset = PRESETS_PERIODO.some((p) => { const [d, a] = p.range(); return compDe === d && compAte === a; });
+              return (
+                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${ehPreset ? "border-border bg-card text-muted-foreground" : "border-primary bg-primary text-primary-foreground"}`}>
+                  Personalizado
+                </span>
+              );
+            })()}
+          </div>
           <div className="flex flex-wrap items-end gap-3">
             <label className="block">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Período · de</span>
@@ -534,7 +569,7 @@ function RelatoriosPage() {
         <section className={`${cardCls} mb-5`}>
           <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground"><UserX className="size-4 text-primary" /> Profissionais sem produção</h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Profissionais que atendem pacientes e que <strong>não lançaram produção</strong> em {mesLabel(competencia)} (mês selecionado acima).
+            Profissionais que atendem pacientes e que <strong>não lançaram produção</strong> no período <strong>{periodoLabel}</strong> (seletor do topo da página).
             O CBO (ocupação) vem do <strong>vínculo no CNES</strong> — um profissional pode ter mais de um. Porteiro, vigia, cozinheiro, limpeza e demais funções de apoio são <strong>excluídos pelo CBO</strong>.
             Produção sem CNS (ex.: BPA-C) é <strong>atribuída pelo CBO</strong> quando há um único profissional com aquele CBO na unidade.
           </p>
@@ -592,7 +627,7 @@ function RelatoriosPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {inativos.rows.length === 0 && <tr><td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">{inaLoading ? "Verificando…" : "Todos os profissionais assistenciais lançaram produção neste mês 🎉"}</td></tr>}
+                  {inativos.rows.length === 0 && <tr><td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">{inaLoading ? "Verificando…" : "Todos os profissionais assistenciais lançaram produção no período 🎉"}</td></tr>}
                   {inativos.rows.map((r) => (
                     <tr key={`${r.cns}~${r.cnes}`} className="border-t border-border align-top">
                       <td className="px-2 py-1.5 whitespace-nowrap">
