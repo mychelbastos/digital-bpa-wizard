@@ -1067,7 +1067,7 @@ function TabulacaoModal({ logo, cor, unidades, onClose }: { logo: string | null;
   return (
     <ModalRel titulo="Tabulação por procedimento (só números)" onClose={onClose}>
       {previewNode}
-      <p className="mb-3 text-xs text-muted-foreground">Conta os <strong>atendimentos</strong> (quantidade) por recorte, com <strong>valores reais</strong>. Uso interno / gestão. Cobre BPA-I e RAAS.</p>
+      <p className="mb-3 text-xs text-muted-foreground">Conta os <strong>atendimentos</strong> (quantidade) por recorte, com <strong>valores reais</strong>. Uso interno / gestão. Cobre BPA-I, RAAS e TFD.</p>
       <div className="grid grid-cols-2 gap-3">
         <label className="block"><span className={lblCls2}>Mês · de</span>
           <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls2}>{ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}</select></label>

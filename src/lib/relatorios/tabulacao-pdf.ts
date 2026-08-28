@@ -91,7 +91,7 @@ export function construirPdfTabulacao(d: {
   }
 
   novaPag(30); pdf.setFont("helvetica", "italic"); pdf.setFontSize(7.5); pdf.setTextColor(130);
-  pdf.text("Relatório de uso interno / gestão em saúde (LGPD, art. 11, II). Contagem por ATENDIMENTO (quantidade); valores reais. Cobre BPA-I e RAAS.", M, y, { maxWidth: W - 2 * M });
+  pdf.text("Relatório de uso interno / gestão em saúde (LGPD, art. 11, II). Contagem por ATENDIMENTO (quantidade); valores reais. Cobre BPA-I, RAAS e TFD.", M, y, { maxWidth: W - 2 * M });
   carimbarRodapeSpa(pdf);
   return pdf;
 }
