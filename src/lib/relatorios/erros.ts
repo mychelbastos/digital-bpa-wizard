@@ -86,6 +86,20 @@ function errosFichasIncompletas(fichas: FichaCompleta[]): ErroItem[] {
       const cnes = jc(d.cnes);
       const prof = (d.profNome as string) || jc(d.profCns) || "—";
       const seqs = Array.isArray(d.seqs) ? d.seqs : [];
+      // Crivo do PROFISSIONAL (nível ficha): mesma regra da ficha aberta — CNS 15 díg. + nome.
+      // Só cobra quando a ficha tem alguma sequência preenchida.
+      if (seqs.some((s) => seqPreenchida(s))) {
+        const profCnsDig = jc(d.profCns).replace(/\D/g, "");
+        if (profCnsDig.length !== 15) {
+          out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
+            competencia: "", cnes, profissional: prof, procedimento: "",
+            descricao: profCnsDig ? `CNS do profissional incompleto (${profCnsDig.length}/15 dígitos).` : "CNS do profissional ausente." });
+        }
+        if (!((d.profNome as string) ?? "").trim()) {
+          out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
+            competencia: "", cnes, profissional: prof, procedimento: "", descricao: "Nome do profissional ausente." });
+        }
+      }
       seqs.forEach((s, i) => {
         if (!seqPreenchida(s)) return;
         const motivos = motivosObrigatoriosSeq(s, { exigeServico: null, exigeCid: null });
