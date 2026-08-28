@@ -23,6 +23,9 @@ import { carregarInativos, type InativosResultado } from "@/lib/relatorios/inati
 import { csvInativos, construirPdfInativos } from "@/lib/relatorios/inativos-pdf";
 import { carregarPerfilCadastro, carregarPerfilAtendidos, agregarCid, agregarProcedimentos, agregarPorUnidade } from "@/lib/relatorios/perfil";
 import { construirPdfPerfil } from "@/lib/relatorios/perfil-pdf";
+import { relacaoGeral, relacaoTfd, relacaoProducao, carregarTabulacao } from "@/lib/relatorios/relacao";
+import { construirPdfRelacao } from "@/lib/relatorios/relacao-pdf";
+import { construirPdfTabulacao, type DimTab } from "@/lib/relatorios/tabulacao-pdf";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { AlertTriangle } from "lucide-react";
 import {
@@ -138,6 +141,8 @@ function RelatoriosPage() {
   const [fpoOpen, setFpoOpen] = useState(false);
   const [tfdOpen, setTfdOpen] = useState(false);
   const [perfilOpen, setPerfilOpen] = useState(false);
+  const [relacaoOpen, setRelacaoOpen] = useState(false);
+  const [tabulacaoOpen, setTabulacaoOpen] = useState(false);
   // Erros / crivo
   const TODAS_CATS: CategoriaErro[] = ["producao-sigtap", "ficha-incompleta", "paciente-revisao", "duplicidade"];
   const [categoriasErro, setCategoriasErro] = useState<Set<CategoriaErro>>(new Set(TODAS_CATS));
@@ -614,12 +619,20 @@ function RelatoriosPage() {
           <RelatorioCard icon={<Users className="size-5" />} titulo="Perfil de pacientes"
             desc="Faixa etária, sexo, raça/cor, situação de rua + CID e procedimentos. Agregado e anonimizado (LGPD)."
             bloqueado={!pode("emitir_rel_perfil")} onClick={() => setPerfilOpen(true)} />
+          <RelatorioCard icon={<Users className="size-5" />} titulo="Relação de pacientes"
+            desc="Lista nominal (com nome) — Geral, TFD, RAAS ou por procedimento. Uso interno / conferência."
+            bloqueado={!pode("emitir_rel_perfil")} onClick={() => setRelacaoOpen(true)} />
+          <RelatorioCard icon={<FileBarChart className="size-5" />} titulo="Tabulação por procedimento"
+            desc="Procedimento × faixa etária × sexo × raça/cor × bairro. Só números (anonimizado)."
+            bloqueado={!pode("emitir_rel_perfil")} onClick={() => setTabulacaoOpen(true)} />
         </div>
       </div>
 
       {fpoOpen && <FpoModal unidades={cnesOpcoes} logo={logo} cor={cor} responsavel={user?.nome ?? null} onClose={() => setFpoOpen(false)} />}
       {tfdOpen && <TfdModal unidades={cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes))} logo={logo} cor={cor} onClose={() => setTfdOpen(false)} />}
       {perfilOpen && <PerfilModal logo={logo} cor={cor} unidades={cnesOpcoes} nomeUnidade={nomeUnidade} onClose={() => setPerfilOpen(false)} />}
+      {relacaoOpen && <RelacaoModal logo={logo} cor={cor} unidades={cnesOpcoes} onClose={() => setRelacaoOpen(false)} />}
+      {tabulacaoOpen && <TabulacaoModal logo={logo} cor={cor} unidades={cnesOpcoes} onClose={() => setTabulacaoOpen(false)} />}
       {previewNode}
     </div>
   );
@@ -918,6 +931,166 @@ function PerfilModal({ logo, cor, unidades, nomeUnidade, onClose }: { logo: stri
 
       <div className="mt-4 flex justify-end">
         <button onClick={gerar} disabled={gerando || secoes.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          {gerando ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Gerar PDF (timbre)
+        </button>
+      </div>
+    </ModalRel>
+  );
+}
+
+// ---- Relação NOMINAL de pacientes (com nome, uso interno) ----
+function RelacaoModal({ logo, cor, unidades, onClose }: { logo: string | null; cor: string | null; unidades: { cnes: string; nome: string }[]; onClose: () => void }) {
+  const { abrirPreview, previewNode } = usePreviewPdf();
+  const [categoria, setCategoria] = useState<"geral" | "tfd" | "raas" | "procedimento">("geral");
+  const [compDe, setCompDe] = useState(competenciaAtual());
+  const [compAte, setCompAte] = useState(competenciaAtual());
+  const [cnes, setCnes] = useState("todas");
+  const [tipo, setTipo] = useState<"todos" | "BPA-I" | "RAAS">("todos");
+  const [proc, setProc] = useState("");
+  const [gerando, setGerando] = useState(false);
+  const usaPeriodo = categoria !== "geral";
+  const usaUnidade = categoria === "raas" || categoria === "procedimento";
+  const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
+
+  const gerar = async () => {
+    setGerando(true);
+    try {
+      const cnesList = cnes === "todas" ? [] : [cnes];
+      const procCod = proc.replace(/\D/g, "");
+      let pacientes; let titulo; let sub;
+      if (categoria === "geral") { pacientes = await relacaoGeral(); titulo = "Relação de pacientes — Geral"; sub = "Todos os pacientes cadastrados"; }
+      else if (categoria === "tfd") { pacientes = await relacaoTfd(compDe, compAte); titulo = "Relação de pacientes — TFD"; sub = `Pacientes com TFD · ${periodoLabel}`; }
+      else if (categoria === "raas") { pacientes = await relacaoProducao(cnesList, compDe, compAte, "RAAS", null); titulo = "Relação de pacientes — RAAS"; sub = `Atendidos no RAAS · ${periodoLabel}`; }
+      else {
+        if (procCod.length !== 10) { toast.error("Informe o código do procedimento (10 dígitos)."); return; }
+        pacientes = await relacaoProducao(cnesList, compDe, compAte, tipo, procCod);
+        const nm = await carregarNomesProcedimentos([procCod]);
+        titulo = "Relação de pacientes — por procedimento"; sub = `${nm[procCod] ? `${nm[procCod]} (${procCod})` : procCod} · ${periodoLabel}`;
+      }
+      if (pacientes.length === 0) { toast.warning("Nenhum paciente encontrado para este recorte."); }
+      const uni = usaUnidade && cnes !== "todas" ? `  ·  Unidade: ${unidades.find((u) => u.cnes === cnes)?.nome ?? cnes}` : "";
+      const pdf = construirPdfRelacao({ titulo, subtitulo: sub + uni, pacientes, mostrarMunicipio: categoria === "geral" || categoria === "tfd", logo, cor });
+      abrirPreview(pdf, `relacao-${categoria}.pdf`, titulo);
+    } catch { toast.error("Falha ao gerar a relação."); }
+    finally { setGerando(false); }
+  };
+
+  return (
+    <ModalRel titulo="Relação de pacientes (com nome · uso interno)" onClose={onClose}>
+      {previewNode}
+      <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+        Contém <strong>nome e dados pessoais</strong> — uso interno / conferência (LGPD). Não divulgar.
+      </p>
+      <label className="block">
+        <span className={lblCls2}>Categoria</span>
+        <select value={categoria} onChange={(e) => setCategoria(e.target.value as typeof categoria)} className={selCls2}>
+          <option value="geral">Geral (todos os cadastrados)</option>
+          <option value="tfd">TFD</option>
+          <option value="raas">RAAS</option>
+          <option value="procedimento">Por procedimento</option>
+        </select>
+      </label>
+      {usaPeriodo && (
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <label className="block"><span className={lblCls2}>Mês · de</span>
+            <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls2}>{ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}</select></label>
+          <label className="block"><span className={lblCls2}>até</span>
+            <select value={compAte} onChange={(e) => { const v = e.target.value; setCompAte(v); if (v < compDe) setCompDe(v); }} className={selCls2}>{ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}</select></label>
+          {usaUnidade && (
+            <label className="block"><span className={lblCls2}>Unidade</span>
+              <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}><option value="todas">Todas</option>{unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome}</option>)}</select></label>
+          )}
+          {categoria === "procedimento" && (
+            <>
+              <label className="block"><span className={lblCls2}>Tipo</span>
+                <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls2}><option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="RAAS">RAAS</option></select></label>
+              <label className="block sm:col-span-2"><span className={lblCls2}>Código do procedimento (10 dígitos)</span>
+                <input value={proc} onChange={(e) => setProc(e.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="0302040021" className={selCls2} /></label>
+            </>
+          )}
+        </div>
+      )}
+      <div className="mt-4 flex justify-end">
+        <button onClick={gerar} disabled={gerando} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          {gerando ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Gerar PDF (timbre)
+        </button>
+      </div>
+    </ModalRel>
+  );
+}
+
+// ---- Tabulação por procedimento (agregada, só números) ----
+const DIMS_TAB: { key: DimTab; label: string }[] = [
+  { key: "faixa", label: "Por faixa etária" },
+  { key: "faixa_sexo", label: "Faixa etária × Sexo" },
+  { key: "sexo", label: "Por sexo" },
+  { key: "raca", label: "Por raça/cor" },
+  { key: "bairro", label: "Por bairro" },
+];
+function TabulacaoModal({ logo, cor, unidades, onClose }: { logo: string | null; cor: string | null; unidades: { cnes: string; nome: string }[]; onClose: () => void }) {
+  const { abrirPreview, previewNode } = usePreviewPdf();
+  const [compDe, setCompDe] = useState(competenciaAtual());
+  const [compAte, setCompAte] = useState(competenciaAtual());
+  const [cnes, setCnes] = useState("todas");
+  const [tipo, setTipo] = useState<"todos" | "BPA-I" | "RAAS">("todos");
+  const [proc, setProc] = useState("");
+  const [dims, setDims] = useState<Set<DimTab>>(new Set(["faixa_sexo", "raca", "bairro"] as DimTab[]));
+  const [gerando, setGerando] = useState(false);
+  const K = 5;
+  const toggleDim = (k: DimTab) => setDims((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
+
+  const gerar = async () => {
+    if (dims.size === 0) { toast.error("Selecione ao menos um recorte."); return; }
+    setGerando(true);
+    try {
+      const cnesList = cnes === "todas" ? [] : [cnes];
+      const procCod = proc.replace(/\D/g, "") || null;
+      const tab = await carregarTabulacao(cnesList, compDe, compAte, tipo, procCod);
+      if (!tab) { toast.error("Falha ao carregar a tabulação."); return; }
+      if (tab.total === 0) { toast.warning("Nenhum atendimento para este recorte."); }
+      const nm = procCod ? await carregarNomesProcedimentos([procCod]) : {};
+      const procLabel = procCod ? (nm[procCod] ? `${nm[procCod]} (${procCod})` : `Procedimento ${procCod}`) : "Todos os procedimentos";
+      const filtros = [
+        cnes !== "todas" ? `Unidade: ${unidades.find((u) => u.cnes === cnes)?.nome ?? cnes}` : null,
+        tipo !== "todos" ? `Tipo: ${tipo}` : null,
+      ].filter(Boolean).join("  ·  ");
+      const ordem: DimTab[] = ["faixa", "faixa_sexo", "sexo", "raca", "bairro"];
+      const pdf = construirPdfTabulacao({ tab, procLabel, periodoLabel, filtros: filtros || undefined, dims: ordem.filter((d) => dims.has(d)), k: K, logo, cor });
+      abrirPreview(pdf, `tabulacao-${procCod ?? "todos"}-${compDe}-${compAte}.pdf`, "Tabulação por procedimento");
+    } catch { toast.error("Falha ao gerar a tabulação."); }
+    finally { setGerando(false); }
+  };
+
+  return (
+    <ModalRel titulo="Tabulação por procedimento (só números)" onClose={onClose}>
+      {previewNode}
+      <p className="mb-3 text-xs text-muted-foreground">Conta os <strong>atendimentos</strong> (quantidade) por recorte. Dados agregados e anonimizados — contagens abaixo de {K} viram “&lt; {K}”. Cobre BPA-I e RAAS.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block"><span className={lblCls2}>Mês · de</span>
+          <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls2}>{ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}</select></label>
+        <label className="block"><span className={lblCls2}>até</span>
+          <select value={compAte} onChange={(e) => { const v = e.target.value; setCompAte(v); if (v < compDe) setCompDe(v); }} className={selCls2}>{ultimosMesesMod(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}</select></label>
+        <label className="block"><span className={lblCls2}>Unidade</span>
+          <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}><option value="todas">Todas</option>{unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome}</option>)}</select></label>
+        <label className="block"><span className={lblCls2}>Tipo</span>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls2}><option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="RAAS">RAAS</option></select></label>
+        <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento (10 dígitos · vazio = todos)</span>
+          <input value={proc} onChange={(e) => setProc(e.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="0302040021" className={selCls2} /></label>
+      </div>
+      <div className="mt-3">
+        <span className={lblCls2}>Recortes (tabelas)</span>
+        <div className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {DIMS_TAB.map((d) => (
+            <label key={d.key} className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm">
+              <input type="checkbox" checked={dims.has(d.key)} onChange={() => toggleDim(d.key)} className="size-4 rounded border-border" />
+              {d.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button onClick={gerar} disabled={gerando || dims.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
           {gerando ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Gerar PDF (timbre)
         </button>
       </div>
