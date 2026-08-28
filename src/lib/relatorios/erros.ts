@@ -184,8 +184,10 @@ function errosDuplicidade(fichas: FichaCompleta[]): ErroItem[] {
 async function errosTfdSemProfissional(): Promise<ErroItem[]> {
   if (!supabase) return [];
   try {
+    // `tfd` tem 2 FKs para pacientes (paciente_id e acompanhante_id) → o embed precisa nomear
+    // o FK, senão o PostgREST recusa por ambiguidade.
     const { data, error } = await supabase.from("tfd")
-      .select("id, cnes, competencia, prof_cns, prof_nome, pacientes(nome)");
+      .select("id, cnes, competencia, prof_cns, prof_nome, pacientes!tfd_paciente_id_fkey(nome)");
     if (error || !data) return [];
     const out: ErroItem[] = [];
     for (const t of data as { id: string; cnes: string | null; competencia: string; prof_cns: string | null; prof_nome: string | null; pacientes: { nome: string } | { nome: string }[] | null }[]) {
