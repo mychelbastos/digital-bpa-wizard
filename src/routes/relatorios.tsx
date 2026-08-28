@@ -393,19 +393,11 @@ function RelatoriosPage() {
           {logo && <img src={logo} alt="Timbre" className="hidden h-12 w-auto object-contain sm:block" />}
         </header>
 
-        {/* ============ Relatório de Produção (BPA-I/BPA-C) ============ */}
-        <section className={`${cardCls} mb-5`}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-base font-bold text-foreground"><FileText className="size-4 text-primary" /> Produção (BPA-I / BPA-C / RAAS)</h2>
-            <button onClick={carregar} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
-            </button>
-          </div>
-
-          {/* Filtros */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {/* ============ PERÍODO — seletor único que rege TODA a página ============ */}
+        <section className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-end gap-3">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Mês de produção · de</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Período · de</span>
               <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls}>
                 {ultimosMeses(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
               </select>
@@ -416,6 +408,23 @@ function RelatoriosPage() {
                 {ultimosMeses(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
               </select>
             </label>
+            <p className="min-w-0 flex-1 pb-2 text-xs text-muted-foreground">
+              Este período <strong className="text-foreground">rege todos os relatórios desta página</strong> — produção, consistência e profissionais sem produção. Selecionado: <strong className="text-foreground">{periodoLabel}</strong>.
+            </p>
+          </div>
+        </section>
+
+        {/* ============ Relatório de Produção (BPA-I/BPA-C) ============ */}
+        <section className={`${cardCls} mb-5`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-base font-bold text-foreground"><FileText className="size-4 text-primary" /> Produção (BPA-I / BPA-C / RAAS)</h2>
+            <button onClick={carregar} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
+              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
+            </button>
+          </div>
+
+          {/* Filtros (o PERÍODO fica na barra do topo, regendo a página toda) */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <MultiSelect titulo="Tipo" allLabel="Todos" opcoes={tipos} sel={tipoSel} onChange={setTipoSel} />
             <MultiSelect titulo="Unidade" allLabel="Todas" opcoes={unidades} sel={cnesSel} onChange={setCnesSel} />
             <MultiSelect titulo="Profissional" allLabel="Todos" opcoes={profissionais} sel={profSel} onChange={setProfSel} />
