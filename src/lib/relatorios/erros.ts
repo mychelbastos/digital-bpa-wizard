@@ -11,12 +11,13 @@ import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { assinaturaBpaI, assinaturaBpaC } from "@/lib/bpa-i-v2/folha-duplicidade";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 
-export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade";
+export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade" | "tfd-sem-profissional";
 export const ROTULO_CATEGORIA: Record<CategoriaErro, string> = {
   "producao-sigtap": "Produção × SIGTAP",
   "ficha-incompleta": "Ficha incompleta",
   "paciente-revisao": "Cadastro de paciente",
   "duplicidade": "Duplicidade de fichas",
+  "tfd-sem-profissional": "TFD sem profissional",
 };
 
 export interface ErroItem {
@@ -162,6 +163,29 @@ function errosDuplicidade(fichas: FichaCompleta[]): ErroItem[] {
   return out;
 }
 
+// ---- E) TFD sem profissional responsável (não será faturado no fechamento) ----
+async function errosTfdSemProfissional(mesProducao: string): Promise<ErroItem[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.from("tfd")
+      .select("id, cnes, competencia, prof_cns, prof_nome, pacientes(nome)")
+      .eq("competencia", mesProducao);
+    if (error || !data) return [];
+    const out: ErroItem[] = [];
+    for (const t of data as { id: string; cnes: string | null; competencia: string; prof_cns: string | null; prof_nome: string | null; pacientes: { nome: string } | { nome: string }[] | null }[]) {
+      const cnsOk = /^[0-9]{15}$/.test((t.prof_cns ?? "").replace(/\D/g, ""));
+      if (cnsOk && (t.prof_nome ?? "").trim()) continue;
+      const pac = Array.isArray(t.pacientes) ? t.pacientes[0] : t.pacientes;
+      out.push({
+        categoria: "tfd-sem-profissional", gravidade: "erro", fichaId: t.id, tipo: "TFD",
+        competencia: t.competencia ?? "", cnes: t.cnes ?? "", profissional: "—", procedimento: "",
+        descricao: `TFD de ${pac?.nome ?? "paciente"} sem profissional responsável (nome/CNS) — não será faturado no fechamento.`,
+      });
+    }
+    return out;
+  } catch { return []; }
+}
+
 export interface OpcoesErros { mesProducao: string; categorias: Set<CategoriaErro> }
 
 // Coleta os erros das categorias pedidas. As categorias que usam produção compartilham a
@@ -178,6 +202,7 @@ export async function coletarErros({ mesProducao, categorias }: OpcoesErros): Pr
   if (categorias.has("ficha-incompleta")) tarefas.push(Promise.resolve(errosFichasIncompletas(fichas)));
   if (categorias.has("paciente-revisao")) tarefas.push(errosPacientesRevisao());
   if (categorias.has("duplicidade")) tarefas.push(Promise.resolve(errosDuplicidade(fichas)));
+  if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional(mesProducao));
   for (const bloco of await Promise.all(tarefas)) res.push(...bloco);
   return res;
 }

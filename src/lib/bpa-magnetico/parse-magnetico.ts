@@ -36,6 +36,18 @@ import { emptyRow, type RowData } from "@/lib/bpac-layout";
 
 const arr = (s: string) => s.split("");
 
+// Dígito verificador do código IBGE de município: o .MAR guarda o código com 6 dígitos, mas o
+// BPA-I exige 7 (com o DV). Acrescenta o DV (algoritmo oficial do IBGE). Se não vier com 6
+// dígitos, devolve como está (o crivo aponta a inconsistência).
+function ibge7(campo: string): string {
+  const d = campo.replace(/\D/g, "");
+  if (d.length !== 6) return d;
+  const pesos = [1, 2, 1, 2, 1, 2];
+  let s = 0;
+  for (let i = 0; i < 6; i++) { let p = Number(d[i]) * pesos[i]; if (p > 9) p -= 9; s += p; }
+  return d + String((10 - (s % 10)) % 10);
+}
+
 // data aaaammdd (arquivo) -> ddmmaaaa (como o SeqData guarda). Branco/inválida -> [].
 function dataParaSeq(amd: string): string[] {
   if (!/\d/.test(amd) || amd.trim().length !== 8) return [];
@@ -124,7 +136,7 @@ function parse03(line: string): { cnes: string; competencia: string; profCns: st
     codProc: arr(line.slice(49, 59)),
     cnsPac: arr(line.slice(59, 74)),
     sexo: (line[74] === "M" || line[74] === "F" ? line[74] : "") as SeqData["sexo"],
-    ibge: arr(line.slice(75, 81)),
+    ibge: arr(ibge7(line.slice(75, 81))),
     cid: arr(line.slice(81, 85)),
     idade: arr(line.slice(85, 88)),
     qtde: arr(line.slice(88, 94)),

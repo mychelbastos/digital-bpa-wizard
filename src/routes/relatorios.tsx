@@ -145,7 +145,7 @@ function RelatoriosPage() {
   const [relacaoOpen, setRelacaoOpen] = useState(false);
   const [tabulacaoOpen, setTabulacaoOpen] = useState(false);
   // Erros / crivo
-  const TODAS_CATS: CategoriaErro[] = ["producao-sigtap", "ficha-incompleta", "paciente-revisao", "duplicidade"];
+  const TODAS_CATS: CategoriaErro[] = ["producao-sigtap", "ficha-incompleta", "paciente-revisao", "duplicidade", "tfd-sem-profissional"];
   const [categoriasErro, setCategoriasErro] = useState<Set<CategoriaErro>>(new Set(TODAS_CATS));
   const [erros, setErros] = useState<ErroItem[] | null>(null);
   const [verificando, setVerificando] = useState(false);
