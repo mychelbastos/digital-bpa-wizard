@@ -181,7 +181,7 @@ function errosDuplicidade(fichas: FichaCompleta[]): ErroItem[] {
 // NÃO filtra pelo mês de produção selecionado: um TFD sem profissional é um pendente (ainda
 // não faturado — TFD faturado sai da tabela `tfd`), então precisa aparecer em qualquer
 // verificação. A competência do TFD vai na descrição.
-async function errosTfdSemProfissional(): Promise<ErroItem[]> {
+async function errosTfdSemProfissional(cnesFiltro: Set<string> | null): Promise<ErroItem[]> {
   if (!supabase) return [];
   try {
     // `tfd` tem 2 FKs para pacientes (paciente_id e acompanhante_id) → o embed precisa nomear
@@ -191,6 +191,7 @@ async function errosTfdSemProfissional(): Promise<ErroItem[]> {
     if (error || !data) return [];
     const out: ErroItem[] = [];
     for (const t of data as { id: string; cnes: string | null; competencia: string; prof_cns: string | null; prof_nome: string | null; pacientes: { nome: string } | { nome: string }[] | null }[]) {
+      if (cnesFiltro && !cnesFiltro.has(t.cnes ?? "")) continue;
       const cnsOk = /^[0-9]{15}$/.test((t.prof_cns ?? "").replace(/\D/g, ""));
       if (cnsOk && (t.prof_nome ?? "").trim()) continue;
       const pac = Array.isArray(t.pacientes) ? t.pacientes[0] : t.pacientes;
@@ -205,7 +206,7 @@ async function errosTfdSemProfissional(): Promise<ErroItem[]> {
   } catch { return []; }
 }
 
-export interface OpcoesErros { de: string; ate: string; categorias: Set<CategoriaErro> }
+export interface OpcoesErros { de: string; ate: string; categorias: Set<CategoriaErro>; cnes?: string[] }
 
 // Meses AAAAMM no intervalo [de, ate] (inclusive). Ex.: 202607..202608 -> ["202607","202608"].
 export function mesesNoIntervalo(de: string, ate: string): string[] {
@@ -223,23 +224,27 @@ export function mesesNoIntervalo(de: string, ate: string): string[] {
 
 // Coleta os erros das categorias pedidas para o PERÍODO [de, ate]. As categorias que usam
 // produção compartilham a mesma carga.
-export async function coletarErros({ de, ate, categorias }: OpcoesErros): Promise<ErroItem[]> {
+export async function coletarErros({ de, ate, categorias, cnes }: OpcoesErros): Promise<ErroItem[]> {
   const res: ErroItem[] = [];
   const meses = mesesNoIntervalo(de, ate);
+  const cnesSet = cnes && cnes.length ? new Set(cnes) : null; // filtro de unidade (null = todas)
   // Cargas compartilhadas: produção p/ o crivo SIGTAP (período); fichas p/ incompletas+duplicidade
   // (todos os meses do período).
-  const [rows, fichas] = await Promise.all([
+  const [rowsRaw, fichasRaw] = await Promise.all([
     categorias.has("producao-sigtap") ? carregarProducaoDashboardPeriodo(de, ate) : Promise.resolve([] as ProducaoBpaRow[]),
     (categorias.has("ficha-incompleta") || categorias.has("duplicidade"))
       ? Promise.all(meses.map((m) => fichasDoMes(m))).then((a) => a.flat())
       : Promise.resolve([] as FichaCompleta[]),
   ]);
+  // Aplica o filtro de unidade (quando houver).
+  const rows = cnesSet ? rowsRaw.filter((r) => cnesSet.has(r.cnes ?? "")) : rowsRaw;
+  const fichas = cnesSet ? fichasRaw.filter((f) => cnesSet.has(jc((f.dados as { cnes?: unknown }).cnes))) : fichasRaw;
   const tarefas: Promise<ErroItem[]>[] = [];
   if (categorias.has("producao-sigtap")) tarefas.push(errosProducaoSigtap(rows));
   if (categorias.has("ficha-incompleta")) tarefas.push(Promise.resolve(errosFichasIncompletas(fichas)));
   if (categorias.has("paciente-revisao")) tarefas.push(errosPacientesRevisao());
   if (categorias.has("duplicidade")) tarefas.push(Promise.resolve(errosDuplicidade(fichas)));
-  if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional());
+  if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional(cnesSet));
   for (const bloco of await Promise.all(tarefas)) res.push(...bloco);
   return res;
 }

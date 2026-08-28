@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import {
   FileBarChart, Download, FileText, Printer, RefreshCw, FileSpreadsheet, Ambulance, X, Loader2, UserX, ChevronDown, Check, Users, Lock,
 } from "lucide-react";
@@ -165,7 +166,6 @@ function RelatoriosPage() {
   const [verificando, setVerificando] = useState(false);
   const [filtroGrav, setFiltroGrav] = useState<"todas" | "erro" | "aviso">("todas");
   // Profissionais inativos / sem produção
-  const [inaCnes, setInaCnes] = useState("todos");
   const [inaJanela, setInaJanela] = useState(3);
   const [inaIncluirRoster, setInaIncluirRoster] = useState(false);
   const [inativos, setInativos] = useState<InativosResultado | null>(null);
@@ -185,6 +185,8 @@ function RelatoriosPage() {
   // Rótulo do período (para PDFs/arquivos/labels): "Jul/2026" ou "Jun/2026 a Ago/2026".
   const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
   const periodoArq = compDe === compAte ? compDe : `${compDe}-${compAte}`;
+  // Preset ativo do período (ou "custom" quando não bate nenhum).
+  const presetAtivo = PRESETS_PERIODO.find((p) => { const [d, a] = p.range(); return compDe === d && compAte === a; })?.key ?? "custom";
 
   // Token da carga atual: a produção é paginada e o período pode mudar rápido; sem isto uma
   // carga antiga (mais lenta) responde depois e sobrescreve a nova (dava 155 vs 227 no mesmo
@@ -334,7 +336,7 @@ function RelatoriosPage() {
   const verificarErros = async () => {
     if (categoriasErro.size === 0) { toast.error("Selecione ao menos uma categoria."); return; }
     setVerificando(true);
-    try { setErros(await coletarErros({ de: compDe, ate: compAte, categorias: categoriasErro })); }
+    try { setErros(await coletarErros({ de: compDe, ate: compAte, categorias: categoriasErro, cnes: [...cnesSel] })); }
     finally { setVerificando(false); }
   };
   const [resolvendo, setResolvendo] = useState<string | null>(null);
@@ -355,7 +357,7 @@ function RelatoriosPage() {
   // ---- Profissionais inativos / sem produção ----
   const nomesUnidade = useMemo(() => Object.fromEntries(cnesOpcoes.map((u) => [u.cnes, u.nome])), [cnesOpcoes]);
   const verificarInativos = async () => {
-    const cnesList = inaCnes === "todos" ? cnesOpcoes.map((u) => u.cnes) : [inaCnes];
+    const cnesList = cnesSel.size > 0 ? [...cnesSel] : cnesOpcoes.map((u) => u.cnes);
     if (cnesList.length === 0) { toast.error("Sem unidade vinculada."); return; }
     setInaLoading(true);
     try {
@@ -363,10 +365,10 @@ function RelatoriosPage() {
     } finally { setInaLoading(false); }
   };
   const inaSubtitulo = () => {
-    const uni = inaCnes === "todos" ? `Todas as unidades (${cnesOpcoes.length})` : (nomesUnidade[inaCnes] ?? inaCnes);
+    const uni = cnesSel.size === 0 ? `Todas as unidades (${cnesOpcoes.length})` : cnesSel.size === 1 ? (nomesUnidade[[...cnesSel][0]] ?? [...cnesSel][0]) : `${cnesSel.size} unidades`;
     return `${uni} · sem produção em ${periodoLabel} · janela ${inaJanela} ${inaJanela === 1 ? "mês" : "meses"} anteriores`;
   };
-  const inaNomeArq = () => `sem-producao-${periodoArq}${inaCnes !== "todos" ? `-${inaCnes}` : ""}`;
+  const inaNomeArq = () => `sem-producao-${periodoArq}${cnesSel.size === 1 ? `-${[...cnesSel][0]}` : ""}`;
   const baixarCsvInativos = () => { if (!inativos?.rows.length) return; baixarCsv(`${inaNomeArq()}.csv`, csvInativos(inativos.rows)); toast.success("CSV gerado."); };
   const baixarPdfInativos = () => { if (!inativos?.rows.length) return; abrirPreview(construirPdfInativos({ rows: inativos.rows, subtitulo: inaSubtitulo(), logo, cor }), `${inaNomeArq()}.pdf`, "Profissionais sem produção"); };
 
@@ -390,6 +392,7 @@ function RelatoriosPage() {
   };
 
   const selCls = "w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm";
+  const lblTopo = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
   const cardCls = "rounded-2xl border border-border bg-card p-5 shadow-sm";
 
   return (
@@ -407,47 +410,38 @@ function RelatoriosPage() {
           {logo && <img src={logo} alt="Timbre" className="hidden h-12 w-auto object-contain sm:block" />}
         </header>
 
-        {/* ============ PERÍODO — seletor único que rege TODA a página ============ */}
-        <section className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 p-4">
-          {/* Presets rápidos */}
-          <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            {PRESETS_PERIODO.map((p) => {
-              const [d, a] = p.range();
-              const ativo = compDe === d && compAte === a;
-              return (
-                <button key={p.key} type="button" onClick={() => { setCompDe(d); setCompAte(a); }}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-muted"}`}>
-                  {p.label}
-                </button>
-              );
-            })}
-            {(() => {
-              const ehPreset = PRESETS_PERIODO.some((p) => { const [d, a] = p.range(); return compDe === d && compAte === a; });
-              return (
-                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${ehPreset ? "border-border bg-card text-muted-foreground" : "border-primary bg-primary text-primary-foreground"}`}>
-                  Personalizado
-                </span>
-              );
-            })()}
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
+        {/* ============ FILTROS-BASE — período + unidade que regem TODA a página ============ */}
+        <motion.section initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: "easeOut" }}
+          className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Período · de</span>
+              <span className={lblTopo}>Atalho de período</span>
+              <select value={presetAtivo} onChange={(e) => { const p = PRESETS_PERIODO.find((x) => x.key === e.target.value); if (p) { const [d, a] = p.range(); setCompDe(d); setCompAte(a); } }} className={selCls}>
+                {PRESETS_PERIODO.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                <option value="custom">Personalizado</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className={lblTopo}>De</span>
               <select value={compDe} onChange={(e) => { const v = e.target.value; setCompDe(v); if (v > compAte) setCompAte(v); }} className={selCls}>
                 {ultimosMeses(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">até</span>
+              <span className={lblTopo}>Até</span>
               <select value={compAte} onChange={(e) => { const v = e.target.value; setCompAte(v); if (v < compDe) setCompDe(v); }} className={selCls}>
                 {ultimosMeses(12).map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
               </select>
             </label>
-            <p className="min-w-0 flex-1 pb-2 text-xs text-muted-foreground">
-              Este período <strong className="text-foreground">rege todos os relatórios desta página</strong> — produção, consistência e profissionais sem produção. Selecionado: <strong className="text-foreground">{periodoLabel}</strong>.
-            </p>
+            <div className="col-span-2 sm:col-span-1 lg:col-span-2">
+              <MultiSelect titulo="Unidade" allLabel="Todas as unidades" opcoes={unidades} sel={cnesSel} onChange={setCnesSel} />
+            </div>
           </div>
-        </section>
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            Estes filtros <strong className="text-foreground">regem todos os relatórios desta página</strong> — produção, consistência e profissionais sem produção.
+            {" "}Selecionado: <strong className="text-foreground">{periodoLabel}</strong> · <strong className="text-foreground">{cnesSel.size > 0 ? `${cnesSel.size} unidade(s)` : "todas as unidades"}</strong>.
+          </p>
+        </motion.section>
 
         {/* ============ Relatório de Produção (BPA-I/BPA-C) ============ */}
         <section className={`${cardCls} mb-5`}>
@@ -461,7 +455,6 @@ function RelatoriosPage() {
           {/* Filtros (o PERÍODO fica na barra do topo, regendo a página toda) */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <MultiSelect titulo="Tipo" allLabel="Todos" opcoes={tipos} sel={tipoSel} onChange={setTipoSel} />
-            <MultiSelect titulo="Unidade" allLabel="Todas" opcoes={unidades} sel={cnesSel} onChange={setCnesSel} />
             <MultiSelect titulo="Profissional" allLabel="Todos" opcoes={profissionais} sel={profSel} onChange={setProfSel} />
             <div className="lg:col-span-2"><MultiSelect titulo="Procedimento" allLabel="Todos" opcoes={procedimentos} comCodigo sel={procSel} onChange={setProcSel} /></div>
             <MultiSelect titulo="CID" allLabel="Todos" opcoes={cids} sel={cidSel} onChange={setCidSel} />
@@ -575,13 +568,6 @@ function RelatoriosPage() {
           </p>
           <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Unidade</span>
-              <select value={inaCnes} onChange={(e) => setInaCnes(e.target.value)} className={selCls}>
-                <option value="todos">Todas ({cnesOpcoes.length})</option>
-                {cnesOpcoes.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome}</option>)}
-              </select>
-            </label>
-            <label className="block">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Janela anterior</span>
               <select value={inaJanela} onChange={(e) => setInaJanela(Number(e.target.value))} className={selCls}>
                 <option value={3}>Últimos 3 meses</option>
@@ -589,6 +575,7 @@ function RelatoriosPage() {
                 <option value={12}>Últimos 12 meses</option>
               </select>
             </label>
+            <p className="col-span-2 self-end pb-1 text-[11px] text-muted-foreground sm:col-span-3">Unidade e período vêm do <strong className="text-foreground">seletor do topo</strong> da página.</p>
           </div>
           <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <input type="checkbox" checked={inaIncluirRoster} onChange={(e) => setInaIncluirRoster(e.target.checked)} className="mt-0.5 size-4 shrink-0 rounded border-border" />
