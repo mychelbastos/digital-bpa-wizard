@@ -503,6 +503,11 @@ function FormTfd(props: {
     if (!destinoId) { toast.error("Selecione um destino para o TFD."); return; }
     if (viagensValidas.length === 0) { toast.error("Adicione ao menos uma viagem com data."); return; }
     if (temAcomp && !acompanhante) { toast.error("Cadastre/selecione o acompanhante (ou desmarque acompanhante)."); return; }
+    // Profissional responsável obrigatório: o BPA-I exige nome + CNS do profissional.
+    if (!profNome.trim() || !/^[0-9]{15}$/.test((profCns || "").replace(/\D/g, ""))) {
+      toast.error("Informe o profissional responsável (nome e CNS) — obrigatório para gerar o BPA-I.");
+      return;
+    }
     setSalvando(true);
     const res = await salvarTfd(et?.id ?? null, {
       organizacao_id: orgId, cnes, competencia, paciente_id: paciente.id,
@@ -597,7 +602,7 @@ function FormTfd(props: {
 
       {/* Profissional responsável */}
       <div className="mt-3">
-        <div className={label}>Profissional responsável (CBO usado no BPA-I)</div>
+        <div className={label}>Profissional responsável (CBO usado no BPA-I) <span className="text-destructive">*</span></div>
         <ProfPicker cnes={cnes} cns={profCns} nome={profNome} cbo={profCbo}
           onMuda={(v) => { setProfCns(v.cns); setProfNome(v.nome); setProfCbo(v.cbo); }} />
       </div>
