@@ -26,6 +26,7 @@ import { construirPdfPerfil } from "@/lib/relatorios/perfil-pdf";
 import { relacaoGeral, relacaoTfd, relacaoProducao, carregarTabulacao } from "@/lib/relatorios/relacao";
 import { construirPdfRelacao } from "@/lib/relatorios/relacao-pdf";
 import { construirPdfTabulacao, type DimTab } from "@/lib/relatorios/tabulacao-pdf";
+import { ProcedimentoPicker } from "@/components/relatorios/ProcedimentoPicker";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { AlertTriangle } from "lucide-react";
 import {
@@ -1004,8 +1005,8 @@ function RelacaoModal({ logo, cor, unidades, onClose }: { logo: string | null; c
             <>
               <label className="block"><span className={lblCls2}>Tipo</span>
                 <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls2}><option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="RAAS">RAAS</option></select></label>
-              <label className="block sm:col-span-2"><span className={lblCls2}>Código do procedimento (10 dígitos)</span>
-                <input value={proc} onChange={(e) => setProc(e.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="0302040021" className={selCls2} /></label>
+              <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento</span>
+                <ProcedimentoPicker value={proc} onChange={setProc} /></label>
             </>
           )}
         </div>
@@ -1075,8 +1076,8 @@ function TabulacaoModal({ logo, cor, unidades, onClose }: { logo: string | null;
           <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}><option value="todas">Todas</option>{unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome}</option>)}</select></label>
         <label className="block"><span className={lblCls2}>Tipo</span>
           <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls2}><option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="RAAS">RAAS</option></select></label>
-        <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento (10 dígitos · vazio = todos)</span>
-          <input value={proc} onChange={(e) => setProc(e.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="0302040021" className={selCls2} /></label>
+        <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento (vazio = todos)</span>
+          <ProcedimentoPicker value={proc} onChange={setProc} /></label>
       </div>
       <div className="mt-3">
         <span className={lblCls2}>Recortes (tabelas)</span>
