@@ -47,6 +47,7 @@ import {
   type LeituraLog,
   type DonoSistema,
 } from "@/lib/admin";
+import { ProfissionalPicker } from "@/components/admin/ProfissionalPicker";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Administração de vínculos e acessos" }] }),
@@ -339,10 +340,10 @@ function Admin() {
     }
   };
 
-  const criarContaNova = async (email: string, senha: string, cnes: string, papel: string) => {
+  const criarContaNova = async (email: string, senha: string, cnes: string, papel: string, nome: string, cns: string) => {
     setSalvando("criar-conta");
     try {
-      await criarConta(email, senha, cnes, papel);
+      await criarConta(email, senha, cnes, papel, nome, cns);
       await recarregar();
       toast.success(`Conta ${email} criada e vinculada ao CNES ${cnes}.`);
       return true;
@@ -1126,7 +1127,7 @@ function CriarContaForm({
   cargos: string[];
   estabPorOrg: Record<string, EstabelecimentoOrg[]>;
   criando: boolean;
-  onCriar: (email: string, senha: string, cnes: string, papel: string) => Promise<boolean>;
+  onCriar: (email: string, senha: string, cnes: string, papel: string, nome: string, cns: string) => Promise<boolean>;
 }) {
   const [aberto, setAberto] = useState(false);
   const [email, setEmail] = useState("");
@@ -1134,19 +1135,20 @@ function CriarContaForm({
   const [org, setOrg] = useState(orgs.length === 1 ? orgs[0].id : "");
   const [cnes, setCnes] = useState("");
   const [papel, setPapel] = useState("");
+  const [nome, setNome] = useState("");
+  const [cns, setCns] = useState("");
+  const [confere, setConfere] = useState(false);
 
   const estabs = estabPorOrg[org] ?? [];
   const senhaCurta = senha.length > 0 && senha.length < 8;
-  const valido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && senha.length >= 8 && cnes && papel;
+  const valido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && senha.length >= 8 && cnes && papel && nome.trim() && /^[0-9]{15}$/.test(cns);
 
   const submeter = async () => {
     if (!valido) return;
-    const ok = await onCriar(email.trim(), senha, cnes, papel);
+    const ok = await onCriar(email.trim(), senha, cnes, papel, nome.trim(), cns);
     if (ok) {
-      setEmail("");
-      setSenha("");
-      setCnes("");
-      setPapel("");
+      setEmail(""); setSenha(""); setCnes(""); setPapel("");
+      setNome(""); setCns(""); setConfere(false);
       setAberto(false);
     }
   };
@@ -1244,7 +1246,15 @@ function CriarContaForm({
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground sm:col-span-2">
+          Profissional da unidade (crivo por nome/CNS)
+          <ProfissionalPicker cnes={cnes} nome={nome} cns={cns} confere={confere}
+            onChange={(nm, c, ok) => { setNome(nm); setCns(c); setConfere(ok); }} />
+        </label>
       </div>
+      <p className="mt-1.5 text-[10px] text-muted-foreground">
+        Esta é a <strong>unidade de cadastro</strong> (base) do usuário. Ele confere com o cadastro SCNES do CNES. Depois você pode dar acesso a outras unidades no card da pessoa.
+      </p>
       <div className="mt-2 flex items-center gap-2">
         <button
           onClick={submeter}

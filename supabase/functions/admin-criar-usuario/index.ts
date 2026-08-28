@@ -23,13 +23,18 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader) return json({ erro: "Sem autenticação." }, 401);
 
-    const { email, senha, cnes, papel } = await req.json().catch(() => ({}));
+    const { email, senha, cnes, papel, nome, cns } = await req.json().catch(() => ({}));
     const emailOk = typeof email === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
     if (!emailOk) return json({ erro: "E-mail inválido." }, 400);
     if (typeof senha !== "string" || senha.length < 8)
       return json({ erro: "A senha deve ter ao menos 8 caracteres." }, 400);
     if (!/^[0-9]{7}$/.test(cnes ?? "")) return json({ erro: "CNES inválido." }, 400);
     if (typeof papel !== "string" || !papel) return json({ erro: "Cargo obrigatório." }, 400);
+    // nome + CNS do profissional (unidade de cadastro/base). CNS obrigatório (15 díg.).
+    const nomeStr = typeof nome === "string" ? nome.trim() : "";
+    const cnsStr = typeof cns === "string" ? cns.replace(/\D/g, "") : "";
+    if (!nomeStr) return json({ erro: "Informe o nome do profissional." }, 400);
+    if (!/^[0-9]{15}$/.test(cnsStr)) return json({ erro: "CNS do profissional inválido (15 dígitos)." }, 400);
 
     const url = Deno.env.get("SUPABASE_URL")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -58,11 +63,27 @@ Deno.serve(async (req) => {
       .single();
     if (e2 || !estab?.organizacao_id) return json({ erro: "CNES sem organização." }, 400);
 
+    // 2b) CRIVO: o profissional (CNS) precisa constar no cadastro SCNES DESTE CNES. Se o CNS
+    // não estiver no cache local, dispara a sincronização (mesma Edge Function) e reconsulta.
+    let nomeFinal = nomeStr;
+    const buscaProf = async () =>
+      (await admin.from("profissionais").select("nome").eq("cnes", cnes).eq("cns", cnsStr).limit(1)).data as { nome: string }[] | null;
+    let prof = await buscaProf();
+    if (!prof || prof.length === 0) {
+      try { await admin.functions.invoke("cnes-profissionais", { body: { cnes } }); } catch { /* best-effort */ }
+      prof = await buscaProf();
+    }
+    if (!prof || prof.length === 0)
+      return json({ erro: "O profissional (CNS) não confere com o cadastro SCNES desta unidade." }, 400);
+    nomeFinal = prof[0].nome || nomeStr; // usa o nome oficial do SCNES
+
     // 3) Cria o usuário (Admin API). email_confirm: true = já ativo, sem e-mail de confirmação.
+    // Guarda nome+CNS no perfil (user_metadata) — usados como assinatura/identidade.
     const { data: novo, error: e3 } = await admin.auth.admin.createUser({
       email,
       password: senha,
       email_confirm: true,
+      user_metadata: { nome: nomeFinal, cns: cnsStr, cnes_base: cnes },
     });
     if (e3) return json({ erro: e3.message }, 400);
     const userId = novo.user?.id;

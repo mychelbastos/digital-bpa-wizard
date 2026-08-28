@@ -289,10 +289,12 @@ export async function criarConta(
   senha: string,
   cnes: string,
   papel: string,
+  nome?: string,
+  cns?: string,
 ): Promise<string> {
   if (!supabase) throw new Error("Sem conexão.");
   const { data, error } = await supabase.functions.invoke("admin-criar-usuario", {
-    body: { email, senha, cnes, papel },
+    body: { email, senha, cnes, papel, nome, cns },
   });
   if (error) {
     let msg = error.message;
