@@ -947,7 +947,7 @@ function RelacaoModal({ logo, cor, unidades, onClose }: { logo: string | null; c
   const [compAte, setCompAte] = useState(competenciaAtual());
   const [cnes, setCnes] = useState("todas");
   const [tipo, setTipo] = useState<"todos" | "BPA-I" | "RAAS">("todos");
-  const [proc, setProc] = useState("");
+  const [procs, setProcs] = useState<string[]>([]);
   const [gerando, setGerando] = useState(false);
   const usaPeriodo = categoria !== "geral";
   const usaUnidade = categoria === "raas" || categoria === "procedimento";
@@ -957,16 +957,16 @@ function RelacaoModal({ logo, cor, unidades, onClose }: { logo: string | null; c
     setGerando(true);
     try {
       const cnesList = cnes === "todas" ? [] : [cnes];
-      const procCod = proc.replace(/\D/g, "");
       let pacientes; let titulo; let sub;
       if (categoria === "geral") { pacientes = await relacaoGeral(); titulo = "Relação de pacientes — Geral"; sub = "Todos os pacientes cadastrados"; }
       else if (categoria === "tfd") { pacientes = await relacaoTfd(compDe, compAte); titulo = "Relação de pacientes — TFD"; sub = `Pacientes com TFD · ${periodoLabel}`; }
-      else if (categoria === "raas") { pacientes = await relacaoProducao(cnesList, compDe, compAte, "RAAS", null); titulo = "Relação de pacientes — RAAS"; sub = `Atendidos no RAAS · ${periodoLabel}`; }
+      else if (categoria === "raas") { pacientes = await relacaoProducao(cnesList, compDe, compAte, "RAAS", []); titulo = "Relação de pacientes — RAAS"; sub = `Atendidos no RAAS · ${periodoLabel}`; }
       else {
-        if (procCod.length !== 10) { toast.error("Informe o código do procedimento (10 dígitos)."); return; }
-        pacientes = await relacaoProducao(cnesList, compDe, compAte, tipo, procCod);
-        const nm = await carregarNomesProcedimentos([procCod]);
-        titulo = "Relação de pacientes — por procedimento"; sub = `${nm[procCod] ? `${nm[procCod]} (${procCod})` : procCod} · ${periodoLabel}`;
+        if (procs.length === 0) { toast.error("Selecione ao menos um procedimento."); return; }
+        pacientes = await relacaoProducao(cnesList, compDe, compAte, tipo, procs);
+        const nm = await carregarNomesProcedimentos(procs);
+        const rot = procs.length === 1 ? (nm[procs[0]] ? `${nm[procs[0]]} (${procs[0]})` : procs[0]) : `${procs.length} procedimentos`;
+        titulo = "Relação de pacientes — por procedimento"; sub = `${rot} · ${periodoLabel}`;
       }
       if (pacientes.length === 0) { toast.warning("Nenhum paciente encontrado para este recorte."); }
       const uni = usaUnidade && cnes !== "todas" ? `  ·  Unidade: ${unidades.find((u) => u.cnes === cnes)?.nome ?? cnes}` : "";
@@ -1005,8 +1005,8 @@ function RelacaoModal({ logo, cor, unidades, onClose }: { logo: string | null; c
             <>
               <label className="block"><span className={lblCls2}>Tipo</span>
                 <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls2}><option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="RAAS">RAAS</option></select></label>
-              <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento</span>
-                <ProcedimentoPicker value={proc} onChange={setProc} /></label>
+              <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento(s)</span>
+                <ProcedimentoPicker value={procs} onChange={setProcs} /></label>
             </>
           )}
         </div>
@@ -1034,7 +1034,7 @@ function TabulacaoModal({ logo, cor, unidades, onClose }: { logo: string | null;
   const [compAte, setCompAte] = useState(competenciaAtual());
   const [cnes, setCnes] = useState("todas");
   const [tipo, setTipo] = useState<"todos" | "BPA-I" | "RAAS">("todos");
-  const [proc, setProc] = useState("");
+  const [procs, setProcs] = useState<string[]>([]);
   const [dims, setDims] = useState<Set<DimTab>>(new Set(["faixa_sexo", "raca", "bairro"] as DimTab[]));
   const [gerando, setGerando] = useState(false);
   const K = 5;
@@ -1046,19 +1046,20 @@ function TabulacaoModal({ logo, cor, unidades, onClose }: { logo: string | null;
     setGerando(true);
     try {
       const cnesList = cnes === "todas" ? [] : [cnes];
-      const procCod = proc.replace(/\D/g, "") || null;
-      const tab = await carregarTabulacao(cnesList, compDe, compAte, tipo, procCod);
+      const tab = await carregarTabulacao(cnesList, compDe, compAte, tipo, procs);
       if (!tab) { toast.error("Falha ao carregar a tabulação."); return; }
       if (tab.total === 0) { toast.warning("Nenhum atendimento para este recorte."); }
-      const nm = procCod ? await carregarNomesProcedimentos([procCod]) : {};
-      const procLabel = procCod ? (nm[procCod] ? `${nm[procCod]} (${procCod})` : `Procedimento ${procCod}`) : "Todos os procedimentos";
+      const nm = procs.length ? await carregarNomesProcedimentos(procs) : {};
+      const procLabel = procs.length === 0 ? "Todos os procedimentos"
+        : procs.length === 1 ? (nm[procs[0]] ? `${nm[procs[0]]} (${procs[0]})` : `Procedimento ${procs[0]}`)
+        : `${procs.length} procedimentos (${procs.join(", ")})`;
       const filtros = [
         cnes !== "todas" ? `Unidade: ${unidades.find((u) => u.cnes === cnes)?.nome ?? cnes}` : null,
         tipo !== "todos" ? `Tipo: ${tipo}` : null,
       ].filter(Boolean).join("  ·  ");
       const ordem: DimTab[] = ["faixa", "faixa_sexo", "sexo", "raca", "bairro"];
       const pdf = construirPdfTabulacao({ tab, procLabel, periodoLabel, filtros: filtros || undefined, dims: ordem.filter((d) => dims.has(d)), k: K, logo, cor });
-      abrirPreview(pdf, `tabulacao-${procCod ?? "todos"}-${compDe}-${compAte}.pdf`, "Tabulação por procedimento");
+      abrirPreview(pdf, `tabulacao-${procs.length === 1 ? procs[0] : procs.length ? "multi" : "todos"}-${compDe}-${compAte}.pdf`, "Tabulação por procedimento");
     } catch { toast.error("Falha ao gerar a tabulação."); }
     finally { setGerando(false); }
   };
@@ -1076,8 +1077,8 @@ function TabulacaoModal({ logo, cor, unidades, onClose }: { logo: string | null;
           <select value={cnes} onChange={(e) => setCnes(e.target.value)} className={selCls2}><option value="todas">Todas</option>{unidades.map((u) => <option key={u.cnes} value={u.cnes}>{u.nome}</option>)}</select></label>
         <label className="block"><span className={lblCls2}>Tipo</span>
           <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={selCls2}><option value="todos">Todos</option><option value="BPA-I">BPA-I</option><option value="RAAS">RAAS</option></select></label>
-        <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento (vazio = todos)</span>
-          <ProcedimentoPicker value={proc} onChange={setProc} /></label>
+        <label className="block sm:col-span-2"><span className={lblCls2}>Procedimento(s) (vazio = todos)</span>
+          <ProcedimentoPicker value={procs} onChange={setProcs} /></label>
       </div>
       <div className="mt-3">
         <span className={lblCls2}>Recortes (tabelas)</span>

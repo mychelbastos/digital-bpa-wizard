@@ -20,9 +20,9 @@ export async function relacaoTfd(de: string | null, ate: string | null): Promise
   if (!supabase) return [];
   try { const { data, error } = await supabase.rpc("relacao_pacientes_tfd", { _de: de, _ate: ate }); return error ? [] : mapNominal(data); } catch { return []; }
 }
-export async function relacaoProducao(cnesList: string[], de: string, ate: string, tipo: string, proc: string | null): Promise<PacienteNominal[]> {
+export async function relacaoProducao(cnesList: string[], de: string, ate: string, tipo: string, procs: string[]): Promise<PacienteNominal[]> {
   if (!supabase) return [];
-  try { const { data, error } = await supabase.rpc("relacao_pacientes_producao", { _cnes: cnesList.length ? cnesList : null, _de: de, _ate: ate, _tipo: tipo, _proc: proc }); return error ? [] : mapNominal(data); } catch { return []; }
+  try { const { data, error } = await supabase.rpc("relacao_pacientes_producao", { _cnes: cnesList.length ? cnesList : null, _de: de, _ate: ate, _tipo: tipo, _procs: procs.length ? procs : null }); return error ? [] : mapNominal(data); } catch { return []; }
 }
 
 export interface Tabulacao {
@@ -33,10 +33,10 @@ export interface Tabulacao {
   bairro: { k: string; n: number }[];
   faixaSexo: { faixa: string; sexo: string; n: number }[];
 }
-export async function carregarTabulacao(cnesList: string[], de: string, ate: string, tipo: string, proc: string | null): Promise<Tabulacao | null> {
+export async function carregarTabulacao(cnesList: string[], de: string, ate: string, tipo: string, procs: string[]): Promise<Tabulacao | null> {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase.rpc("tabulacao_producao", { _cnes: cnesList.length ? cnesList : null, _de: de, _ate: ate, _tipo: tipo, _proc: proc });
+    const { data, error } = await supabase.rpc("tabulacao_producao", { _cnes: cnesList.length ? cnesList : null, _de: de, _ate: ate, _tipo: tipo, _procs: procs.length ? procs : null });
     if (error || !data) return null;
     const d = data as { total: number; faixa: { k: string; n: number }[]; sexo: { k: string; n: number }[]; raca: { k: string; n: number }[]; bairro: { k: string; n: number }[]; faixa_sexo: { faixa: string; sexo: string; n: number }[] };
     return {
