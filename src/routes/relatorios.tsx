@@ -320,7 +320,7 @@ function RelatoriosPage() {
   const verificarErros = async () => {
     if (categoriasErro.size === 0) { toast.error("Selecione ao menos uma categoria."); return; }
     setVerificando(true);
-    try { setErros(await coletarErros({ mesProducao: competencia, categorias: categoriasErro })); }
+    try { setErros(await coletarErros({ de: compDe, ate: compAte, categorias: categoriasErro })); }
     finally { setVerificando(false); }
   };
   const [resolvendo, setResolvendo] = useState<string | null>(null);
@@ -335,8 +335,8 @@ function RelatoriosPage() {
   const errosFiltrados = (erros ?? []).filter((e) => filtroGrav === "todas" || e.gravidade === filtroGrav);
   const nErros = (erros ?? []).filter((e) => e.gravidade === "erro").length;
   const nAvisos = (erros ?? []).length - nErros;
-  const baixarCsvErros = () => { if (!errosFiltrados.length) return; baixarCsv(`erros-${competencia}.csv`, csvErros(errosFiltrados)); toast.success("CSV gerado."); };
-  const baixarPdfErros = () => { if (!errosFiltrados.length) return; abrirPreview(construirPdfErros({ itens: errosFiltrados, subtitulo: `Mês de produção ${mesLabel(competencia)}`, logo, cor }), `consistencia-${competencia}.pdf`, "Consistência da produção"); };
+  const baixarCsvErros = () => { if (!errosFiltrados.length) return; baixarCsv(`erros-${periodoArq}.csv`, csvErros(errosFiltrados)); toast.success("CSV gerado."); };
+  const baixarPdfErros = () => { if (!errosFiltrados.length) return; abrirPreview(construirPdfErros({ itens: errosFiltrados, subtitulo: `Período ${periodoLabel}`, logo, cor }), `consistencia-${periodoArq}.pdf`, "Consistência da produção"); };
 
   // ---- Profissionais inativos / sem produção ----
   const nomesUnidade = useMemo(() => Object.fromEntries(cnesOpcoes.map((u) => [u.cnes, u.nome])), [cnesOpcoes]);
@@ -459,7 +459,7 @@ function RelatoriosPage() {
         {/* ============ Consistência da produção (antigo "Erros / Crivo") ============ */}
         <section className={`${cardCls} mb-5`}>
           <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground"><AlertTriangle className="size-4 text-amber-500" /> Consistência da produção</h2>
-          <p className="mb-3 text-xs text-muted-foreground">Varre a produção do mês selecionado acima ({mesLabel(competencia)}) e o cadastro, e lista o que precisa de correção antes de transmitir.</p>
+          <p className="mb-3 text-xs text-muted-foreground">Varre a produção do período selecionado acima ({periodoLabel}) e o cadastro, e lista o que precisa de correção antes de transmitir.</p>
           <div className="mb-3 flex flex-wrap gap-2">
             {TODAS_CATS.map((c) => {
               const on = categoriasErro.has(c);
@@ -510,7 +510,9 @@ function RelatoriosPage() {
                       <td className="px-2 py-1.5 whitespace-nowrap">{e.tipo}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap font-mono text-[11px]">{e.cnes}</td>
                       <td className="px-2 py-1.5">{e.profissional}</td>
-                      <td className="px-2 py-1.5 text-foreground">{e.descricao}{e.fichaId ? <a href={`${e.tipo === "BPA-C" ? "/bpa-c-v3" : e.tipo === "RAAS" ? "/raas" : "/bpa-i-v3"}?ficha=${e.fichaId}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir ficha</a> : null}{e.categoria === "paciente-revisao" && e.pacienteId ? <button onClick={() => resolverRevisao(e.pacienteId!)} disabled={resolvendo === e.pacienteId} className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">{resolvendo === e.pacienteId ? "Resolvendo…" : "Resolver revisão"}</button> : null}</td>
+                      <td className="px-2 py-1.5 text-foreground">{e.descricao}{e.fichaId ? (e.tipo === "TFD"
+                        ? <a href={`/tfd?cnes=${e.cnes}&comp=${e.competencia}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir no TFD</a>
+                        : <a href={`${e.tipo === "BPA-C" ? "/bpa-c-v3" : e.tipo === "RAAS" ? "/raas" : "/bpa-i-v3"}?ficha=${e.fichaId}`} target="_blank" rel="noreferrer" className="ml-1 text-primary hover:underline">abrir ficha</a>) : null}{e.categoria === "paciente-revisao" && e.pacienteId ? <button onClick={() => resolverRevisao(e.pacienteId!)} disabled={resolvendo === e.pacienteId} className="ml-2 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">{resolvendo === e.pacienteId ? "Resolvendo…" : "Resolver revisão"}</button> : null}</td>
                     </tr>
                   ))}
                 </tbody>

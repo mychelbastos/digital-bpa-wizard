@@ -2,7 +2,7 @@
 // Quatro categorias (selecionáveis): produção×SIGTAP, fichas incompletas, cadastro de
 // pacientes (revisão) e duplicidade de fichas. Tudo null-safe: degrada sem quebrar a tela.
 import { supabase } from "@/lib/supabase";
-import { carregarProducaoDashboard, type ProducaoBpaRow } from "@/lib/dashboard-producao";
+import { carregarProducaoDashboardPeriodo, type ProducaoBpaRow } from "@/lib/dashboard-producao";
 import { fichasDoMes, type FichaCompleta } from "@/lib/bpa-i-v2/fichas";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { procedimentoExigeServico, procedimentoExigeCid } from "@/lib/bpa-i-v3/exigencias-sigtap";
@@ -205,16 +205,34 @@ async function errosTfdSemProfissional(): Promise<ErroItem[]> {
   } catch { return []; }
 }
 
-export interface OpcoesErros { mesProducao: string; categorias: Set<CategoriaErro> }
+export interface OpcoesErros { de: string; ate: string; categorias: Set<CategoriaErro> }
 
-// Coleta os erros das categorias pedidas. As categorias que usam produção compartilham a
-// mesma carga (uma consulta só).
-export async function coletarErros({ mesProducao, categorias }: OpcoesErros): Promise<ErroItem[]> {
+// Meses AAAAMM no intervalo [de, ate] (inclusive). Ex.: 202607..202608 -> ["202607","202608"].
+function mesesNoIntervalo(de: string, ate: string): string[] {
+  if (!/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate) || ate < de) return /^\d{6}$/.test(de) ? [de] : [];
+  const out: string[] = [];
+  let a = Number(de.slice(0, 4)), m = Number(de.slice(4, 6));
+  const fa = Number(ate.slice(0, 4)), fm = Number(ate.slice(4, 6));
+  while (a < fa || (a === fa && m <= fm)) {
+    out.push(`${a}${String(m).padStart(2, "0")}`);
+    m++; if (m > 12) { m = 1; a++; }
+    if (out.length > 60) break; // trava de segurança
+  }
+  return out;
+}
+
+// Coleta os erros das categorias pedidas para o PERÍODO [de, ate]. As categorias que usam
+// produção compartilham a mesma carga.
+export async function coletarErros({ de, ate, categorias }: OpcoesErros): Promise<ErroItem[]> {
   const res: ErroItem[] = [];
-  // Cargas compartilhadas (uma vez): produção p/ o crivo SIGTAP; fichas p/ incompletas+duplicidade.
+  const meses = mesesNoIntervalo(de, ate);
+  // Cargas compartilhadas: produção p/ o crivo SIGTAP (período); fichas p/ incompletas+duplicidade
+  // (todos os meses do período).
   const [rows, fichas] = await Promise.all([
-    categorias.has("producao-sigtap") ? carregarProducaoDashboard(mesProducao) : Promise.resolve([] as ProducaoBpaRow[]),
-    (categorias.has("ficha-incompleta") || categorias.has("duplicidade")) ? fichasDoMes(mesProducao) : Promise.resolve([] as FichaCompleta[]),
+    categorias.has("producao-sigtap") ? carregarProducaoDashboardPeriodo(de, ate) : Promise.resolve([] as ProducaoBpaRow[]),
+    (categorias.has("ficha-incompleta") || categorias.has("duplicidade"))
+      ? Promise.all(meses.map((m) => fichasDoMes(m))).then((a) => a.flat())
+      : Promise.resolve([] as FichaCompleta[]),
   ]);
   const tarefas: Promise<ErroItem[]>[] = [];
   if (categorias.has("producao-sigtap")) tarefas.push(errosProducaoSigtap(rows));
