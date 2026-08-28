@@ -178,22 +178,25 @@ function errosDuplicidade(fichas: FichaCompleta[]): ErroItem[] {
 }
 
 // ---- E) TFD sem profissional responsável (não será faturado no fechamento) ----
-async function errosTfdSemProfissional(mesProducao: string): Promise<ErroItem[]> {
+// NÃO filtra pelo mês de produção selecionado: um TFD sem profissional é um pendente (ainda
+// não faturado — TFD faturado sai da tabela `tfd`), então precisa aparecer em qualquer
+// verificação. A competência do TFD vai na descrição.
+async function errosTfdSemProfissional(): Promise<ErroItem[]> {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase.from("tfd")
-      .select("id, cnes, competencia, prof_cns, prof_nome, pacientes(nome)")
-      .eq("competencia", mesProducao);
+      .select("id, cnes, competencia, prof_cns, prof_nome, pacientes(nome)");
     if (error || !data) return [];
     const out: ErroItem[] = [];
     for (const t of data as { id: string; cnes: string | null; competencia: string; prof_cns: string | null; prof_nome: string | null; pacientes: { nome: string } | { nome: string }[] | null }[]) {
       const cnsOk = /^[0-9]{15}$/.test((t.prof_cns ?? "").replace(/\D/g, ""));
       if (cnsOk && (t.prof_nome ?? "").trim()) continue;
       const pac = Array.isArray(t.pacientes) ? t.pacientes[0] : t.pacientes;
+      const comp = (t.competencia ?? "").length === 6 ? `${t.competencia.slice(4, 6)}/${t.competencia.slice(0, 4)}` : (t.competencia ?? "—");
       out.push({
         categoria: "tfd-sem-profissional", gravidade: "erro", fichaId: t.id, tipo: "TFD",
         competencia: t.competencia ?? "", cnes: t.cnes ?? "", profissional: "—", procedimento: "",
-        descricao: `TFD de ${pac?.nome ?? "paciente"} sem profissional responsável (nome/CNS) — não será faturado no fechamento.`,
+        descricao: `TFD de ${pac?.nome ?? "paciente"} (competência ${comp}) sem profissional responsável (nome/CNS) — não será faturado no fechamento.`,
       });
     }
     return out;
@@ -216,7 +219,7 @@ export async function coletarErros({ mesProducao, categorias }: OpcoesErros): Pr
   if (categorias.has("ficha-incompleta")) tarefas.push(Promise.resolve(errosFichasIncompletas(fichas)));
   if (categorias.has("paciente-revisao")) tarefas.push(errosPacientesRevisao());
   if (categorias.has("duplicidade")) tarefas.push(Promise.resolve(errosDuplicidade(fichas)));
-  if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional(mesProducao));
+  if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional());
   for (const bloco of await Promise.all(tarefas)) res.push(...bloco);
   return res;
 }
