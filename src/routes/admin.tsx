@@ -10,6 +10,7 @@ import {
   Loader2,
   Users,
   Eye,
+  EyeOff,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -1138,6 +1139,7 @@ function CriarContaForm({
   const [nome, setNome] = useState("");
   const [cns, setCns] = useState("");
   const [confere, setConfere] = useState(false);
+  const [verSenha, setVerSenha] = useState(false);
 
   const estabs = estabPorOrg[org] ?? [];
   const senhaCurta = senha.length > 0 && senha.length < 8;
@@ -1148,7 +1150,7 @@ function CriarContaForm({
     const ok = await onCriar(email.trim(), senha, cnes, papel, nome.trim(), cns);
     if (ok) {
       setEmail(""); setSenha(""); setCnes(""); setPapel("");
-      setNome(""); setCns(""); setConfere(false);
+      setNome(""); setCns(""); setConfere(false); setVerSenha(false);
       setAberto(false);
     }
   };
@@ -1187,13 +1189,24 @@ function CriarContaForm({
         </label>
         <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
           Senha inicial (mín. 8)
-          <input
-            type="password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            autoComplete="new-password"
-            className={`rounded-md border bg-background px-2 py-1 text-xs text-foreground ${senhaCurta ? "border-destructive" : "border-border"}`}
-          />
+          <div className="relative">
+            <input
+              type={verSenha ? "text" : "password"}
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              autoComplete="new-password"
+              className={`w-full rounded-md border bg-background px-2 py-1 pr-8 text-xs text-foreground ${senhaCurta ? "border-destructive" : "border-border"}`}
+            />
+            <button
+              type="button"
+              onClick={() => setVerSenha((v) => !v)}
+              title={verSenha ? "Ocultar senha" : "Mostrar senha"}
+              aria-label={verSenha ? "Ocultar senha" : "Mostrar senha"}
+              className="absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground hover:text-foreground"
+            >
+              {verSenha ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            </button>
+          </div>
         </label>
         {orgs.length > 1 && (
           <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
