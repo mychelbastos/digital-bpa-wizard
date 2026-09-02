@@ -14,7 +14,7 @@ import { validarCns } from "@/lib/bpa-i-v2/validacao";
 import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
 import { emailValido } from "@/lib/validacao-email";
 import { telefoneValido, cepValido } from "@/lib/validacao-contato";
-import { anoAte4Digitos } from "@/lib/validacao-data";
+import { anoAte4Digitos, nascimentoValido } from "@/lib/validacao-data";
 import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/nacionalidades";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
@@ -280,7 +280,15 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
     if (cnsDig.length > 0 && !cnsOk) { toast.error("CNS inválido (verifique os 15 dígitos)."); return; }
     if (cpfDig.length > 0 && !cpfOk) { toast.error("CPF inválido (verifique os 11 dígitos)."); return; }
     const faltam = pacienteFaltando(candidato);
+    // Crivo da data de nascimento: DD/MM/AAAA com ano de 4 dígitos (rejeita "26" -> "0026",
+    // datas impossíveis e futuras). Só checa quando preenchida (ausência já cai em `faltam`).
+    const nascInvalido = !!nascimento && !nascimentoValido(nascimento);
+    if (nascInvalido && !faltam.includes("nascimento")) faltam.push("nascimento");
     setFaltando(faltam);
+    if (nascInvalido) {
+      toast.error("Data de nascimento inválida — use DD/MM/AAAA com ano de 4 dígitos (ex.: 2026), sem dígitos a mais ou a menos.");
+      return;
+    }
     if (faltam.length > 0) {
       const rotulos = faltam.map((f) => ROTULO_CAMPO[f] ?? f).join(", ");
       toast.error(`Campos obrigatórios em falta: ${rotulos}.`);
