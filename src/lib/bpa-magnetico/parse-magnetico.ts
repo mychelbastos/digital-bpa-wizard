@@ -48,6 +48,20 @@ function ibge7(campo: string): string {
   return d + String((10 - (s % 10)) % 10);
 }
 
+// Identificação canônica do paciente (15 caixas). No v3 a fonte de verdade é o campo
+// principal CNS/CPF (`cnsPac`). O .MAR guarda o CNS em 59..74 e, para paciente só-CPF, deixa
+// esse campo em branco trazendo o CPF numa CAUDA separada (338..349). Sem normalizar, a ficha
+// fica "sem identificação" para tudo que lê `cnsPac` (relatório de consistência, campo do
+// formulário, exportação). Aqui, quando o principal não tem doc completo (11/15 díg.) mas a
+// cauda traz um CPF de 11 díg., ancoramos o CPF nas 15 caixas (4 brancos + 11), como o form.
+function identCanonica(cnsCampo: string, cpfCauda: string): string[] {
+  const cns = cnsCampo.replace(/\D/g, "");
+  if (cns.length === 15 || cns.length === 11) return arr(cnsCampo); // já tem doc no principal
+  const cpf = cpfCauda.replace(/\D/g, "");
+  if (cpf.length === 11) return [...Array(4).fill(""), ...cpf.split("")];
+  return arr(cnsCampo); // sem doc → deixa como veio (o crivo aponta a ausência real)
+}
+
 // data aaaammdd (arquivo) -> ddmmaaaa (como o SeqData guarda). Branco/inválida -> [].
 function dataParaSeq(amd: string): string[] {
   if (!/\d/.test(amd) || amd.trim().length !== 8) return [];
@@ -134,7 +148,7 @@ function parse03(line: string): { cnes: string; competencia: string; profCns: st
     ...emptySeq(),
     dataAtend: dataParaSeq(line.slice(36, 44)),
     codProc: arr(line.slice(49, 59)),
-    cnsPac: arr(line.slice(59, 74)),
+    cnsPac: identCanonica(line.slice(59, 74), line.slice(338, 349)),
     sexo: (line[74] === "M" || line[74] === "F" ? line[74] : "") as SeqData["sexo"],
     ibge: arr(ibge7(line.slice(75, 81))),
     cid: arr(line.slice(81, 85)),

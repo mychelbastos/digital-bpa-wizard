@@ -68,10 +68,15 @@ export function motivosObrigatoriosSeq(
 ): string[] {
   const m: string[] = [];
 
-  // Identificação do paciente: obrigatória e completa (CPF 11 ou CNS 15 dígitos).
+  // Identificação do paciente: obrigatória e completa. Aceita CPF/CNS no campo principal
+  // (cnsPac: 11 ou 15 díg.) OU o CPF na cauda `cpfPac` (11 díg.) — mesma regra do formulário
+  // (identidadeParaPacienteInput/seqTemIdentidade). Fichas importadas do BPA magnético gravam
+  // o CPF em cpfPac com cnsPac em branco; sem olhar a cauda, davam falso "identificação ausente".
   const idd = digs(s.cnsPac);
-  if (idd.length === 0) m.push("Identificação do paciente (CPF ou CNS) é obrigatória.");
-  else if (!identificarPaciente(idd).completo) m.push("Identificação do paciente incompleta — CPF tem 11 e CNS tem 15 dígitos.");
+  const cpfTail = digs(s.cpfPac ?? []);
+  const docCompleto = idd.length === 15 || idd.length === 11 || cpfTail.length === 11;
+  if (idd.length === 0 && cpfTail.length === 0) m.push("Identificação do paciente (CPF ou CNS) é obrigatória.");
+  else if (!docCompleto) m.push("Identificação do paciente incompleta — CPF tem 11 e CNS tem 15 dígitos.");
 
   if (vazio(s.nomePac)) m.push("Nome do paciente é obrigatório.");
   if (s.sexo !== "M" && s.sexo !== "F") m.push("Sexo é obrigatório.");

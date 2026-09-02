@@ -49,6 +49,22 @@ describe("motivosObrigatoriosSeq", () => {
     expect(m).toContain("Identificação do paciente incompleta — CPF tem 11 e CNS tem 15 dígitos.");
   });
 
+  it("identificação na cauda cpfPac (importado: cnsPac em branco) NÃO é cobrada", () => {
+    // Fichas do BPA magnético gravam o CPF em cpfPac com cnsPac só espaços.
+    const s = seqCompleta();
+    s.cnsPac = Array(15).fill(" ");
+    s.cpfPac = "63853884504".split(""); // CPF de 11 díg. na cauda
+    const m = motivosObrigatoriosSeq(s, semExig);
+    expect(m.join("|")).not.toMatch(/Identificação do paciente/);
+  });
+
+  it("sem cnsPac e sem cpfPac cobra a identificação", () => {
+    const s = seqCompleta();
+    s.cnsPac = Array(15).fill(" ");
+    s.cpfPac = Array(11).fill("");
+    expect(motivosObrigatoriosSeq(s, semExig)).toContain("Identificação do paciente (CPF ou CNS) é obrigatória.");
+  });
+
   it("data de nascimento incompleta é cobrada", () => {
     const s = seqCompleta();
     s.dataNasc = "0101".split("").concat(["", "", "", ""]); // 4 díg.
