@@ -11,6 +11,7 @@ import { gerarAas, baixarAas, type ArquivoAas } from "@/lib/raas/gerar-aas";
 import type { RaasState } from "@/lib/raas/raas-layout";
 import { cnesComPermissao } from "@/lib/permissoes";
 import { exportarProducao, reabrirProducao, listarProducoes, type Producao } from "@/lib/producoes";
+import { movimentoFaturamento, rotuloMovimento } from "@/lib/faturamento";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 
 export const Route = createFileRoute("/fechamento")({
@@ -18,13 +19,9 @@ export const Route = createFileRoute("/fechamento")({
   component: Fechamento,
 });
 
-const compAtual = () => {
-  const h = new Date();
-  return `${h.getFullYear()}${String(h.getMonth() + 1).padStart(2, "0")}`;
-};
-
 function Fechamento() {
-  const [comp, setComp] = useState(compAtual());
+  // Abre já no MOVIMENTO DE FATURAMENTO atual (o mesmo em que a produção foi lançada).
+  const [comp, setComp] = useState(movimentoFaturamento());
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<FechamentoMes | null>(null);
   const [cnesPermitidos, setCnesPermitidos] = useState<string[] | null>(null);
@@ -202,13 +199,17 @@ function Fechamento() {
 
         <div className="mt-5 grid gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
           <label className="text-xs font-medium text-foreground sm:max-w-xs">
-            Mês de produção (AAAAMM)
+            Movimento / faturamento (AAAAMM){comp.length === 6 ? ` · ${rotuloMovimento(comp)}` : ""}
             <input
               value={comp}
               onChange={(e) => setComp(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="202607"
               className={input}
             />
+            <span className="mt-1 block font-normal text-muted-foreground">
+              Mês do envio. Junta as fichas lançadas neste movimento — cada folha mantém a
+              competência (mês de realização) dela.
+            </span>
           </label>
           <div>
             {cnesPermitidos !== null && !podeGerar && (

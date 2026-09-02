@@ -69,9 +69,10 @@ async function errosProducaoSigtap(rows: ProducaoBpaRow[]): Promise<ErroItem[]> 
     // CID também não se aplica ao BPA Consolidado (o formulário não registra CID).
     if (r.tipo !== "BPA-C" && cidCache.get(r.procedimento) === true && (!r.cid || r.cid.trim().length < 3))
       out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "CID obrigatório para o procedimento (SIGTAP) e está ausente." });
-    // Competência de atendimento muito anterior ao mês de produção (retroatividade).
+    // Competência da folha (realização) muito anterior ao movimento de faturamento
+    // (retroatividade acima da janela usual de ~3 competências do SIA/SUS).
     if (r.mes_producao && r.competencia && mesesDiff(r.mes_producao, r.competencia) > 3)
-      out.push({ ...base, categoria: "producao-sigtap", gravidade: "aviso", descricao: `Atendimento em ${r.competencia} lançado na produção de ${r.mes_producao} (mais de 3 competências de retroatividade).` });
+      out.push({ ...base, categoria: "producao-sigtap", gravidade: "aviso", descricao: `Competência ${r.competencia} (realização) faturada em ${r.mes_producao} — retroatividade acima de 3 competências; confira se o SIA/SUS ainda aceita.` });
   }
   return out;
 }

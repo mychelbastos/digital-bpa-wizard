@@ -22,7 +22,7 @@ export interface MapasNome {
 // ---------------- CSV (linhas cruas filtradas) ----------------
 export function csvProducao(rows: ProducaoBpaRow[], m: MapasNome): string {
   const cols = [
-    "Tipo", "Competência", "Mês produção", "CNES", "Estabelecimento",
+    "Tipo", "Competência (realização)", "Faturamento (movimento)", "CNES", "Estabelecimento",
     "CNS profissional", "Profissional", "CBO", "Ocupação",
     "Procedimento", "Descrição procedimento", "Quantidade",
     "Serviço", "Classificação", "CID", "Descrição CID", "Caráter", "Idade",

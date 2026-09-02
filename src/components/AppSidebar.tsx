@@ -9,6 +9,7 @@ import spaEmblem from "@/assets/spa-emblem.png";
 import { souAdmin, usePermissoes } from "@/lib/permissoes";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { CNES_TFD } from "@/lib/tfd/tfd";
+import { useMovimentoFaturamento, opcoesMovimento, rotuloMovimento } from "@/lib/faturamento";
 
 const formularios = [
   { to: "/laudo-aih", label: "AIH" },
@@ -27,6 +28,36 @@ const BG_ATIVO = "linear-gradient(135deg, oklch(0.6 0.18 262), oklch(0.53 0.19 2
 const BG_LOGO = "linear-gradient(135deg, oklch(0.72 0.16 235), oklch(0.6 0.19 282))";
 
 const linkBase = "flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13.5px] font-medium transition-colors";
+
+// Seletor do MOVIMENTO DE FATURAMENTO (mês de apresentação). Fica sempre visível — como a
+// barra do programa oficial do BPA Magnético — para o digitador saber em qual movimento a
+// produção está sendo lançada. É a `mes_producao` carimbada nas fichas novas. NÃO é a
+// competência da folha (essa = realização, no cabeçalho da ficha). Retroativas (competência
+// anterior) entram normalmente neste movimento.
+function MovimentoFaturamento() {
+  const [mov, setMov] = useMovimentoFaturamento();
+  const opcoes = opcoesMovimento(mov);
+  return (
+    <div className="mx-1 mt-1 rounded-[10px] border border-white/10 bg-white/[0.03] px-2.5 py-2">
+      <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-400/80">
+        <CalendarCheck className="size-3.5 shrink-0" /> Faturamento
+      </div>
+      <select
+        value={mov}
+        onChange={(e) => setMov(e.target.value)}
+        title="Mês em que a produção digitada será lançada (movimento de apresentação). As folhas mantêm a competência delas."
+        className="mt-1 w-full rounded-lg border border-white/15 bg-slate-900/60 px-2 py-1.5 text-[13px] font-semibold text-white outline-none focus:border-sky-400"
+      >
+        {opcoes.map((m) => (
+          <option key={m} value={m} className="bg-slate-800 text-white">{rotuloMovimento(m)}</option>
+        ))}
+      </select>
+      <p className="mt-1 px-0.5 text-[10px] leading-tight text-slate-400/70">
+        Mês do envio. A folha guarda o mês em que foi feita.
+      </p>
+    </div>
+  );
+}
 
 // Conteúdo da navegação (reusado no desktop e no drawer mobile).
 // `onColapsar` (só no desktop) mostra o botão de ocultar a barra.
@@ -92,6 +123,8 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto">
         <Entrada to="/" perm="ver_dashboard" icon={<Home className="size-4 shrink-0" />} label="Início" />
+
+        {pode("ver_formularios") && <MovimentoFaturamento />}
 
         <div className="pt-3">
           {pode("ver_formularios") ? (

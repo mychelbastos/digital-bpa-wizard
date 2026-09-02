@@ -1,4 +1,5 @@
 import { supabase, buscarTodasPaginado } from "@/lib/supabase";
+import { movimentoFaturamento } from "@/lib/faturamento";
 
 // Persistência das fichas do BPA-I v2 no Supabase (tabela `fichas`, RLS dono-apenas).
 // Tudo null-safe: sem config/login/erro, degrada p/ localStorage sem quebrar o form.
@@ -31,11 +32,9 @@ export interface FichaCompleta {
   dados: unknown;
 }
 
-// Mês de produção (AAAAMM) = mês local atual — carimbado no 1º save da ficha.
-function mesProducaoAtual(): string {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+// Mês de produção (AAAAMM) = MOVIMENTO DE FATURAMENTO escolhido pelo usuário (a barra sempre
+// visível na lateral), com fallback no mês do calendário. Carimbado no 1º save da ficha. NÃO
+// é a competência da folha (essa = realização, vem do cabeçalho). Ver `@/lib/faturamento`.
 
 export interface FichaMetadados {
   tipo?: "BPA-C" | "BPA-I" | "RAAS" | "APAC" | "AIH";
@@ -45,6 +44,10 @@ export interface FichaMetadados {
   // AUDITORIA (adoção): tela que salvou (ex.: 'v4'). NÃO entra no .MAR e nenhuma lógica
   // ramifica por ela. Só é gravada quando informada (V3 deixa undefined).
   origemUi?: string | null;
+  // Movimento de faturamento (AAAAMM) a carimbar em `mes_producao` na CRIAÇÃO. Só os
+  // fluxos que decidem o mês por conta própria (import, TFD) passam isto; os formulários
+  // interativos omitem e o save usa o movimento global (`@/lib/faturamento`).
+  mesProducao?: string;
 }
 
 // Cria (id null) ou atualiza uma ficha. Retorna o id (ou null em falha).
@@ -78,7 +81,7 @@ export async function salvarFicha(
     }
     const { data, error } = await supabase
       .from("fichas")
-      .insert({ ...payload, mes_producao: mesProducaoAtual() })
+      .insert({ ...payload, mes_producao: meta.mesProducao ?? movimentoFaturamento() })
       .select("id")
       .single();
     return error || !data ? null : (data as { id: string }).id;
