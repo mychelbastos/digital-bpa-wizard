@@ -489,7 +489,13 @@ function preencherSeqPessoa(s: SeqData, pessoa: Paciente, dataAtend: string | nu
   if (pessoa.municipio_ibge) s.ibge = cells(pessoa.municipio_ibge, 7);
   if (pessoa.cod_logradouro) s.codLog = cells(pessoa.cod_logradouro, 3);
   if (pessoa.logradouro) s.endereco = pessoa.logradouro.toUpperCase();
-  if (pessoa.numero) s.numero = cells(pessoa.numero, 4);
+  // Número do endereço: ALFANUMÉRICO (aceita "SN"). `cells` descartaria as letras de "SN"
+  // (só-dígitos) e deixaria vazio → o BPA-I acusa "Número obrigatório". Preserva letras e,
+  // quando não há número, usa "SN" (convenção DATASUS p/ sem número) — nunca fica vazio.
+  {
+    const n = (pessoa.numero || "").trim().toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 4) || "SN";
+    s.numero = [...n.split(""), ...Array(Math.max(0, 4 - n.length)).fill("")];
+  }
   if (pessoa.complemento) s.complemento = pessoa.complemento;
   if (pessoa.bairro) s.bairro = pessoa.bairro.toUpperCase();
   // cpfPac (cauda) fica vazio: a identificação (CPF ou CNS) vai no campo `cnsPac`, como no v3.
