@@ -32,6 +32,8 @@ function Fechamento() {
   const [reabrindo, setReabrindo] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
   const [reabrindoBusy, setReabrindoBusy] = useState(false);
+  // Re-baixar o arquivo de uma produção já fechada (id em download).
+  const [baixandoProd, setBaixandoProd] = useState<string | null>(null);
   // Cabeçalho que sairá no arquivo (versão/destino) — muda quase todo mês; mostramos para o
   // operador conferir antes de fechar.
   const [cfgCab, setCfgCab] = useState(() => loadConfig());
@@ -84,6 +86,30 @@ function Fechamento() {
 
   const baixar = () => {
     if (res?.arquivo) baixarTxt(res.arquivo.nome, res.arquivo.conteudo);
+  };
+
+  // Re-baixa o .txt de uma produção JÁ FECHADA. As fichas estão congeladas, então regenerar
+  // produz exatamente o mesmo arquivo exportado. Usa o nome gravado na produção.
+  const baixarProducaoFechada = async (p: Producao) => {
+    if (!/^\d{6}$/.test(p.mes_producao)) return;
+    setBaixandoProd(p.id);
+    try {
+      const fichas = await fichasDoMes(p.mes_producao);
+      const r = gerarArquivoMes(
+        fichas,
+        p.mes_producao,
+        p.mes_producao.slice(0, 4).split(""),
+        p.mes_producao.slice(4, 6).split(""),
+        loadConfig(),
+      );
+      if (!r.arquivo) { toast.warning("Nenhuma produção encontrada para esse mês."); return; }
+      baixarTxt(p.arquivo_nome || r.arquivo.nome, r.arquivo.conteudo);
+    } catch (err) {
+      console.error(err);
+      toast.error("Falha ao baixar o arquivo. Veja o console.");
+    } finally {
+      setBaixandoProd(null);
+    }
   };
 
   // Gera o(s) arquivo(s) .AAS do RAAS do mês (um por CNES). Arquivo SEPARADO do .txt — vai
@@ -392,6 +418,17 @@ function Fechamento() {
                       <span className="text-xs text-muted-foreground">{p.arquivo_nome}</span>
                     )}
                   </div>
+                  <div className="flex items-center gap-2">
+                  {(p.status === "exportada" || p.status === "transmitida") && (
+                    <button
+                      onClick={() => baixarProducaoFechada(p)}
+                      disabled={baixandoProd === p.id}
+                      title="Baixar novamente o arquivo desta produção"
+                      className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60"
+                    >
+                      {baixandoProd === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />} Baixar
+                    </button>
+                  )}
                   {p.status === "exportada" &&
                     (reabrindo === p.id ? (
                       <span className="flex items-center gap-2">
@@ -430,6 +467,7 @@ function Fechamento() {
                         <LockOpen className="size-3.5" /> Reabrir
                       </button>
                     ))}
+                  </div>
                 </li>
               ))}
             </ul>
