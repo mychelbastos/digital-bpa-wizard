@@ -11,7 +11,8 @@
 // respostas da API (nome/CNS) em lugar nenhum além da tabela `profissionais`; (b) NÃO
 // guardamos o CPF do profissional — não é usado em nada. Proveniência: gravamos o
 // `ambiente` (homolog/producao) derivado da URL, p/ revalidar quando virar produção.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Import via `npm:` (não `https://esm.sh/...`): o esm.sh pode falhar no BOOT do edge runtime.
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SOAP_URL = Deno.env.get("CNES_SOAP_URL")!; // .../ProfissionalSaudeService/v1r0
 const SOAP_USER = Deno.env.get("CNES_SOAP_USER")!;

@@ -3,7 +3,10 @@
 // ter 'gerenciar_vinculos' no CNES informado. A criação usa a service-role (injetada pelo
 // Supabase) via a Admin API do GoTrue — não montamos linhas de auth.users na mão. O 1º
 // vínculo é criado pelo RPC admin_vincular_unidade (mesmas travas: regra do digitador etc.).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Import via `npm:` (não `https://esm.sh/...`): o esm.sh às vezes falha no BOOT do edge
+// runtime (BOOT_ERROR), como aconteceu ao recriar contas em 02/09/2026. `npm:` é o padrão
+// atual do Supabase e resolve de forma estável.
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
