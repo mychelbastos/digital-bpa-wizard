@@ -6,6 +6,7 @@
 // cálculos — por isso saem exatamente como o digitador confirmou.
 import type { SeqData } from "@/lib/bpai-v2-layout";
 import type { ConfigOrgao } from "./config";
+import { nacionalidadeBpa } from "./nacionalidades";
 
 export const dig = (v: string | string[]) =>
   (Array.isArray(v) ? v.join("") : v || "").replace(/\D/g, "");
@@ -134,7 +135,9 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     [8, dataAMD(s.dataNasc)],
     [2, numF(raca, 2, true)],
     [4, raca === "05" ? numF(s.etnia, 4, true) : " ".repeat(4)],
-    [3, numF(s.nacionalidade, 3, true)],
+    // Nacionalidade: mapeia p/ a tabela do BPA (Brasil=010); branco/"1" viravam "001" e o
+    // DATASUS recusava. `nacionalidadeBpa` já devolve o código de 3 díg. correto.
+    [3, numF(nacionalidadeBpa(s.nacionalidade), 3, true)],
     [3, numF(s.servico, 3, true)],
     [3, numF(s.classProc, 3, true)],
     [8, " ".repeat(8)], // equipe seq (não coletado)
