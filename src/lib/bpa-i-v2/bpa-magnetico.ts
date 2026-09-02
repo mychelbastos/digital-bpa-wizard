@@ -108,6 +108,21 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
   const idade = idadeCap.length
     ? numF(idadeCap, 3)
     : numF(String(idadeAnos(s.dataNasc, s.dataAtend)), 3);
+
+  // Identificação do paciente: o app guarda CNS **ou** CPF no MESMO campo `cnsPac` (15 caixas;
+  // o CPF fica ancorado à direita = 4 vazios + 11 díg.). Mas o BPA Magnético tem CAMPOS
+  // SEPARADOS: CNS (offset 59, 15 díg.) e CPF (offset 338, 11 díg.). Roteamos aqui:
+  //   • cnsPac com 15 díg. → é CNS → vai no campo CNS (CPF sai da cauda `cpfPac`, se houver);
+  //   • cnsPac com 11 díg. → é CPF → vai no campo CPF (campo CNS fica EM BRANCO).
+  // NUNCA escrever "0000+CPF" no campo CNS — o DATASUS invalida (campo CNS vermelho).
+  const iddDig = dig(s.cnsPac);
+  const cpfTail = dig(s.cpfPac ?? []);
+  let cnsField = "";
+  let cpfField = "";
+  if (iddDig.length === 15) { cnsField = iddDig; cpfField = cpfTail; }
+  else if (iddDig.length === 11) { cpfField = iddDig; }
+  if (!cpfField && cpfTail.length === 11) cpfField = cpfTail;
+
   const campos: [number, string][] = [
     [2, "03"],
     [7, numF(d.cnes, 7)],
@@ -118,7 +133,7 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     [3, numF(String(folha), 3)],
     [2, numF(String(seqNum), 2)],
     [10, numF(s.codProc, 10)],
-    [15, numF(s.cnsPac, 15, true)],
+    [15, numF(cnsField, 15, true)], // campo CNS: só CNS de 15 díg. (ou branco)
     [1, s.sexo === "M" || s.sexo === "F" ? s.sexo : " "],
     // Município: o formulário guarda o IBGE completo (7 díg.); o SIA/SUS usa o
     // código de 6 díg. = IBGE SEM o dígito verificador (o último). Por isso os 6
@@ -156,7 +171,7 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
     // + situação de rua S/N (1). São CAPTURADOS, não derivados: default em branco (fichas
     // que não coletam), mas passam fiéis quando informados — foi o que fechou 556/556 do
     // PA292720.MAR (1 registro traz "N" aqui e o DATASUS aceitou).
-    [11, numF(s.cpfPac ?? [], 11, true)], // CPF do paciente (hipótese)
+    [11, numF(cpfField, 11, true)], // campo CPF (offset 338): CPF de 11 díg. (ou branco)
     [1, s.situacaoRua === "S" || s.situacaoRua === "N" ? s.situacaoRua : " "], // situação de rua (hipótese, ≥ 12/2024)
   ];
   // v05.00 (BPA MAG 5.00, obrigatória 07/2026): novo campo prd_sem_cpf na pos 351 — "Pessoa
@@ -164,7 +179,10 @@ export function linhaBpaI(d: DadosBpa, s: SeqData, folha: number, seqNum: number
   // mantém 350 chars (confirmado byte a byte nos .MAR/.JUN reais de mar/jun 2026).
   const comp = competencia(d.profAno, d.profMes);
   if (comp >= "202607") {
-    campos.push([1, s.semCpf === "S" || s.semCpf === "N" ? s.semCpf : " "]);
+    // prd_sem_cpf: respeita valor explícito; senão DERIVA — tem CPF => "N", sem CPF => "S".
+    // O BPA v05.00 EXIGE o CPF; quem só tem CNS entra marcado como "pessoa sem CPF" (S).
+    const semCpf = s.semCpf === "S" || s.semCpf === "N" ? s.semCpf : (cpfField ? "N" : "S");
+    campos.push([1, semCpf]);
     return montar(campos, 351);
   }
   return montar(campos, 350);

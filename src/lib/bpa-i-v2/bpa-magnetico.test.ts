@@ -84,6 +84,38 @@ describe("linhaBpaI", () => {
   });
 });
 
+describe("linhaBpaI — roteamento CNS x CPF (o BPA tem campos separados)", () => {
+  // Paciente só-CPF: o app guarda o CPF em cnsPac ancorado à direita (4 vazios + 11 díg.).
+  const seqCpf = (): SeqData => ({ ...seqExemplo(), cnsPac: [...Array(4).fill(""), ...cells("11334683573", 11)] });
+
+  it("paciente com CPF: campo CNS(59:74) EM BRANCO e CPF(338:349) preenchido — nunca 0000+CPF no CNS", () => {
+    const l = linhaBpaI(dados(), seqCpf(), 1, 1);
+    expect(l.slice(59, 74)).toBe(" ".repeat(15));       // campo CNS vazio
+    expect(l.slice(338, 349)).toBe("11334683573");      // campo CPF preenchido
+  });
+
+  it("paciente com CNS: campo CNS(59:74) preenchido e CPF(338:349) em branco", () => {
+    const l = linhaBpaI(dados(), seqExemplo(), 1, 1); // cnsPac = CNS de 15 díg.
+    expect(l.slice(59, 74)).toBe("700000000000005");
+    expect(l.slice(338, 349)).toBe(" ".repeat(11));
+  });
+
+  it("CNS no principal + CPF na cauda cpfPac: cada um no seu campo", () => {
+    const s: SeqData = { ...seqExemplo(), cpfPac: cells("11334683573", 11) };
+    const l = linhaBpaI(dados(), s, 1, 1);
+    expect(l.slice(59, 74)).toBe("700000000000005");
+    expect(l.slice(338, 349)).toBe("11334683573");
+  });
+
+  it("v05.00: prd_sem_cpf derivado — 'N' com CPF, 'S' só com CNS", () => {
+    const d07 = { ...dados(), profMes: cells("07", 2) };
+    const comCpf = linhaBpaI(d07, seqCpf(), 1, 1);
+    const soCns = linhaBpaI(d07, seqExemplo(), 1, 1);
+    expect(comCpf.slice(350, 351)).toBe("N"); // tem CPF
+    expect(soCns.slice(350, 351)).toBe("S");  // sem CPF (só CNS)
+  });
+});
+
 describe("header e arquivo", () => {
   it("header tem 126 chars e começa com 01#BPA#", () => {
     const h = header(cfg(), "202606", 1, 1, 1234);
