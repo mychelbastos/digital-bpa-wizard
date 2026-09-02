@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   Home, FileText, FolderOpen, CalendarCheck, FileSpreadsheet, Database, UserCog, LogOut,
   ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X, PanelLeftClose, PanelLeftOpen, Lock,
@@ -29,31 +30,56 @@ const BG_LOGO = "linear-gradient(135deg, oklch(0.72 0.16 235), oklch(0.6 0.19 28
 
 const linkBase = "flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13.5px] font-medium transition-colors";
 
-// Seletor do MOVIMENTO DE FATURAMENTO (mês de apresentação). Fica sempre visível — como a
-// barra do programa oficial do BPA Magnético — para o digitador saber em qual movimento a
-// produção está sendo lançada. É a `mes_producao` carimbada nas fichas novas. NÃO é a
-// competência da folha (essa = realização, no cabeçalho da ficha). Retroativas (competência
-// anterior) entram normalmente neste movimento.
+// MOVIMENTO DE FATURAMENTO (mês de apresentação) — COMPARTILHADO pela equipe. Só o FATURISTA
+// (quem tem `gerar_producao`) ou admin altera; os demais veem apenas a informação. É a barra
+// sempre visível, como no programa oficial do BPA Magnético. Define a `mes_producao` das
+// fichas novas de todos. NÃO é a competência da folha (essa = realização, no cabeçalho).
 function MovimentoFaturamento() {
-  const [mov, setMov] = useMovimentoFaturamento();
-  const opcoes = opcoesMovimento(mov);
-  return (
-    <div className="mx-1 mt-1 rounded-[10px] border border-white/10 bg-white/[0.03] px-2.5 py-2">
-      <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-400/80">
-        <CalendarCheck className="size-3.5 shrink-0" /> Faturamento
+  const { movimento, podeEditar, definir } = useMovimentoFaturamento();
+  const [salvando, setSalvando] = useState(false);
+
+  const cabecalho = (
+    <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-400/80">
+      <CalendarCheck className="size-3.5 shrink-0" /> Mês de faturamento
+    </div>
+  );
+
+  // Somente leitura (não é faturista): mostra a informação que o faturista definiu.
+  if (!podeEditar) {
+    return (
+      <div className="mx-1 mt-1 rounded-[10px] border border-white/10 bg-white/[0.03] px-2.5 py-2">
+        {cabecalho}
+        <div className="mt-0.5 text-[15px] font-bold text-white">{rotuloMovimento(movimento)}</div>
+        <p className="mt-0.5 px-0.5 text-[10px] leading-tight text-slate-400/70">Definido pelo faturista.</p>
       </div>
+    );
+  }
+
+  // Faturista: pode trocar o movimento de toda a equipe.
+  const opcoes = opcoesMovimento(movimento);
+  return (
+    <div className="mx-1 mt-1 rounded-[10px] border border-sky-400/20 bg-sky-400/[0.06] px-2.5 py-2">
+      {cabecalho}
       <select
-        value={mov}
-        onChange={(e) => setMov(e.target.value)}
-        title="Mês em que a produção digitada será lançada (movimento de apresentação). As folhas mantêm a competência delas."
-        className="mt-1 w-full rounded-lg border border-white/15 bg-slate-900/60 px-2 py-1.5 text-[13px] font-semibold text-white outline-none focus:border-sky-400"
+        value={movimento}
+        disabled={salvando}
+        onChange={async (e) => {
+          const alvo = e.target.value;
+          setSalvando(true);
+          const ok = await definir(alvo);
+          setSalvando(false);
+          if (ok) toast.success(`Mês de faturamento da equipe: ${rotuloMovimento(alvo)}`);
+          else toast.error("Não foi possível alterar o mês de faturamento.");
+        }}
+        title="Mês em que a produção digitada será lançada (movimento). Vale para toda a equipe. As folhas mantêm a competência (mês de realização) delas."
+        className="mt-1 w-full rounded-lg border border-white/15 bg-slate-900/60 px-2 py-1.5 text-[13px] font-semibold text-white outline-none focus:border-sky-400 disabled:opacity-60"
       >
         {opcoes.map((m) => (
           <option key={m} value={m} className="bg-slate-800 text-white">{rotuloMovimento(m)}</option>
         ))}
       </select>
       <p className="mt-1 px-0.5 text-[10px] leading-tight text-slate-400/70">
-        Mês do envio. A folha guarda o mês em que foi feita.
+        Rege toda a equipe. A folha guarda o mês em que foi feita.
       </p>
     </div>
   );

@@ -1,24 +1,32 @@
 // "Movimento de faturamento" — o mês de APRESENTAÇÃO em que a produção digitada será
-// lançada. É carimbado em `fichas.mes_producao` no 1º save da ficha. Espelha a "competência
-// do movimento" do programa oficial do BPA Magnético (aquela barra que fica sempre visível):
-// você abre um movimento (ex.: Ago/2026) e tudo que digita entra nele, inclusive folhas
-// retroativas de meses anteriores.
+// lançada (carimbado em `fichas.mes_producao` no 1º save). Espelha a "competência do
+// movimento" do programa oficial do BPA Magnético.
 //
-// NÃO confundir com a competência da FOLHA (essa = realização, vem do cabeçalho da ficha —
-// profMes/profAno no BPA-I, ano/mes no BPA-C). Ver memória competencia-realizacao-vs-faturamento.
-import { useSyncExternalStore } from "react";
+// COMPARTILHADO pela equipe: o valor mora na organização (RPC `movimento_faturamento_atual`),
+// e SÓ o faturista (quem tem `gerar_producao`) ou super-admin altera (RPC
+// `definir_movimento_faturamento`, que também barra no banco). Assim uma pessoa rege todos.
+//
+// NÃO confundir com a competência da FOLHA (essa = realização, no cabeçalho da ficha).
+// Ver memória competencia-realizacao-vs-faturamento.
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { cnesComPermissao, souSuperAdmin } from "@/lib/permissoes";
 
-const CHAVE = "bpa-movimento-faturamento";
+const CHAVE = "bpa-movimento-faturamento"; // espelho local (bootstrap síncrono do save)
 const EVENTO = "movimento-faturamento-mudou";
 
-// Mês do calendário (AAAAMM) — o default quando nada foi escolhido.
+// Cache de módulo: o valor JÁ resolvido da org (compartilhado). Hidratado pela sidebar no load.
+let _cache: string | null = null;
+
+// Mês do calendário (AAAAMM) — fallback quando a org ainda não definiu.
 export function competenciaCalendario(): string {
   const d = new Date();
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// Movimento atual (AAAAMM). Default = mês do calendário. Tolerante a storage indisponível.
+// Leitura SÍNCRONA (usada no save da ficha): cache -> espelho local -> calendário.
 export function movimentoFaturamento(): string {
+  if (_cache && /^\d{6}$/.test(_cache)) return _cache;
   try {
     const v = localStorage.getItem(CHAVE);
     if (v && /^\d{6}$/.test(v)) return v;
@@ -26,37 +34,46 @@ export function movimentoFaturamento(): string {
   return competenciaCalendario();
 }
 
-// Troca o movimento atual (persiste + avisa a UI). Ignora valor fora do formato AAAAMM.
-export function setMovimentoFaturamento(m: string): void {
-  if (!/^\d{6}$/.test(m)) return;
+function guardarEspelho(m: string) {
+  _cache = m;
   try { localStorage.setItem(CHAVE, m); } catch { /* ignora */ }
   try { window.dispatchEvent(new Event(EVENTO)); } catch { /* ignora */ }
 }
 
-// Hook reativo: reflete a troca do movimento em qualquer lugar (mesmo em outra aba).
-export function useMovimentoFaturamento(): [string, (m: string) => void] {
-  const mov = useSyncExternalStore(
-    (cb) => {
-      window.addEventListener(EVENTO, cb);
-      window.addEventListener("storage", cb);
-      return () => { window.removeEventListener(EVENTO, cb); window.removeEventListener("storage", cb); };
-    },
-    () => movimentoFaturamento(),
-    () => competenciaCalendario(),
-  );
-  return [mov, setMovimentoFaturamento];
+// Hidrata do servidor (valor compartilhado da org). null no servidor => mês do calendário.
+export async function carregarMovimento(): Promise<string> {
+  if (!supabase) return movimentoFaturamento();
+  try {
+    const { data, error } = await supabase.rpc("movimento_faturamento_atual");
+    const v = !error && typeof data === "string" && /^\d{6}$/.test(data) ? data : competenciaCalendario();
+    guardarEspelho(v);
+    return v;
+  } catch {
+    return movimentoFaturamento();
+  }
 }
 
-// AAAAMM -> "Ago/2026". Rótulo curto para os seletores.
+// Grava no servidor (o banco barra quem não é faturista/admin). Retorna true em sucesso.
+export async function definirMovimento(m: string): Promise<boolean> {
+  if (!/^\d{6}$/.test(m) || !supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc("definir_movimento_faturamento", { _mes: m });
+    if (error) return false;
+    guardarEspelho(typeof data === "string" && /^\d{6}$/.test(data) ? data : m);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// AAAAMM -> "Ago/2026".
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 export function rotuloMovimento(m: string): string {
   if (!/^\d{6}$/.test(m)) return m;
   return `${MESES_ABREV[Number(m.slice(4, 6)) - 1] ?? m.slice(4, 6)}/${m.slice(0, 4)}`;
 }
 
-// Opções de movimento em torno de agora: `antes` meses para trás + o mês atual + `depois`
-// meses à frente (mais recente primeiro). Inclui sempre o valor atual selecionado, mesmo
-// que caia fora da janela (ex.: um movimento antigo reaberto).
+// Opções em torno de agora (mais recente primeiro); inclui sempre o valor atual.
 export function opcoesMovimento(atual: string, antes = 14, depois = 1): string[] {
   const base = competenciaCalendario();
   const y = Number(base.slice(0, 4)), mo = Number(base.slice(4, 6));
@@ -67,4 +84,34 @@ export function opcoesMovimento(atual: string, antes = 14, depois = 1): string[]
   }
   if (/^\d{6}$/.test(atual)) set.add(atual);
   return [...set].sort((a, b) => b.localeCompare(a));
+}
+
+// Hook: valor compartilhado + se o usuário PODE editar (é faturista/admin) + ação de gravar.
+export function useMovimentoFaturamento() {
+  const [movimento, setMovimento] = useState<string>(() => movimentoFaturamento());
+  const [podeEditar, setPodeEditar] = useState(false);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    let vivo = true;
+    carregarMovimento()
+      .then((v) => { if (vivo) setMovimento(v); })
+      .finally(() => { if (vivo) setCarregando(false); });
+    Promise.all([cnesComPermissao("gerar_producao"), souSuperAdmin()])
+      .then(([cnes, sa]) => { if (vivo) setPodeEditar(sa || cnes.length > 0); })
+      .catch(() => { /* sem permissão de edição por padrão */ });
+    const onEvt = () => { if (vivo) setMovimento(movimentoFaturamento()); };
+    window.addEventListener(EVENTO, onEvt);
+    window.addEventListener("storage", onEvt);
+    return () => { vivo = false; window.removeEventListener(EVENTO, onEvt); window.removeEventListener("storage", onEvt); };
+  }, []);
+
+  // Grava no servidor; só atualiza a UI em caso de sucesso (senão o <select> reverte sozinho).
+  const definir = async (m: string): Promise<boolean> => {
+    const ok = await definirMovimento(m);
+    if (ok) setMovimento(m);
+    return ok;
+  };
+
+  return { movimento, podeEditar, carregando, definir };
 }
