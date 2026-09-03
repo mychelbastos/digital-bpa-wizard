@@ -36,6 +36,13 @@ export interface FichaCompleta {
 // visível na lateral), com fallback no mês do calendário. Carimbado no 1º save da ficha. NÃO
 // é a competência da folha (essa = realização, vem do cabeçalho). Ver `@/lib/faturamento`.
 
+// A competência da folha (realização) é POSTERIOR ao mês de faturamento? Regra: competência ≤
+// faturamento (fatura-se no mês ou depois, nunca antes de realizar). Usada pelas telas para
+// bloquear/orientar e como backstop no save. Ambos precisam ser AAAAMM válidos p/ acender.
+export function competenciaPosteriorAoMovimento(competencia: string, movimento: string): boolean {
+  return /^\d{6}$/.test(competencia) && /^\d{6}$/.test(movimento) && competencia > movimento;
+}
+
 export interface FichaMetadados {
   tipo?: "BPA-C" | "BPA-I" | "RAAS" | "APAC" | "AIH";
   cnes?: string | null;
@@ -79,9 +86,14 @@ export async function salvarFicha(
         .eq("id", id);
       return error ? null : id;
     }
+    const mesProd = meta.mesProducao ?? movimentoFaturamento();
+    // Backstop: a competência da folha (realização) NÃO pode ser POSTERIOR ao mês de
+    // faturamento — não se fatura produção ainda não realizada (ex.: competência 09/2026 numa
+    // produção de 07/2026). A tela mostra a mensagem via `competenciaPosteriorAoMovimento`.
+    if (competenciaPosteriorAoMovimento(competencia, mesProd)) return null;
     const { data, error } = await supabase
       .from("fichas")
-      .insert({ ...payload, mes_producao: meta.mesProducao ?? movimentoFaturamento() })
+      .insert({ ...payload, mes_producao: mesProd })
       .select("id")
       .single();
     return error || !data ? null : (data as { id: string }).id;

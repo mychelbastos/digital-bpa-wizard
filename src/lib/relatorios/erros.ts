@@ -70,11 +70,17 @@ async function errosProducaoSigtap(rows: ProducaoBpaRow[]): Promise<ErroItem[]> 
     // CID também não se aplica ao BPA Consolidado (o formulário não registra CID).
     if (r.tipo !== "BPA-C" && cidCache.get(r.procedimento) === true && (!r.cid || r.cid.trim().length < 3))
       out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "CID obrigatório para o procedimento (SIGTAP) e está ausente." });
-    // Competência da folha (realização) muito anterior ao movimento de faturamento:
-    // retroatividade ACIMA da janela do SIA/SUS (~3 competências) → o DATASUS RECUSA a
-    // importação. É ERRO (não só aviso): ex.: folha de 02/2026 no faturamento de 07/2026.
-    if (r.mes_producao && r.competencia && mesesDiff(r.mes_producao, r.competencia) > 3)
-      out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: `Competência ${r.competencia} (realização) faturada em ${r.mes_producao} — retroatividade de ${mesesDiff(r.mes_producao, r.competencia)} competências (acima do limite ~3). O BPA Magnético recusa; corrija a competência da folha.` });
+    // Competência (folha/realização) × movimento de faturamento (mes_producao). Regra:
+    // competência ≤ faturamento (fatura-se no mês ou depois, nunca antes de realizar).
+    if (r.mes_producao && r.competencia && /^\d{6}$/.test(r.competencia) && /^\d{6}$/.test(r.mes_producao)) {
+      const dif = mesesDiff(r.mes_producao, r.competencia); // faturamento − competência
+      if (dif < 0)
+        // Competência POSTERIOR ao faturamento — impossível (ex.: atendimento 09/2026 na produção de 07/2026).
+        out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: `Competência ${r.competencia} (realização) é POSTERIOR ao faturamento ${r.mes_producao} — impossível: não se fatura produção que ainda não foi realizada. Corrija a competência da folha.` });
+      else if (dif > 3)
+        // Retroatividade acima da janela do SIA/SUS (~3 competências) → o DATASUS recusa.
+        out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: `Competência ${r.competencia} (realização) faturada em ${r.mes_producao} — retroatividade de ${dif} competências (acima do limite ~3). O BPA Magnético recusa; corrija a competência da folha.` });
+    }
   }
   return out;
 }

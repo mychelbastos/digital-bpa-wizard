@@ -10,7 +10,8 @@ import { NomeProfissionalAutocomplete } from "@/components/bpa-c-v3/NomeProfissi
 import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
-import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { salvarFicha, carregarFicha, competenciaPosteriorAoMovimento } from "@/lib/bpa-i-v2/fichas";
+import { movimentoFaturamento } from "@/lib/faturamento";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { proximaFolhaBpaC, assinaturaBpaC, acharDuplicataBpaC, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { toast } from "sonner";
@@ -419,7 +420,19 @@ function BpaCV3() {
     if (!assinatura) return null;
     return acharDuplicataBpaC(state.cnes.join(""), competencia(), state.profNome, assinatura, idAtual);
   };
+  // Competência da folha não pode ser POSTERIOR ao mês de faturamento (movimento). Ex.: folha
+  // de 09/2026 numa produção de 07/2026 — não se fatura o que ainda não foi realizado.
+  const rotComp = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c);
+  const competenciaFuturaBloqueia = (): boolean => {
+    const mov = movimentoFaturamento();
+    if (competenciaPosteriorAoMovimento(competencia(), mov)) {
+      toast.error(`A competência da folha (${rotComp(competencia())}) é POSTERIOR ao mês de faturamento (${rotComp(mov)}). Ajuste o Mês/Ano da folha ou o mês de faturamento — não se fatura produção ainda não realizada.`);
+      return true;
+    }
+    return false;
+  };
   const gravarNaNuvem = async (titulo: string) => {
+    if (competenciaFuturaBloqueia()) return;
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
     const id = await salvarFicha(idAlvo, titulo, competencia(), state, metaFicha());
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
@@ -438,6 +451,7 @@ function BpaCV3() {
     await gravarNaNuvem(titulo);
   };
   const gravarNaFichaAtual = async () => {
+    if (competenciaFuturaBloqueia()) return;
     setSalvandoDireto(true);
     const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current!, competencia(), state, metaFicha());
     setSalvandoDireto(false);

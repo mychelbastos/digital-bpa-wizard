@@ -14,7 +14,8 @@ import { FieldClear } from "@/components/bpa-i-v2/FieldClear";
 import { SequenciaFields } from "@/components/bpa-i-v3/SequenciaFields";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
-import { carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { carregarFicha, competenciaPosteriorAoMovimento } from "@/lib/bpa-i-v2/fichas";
+import { movimentoFaturamento } from "@/lib/faturamento";
 import { type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
@@ -116,7 +117,18 @@ function BpaI() {
   const nomeSugerido = () => nomeSugeridoEng(salvarComoNovo);
 
   // ---- Save (orquestração de diálogo; chama as primitivas do engine) ----
+  // Competência da folha não pode ser POSTERIOR ao mês de faturamento (movimento).
+  const rotComp = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c);
+  const competenciaFuturaBloqueia = (): boolean => {
+    const mov = movimentoFaturamento();
+    if (competenciaPosteriorAoMovimento(competencia(), mov)) {
+      toast.error(`A competência da folha (${rotComp(competencia())}) é POSTERIOR ao mês de faturamento (${rotComp(mov)}). Ajuste o Mês/Ano da folha ou o mês de faturamento — não se fatura produção ainda não realizada.`);
+      return true;
+    }
+    return false;
+  };
   const gravarNaNuvem = async (titulo: string) => {
+    if (competenciaFuturaBloqueia()) return;
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
     const id = await reconciliarESalvar(titulo, idAlvo);
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
@@ -135,6 +147,7 @@ function BpaI() {
     await gravarNaNuvem(titulo);
   };
   const gravarNaFichaAtual = async () => {
+    if (competenciaFuturaBloqueia()) return;
     setSalvandoDireto(true);
     const id = await reconciliarESalvar(fichaTituloRef.current!, fichaIdRef.current);
     setSalvandoDireto(false);
