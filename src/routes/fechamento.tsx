@@ -103,7 +103,8 @@ function Fechamento() {
         loadConfig(),
       );
       if (!r.arquivo) { toast.warning("Nenhuma produção encontrada para esse mês."); return; }
-      baixarTxt(p.arquivo_nome || r.arquivo.nome, r.arquivo.conteudo);
+      // Usa o nome REGENERADO (padrão atual PA<municipio>.<MMM>), não o salvo antigo.
+      baixarTxt(r.arquivo.nome, r.arquivo.conteudo);
     } catch (err) {
       console.error(err);
       toast.error("Falha ao baixar o arquivo. Veja o console.");
