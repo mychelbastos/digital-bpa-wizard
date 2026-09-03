@@ -602,12 +602,22 @@ export interface ResultadoFaturamentoTfd {
 // AGRUPADOS por profissional responsável — cada profissional vira UMA ficha BPA-I com todas
 // as suas seqs (o gerador do .txt fatia em folhas de 3). Idempotente: reexecutar atualiza a
 // ficha do profissional em vez de duplicar. Marca os TFDs como 'faturada'. Null em falha.
-export async function gerarFaturamentoMes(cnes: string, competencia: string, nomeEstab: string, responsavel?: ConfirmacaoResp | null): Promise<ResultadoFaturamentoTfd | null> {
+// `movimento` (mes_producao) opcional: faturamento RETROATIVO. A competência (folha) das
+// fichas continua a do TFD (= mês das viagens), mas o mês de PRODUÇÃO/faturamento é o
+// `movimento` escolhido. Ex.: viagens de julho (competência 202607) faturadas na remessa de
+// agosto (movimento 202608). Quando retroativo, processa só as AGENDADAS — não mexe nas já
+// faturadas daquela competência. Sem `movimento`, o comportamento é o de sempre (mes_producao =
+// competência).
+export async function gerarFaturamentoMes(cnes: string, competencia: string, nomeEstab: string, responsavel?: ConfirmacaoResp | null, movimento?: string): Promise<ResultadoFaturamentoTfd | null> {
   if (!supabase) return null;
   try {
-    const { data: tfds, error } = await supabase.from("tfd")
+    const mesProd = movimento && /^\d{6}$/.test(movimento) ? movimento : competencia;
+    const retro = mesProd !== competencia;
+    let q = supabase.from("tfd")
       .select("id, cnes, competencia, distancia_km, qtd_com_pernoite, qtd_sem_pernoite, viagens, data_atendimento, tem_acompanhante, paciente_id, acompanhante_id, prof_cns, prof_nome, prof_cbo")
       .eq("cnes", cnes).eq("competencia", competencia).neq("status", "cancelada");
+    if (retro) q = q.eq("status", "agendada"); // retroativo: só as pendentes, sem tocar nas faturadas
+    const { data: tfds, error } = await q;
     if (error) return null;
     if (!tfds || tfds.length === 0) return { fichas: 0, tfds: 0, seqs: 0, semProf: 0 };
 
@@ -647,7 +657,7 @@ export async function gerarFaturamentoMes(cnes: string, competencia: string, nom
       const folhas = emLotes(g.seqs, 3);
       // Fichas TFD já existentes desse profissional (idempotência por slot/folha).
       const { data: existentes } = await supabase.from("fichas").select("id")
-        .eq("cnes", cnes).eq("competencia", competencia).eq("origem", "tfd").eq("profissional_cns", g.profCns)
+        .eq("cnes", cnes).eq("competencia", competencia).eq("mes_producao", mesProd).eq("origem", "tfd").eq("profissional_cns", g.profCns)
         .order("created_at", { ascending: true });
       const idsExist = ((existentes ?? []) as { id: string }[]).map((r) => r.id);
 
@@ -659,7 +669,7 @@ export async function gerarFaturamentoMes(cnes: string, competencia: string, nom
         const payload = {
           titulo: `TFD ${mm}/${yyyy} — ${g.profNome || g.profCns} (folha ${i + 1})`,
           competencia, dados, tipo: "BPA-I", cnes,
-          profissional_cns: g.profCns, profissional_nome: g.profNome, origem: "tfd", mes_producao: competencia,
+          profissional_cns: g.profCns, profissional_nome: g.profNome, origem: "tfd", mes_producao: mesProd,
         };
         if (i < idsExist.length) {
           await supabase.from("fichas").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", idsExist[i]);

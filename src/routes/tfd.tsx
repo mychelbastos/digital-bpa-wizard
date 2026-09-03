@@ -41,6 +41,12 @@ const competenciaAtual = () => {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 const compLabel = (c: string) => (/^\d{6}$/.test(c) ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c);
+// Competência seguinte (AAAAMM + 1 mês) — default do movimento no faturamento retroativo.
+const proximaComp = (c: string): string => {
+  if (!/^\d{6}$/.test(c)) return c;
+  const d = new Date(Number(c.slice(0, 4)), Number(c.slice(4, 6)), 1);
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
 // Competência de trabalho do TFD: mês atual + 3 anteriores (mesma regra de retenção; meses
 // mais antigos só via relatórios). Registro/edição ficam limitados a estas 4 competências.
 const competenciasRecentes = (): string[] => {
@@ -169,18 +175,26 @@ function TfdPage() {
   const totalMesRS = useMemo(() => registros.reduce((s, r) => s + r.total_rs, 0), [registros]);
 
   const [faturando, setFaturando] = useState(false);
-  // Faturamento do mês: consolida todos os TFDs da competência em fichas BPA-I (1 por
-  // profissional responsável), que o Fechamento transforma no .txt do BPA Magnético.
-  const faturarMes = async () => {
+  // Painel de faturamento RETROATIVO: escolhe o mês de PRODUÇÃO (movimento) onde lançar as
+  // TFDs agendadas desta competência. Ex.: viagens de julho faturadas na remessa de agosto.
+  const [retroAberto, setRetroAberto] = useState(false);
+  const [retroMov, setRetroMov] = useState("");
+  // Faturamento do mês: consolida os TFDs da competência em fichas BPA-I (1 por profissional
+  // responsável), que o Fechamento transforma no .txt do BPA Magnético. `movimento` opcional =
+  // faturamento retroativo (competência da folha continua a do TFD; muda só o mês de produção).
+  const faturarMes = async (movimento?: string) => {
     if (!podeGerir || !cnes || !competencia) return;
+    const retro = !!movimento && movimento !== competencia;
     setFaturando(true);
-    const res = await gerarFaturamentoMes(cnes, competencia, nomeUnidade, { nome: user?.nome ?? "", cns: user?.cns ?? "" });
+    const res = await gerarFaturamentoMes(cnes, competencia, nomeUnidade, { nome: user?.nome ?? "", cns: user?.cns ?? "" }, movimento);
     setFaturando(false);
     if (!res) { toast.error("Falha ao gerar o faturamento. Verifique sua permissão."); return; }
-    if (res.tfds === 0) { toast.info("Nenhum TFD para faturar neste mês."); return; }
-    let msg = `${res.fichas} ficha(s) BPA-I geradas (${res.tfds} TFD, ${res.seqs} seqs).`;
+    if (res.tfds === 0) { toast.info(retro ? "Nenhuma TFD agendada para faturar retroativo." : "Nenhum TFD para faturar neste mês."); return; }
+    const alvo = retro ? ` — lançadas no faturamento de ${compLabel(movimento!)} (competência da folha: ${compLabel(competencia)})` : "";
+    let msg = `${res.fichas} ficha(s) BPA-I geradas${alvo} (${res.tfds} TFD, ${res.seqs} seqs).`;
     if (res.semProf > 0) msg += ` ${res.semProf} sem profissional responsável — não faturados.`;
     toast.success(msg);
+    setRetroAberto(false);
     carregar();
   };
 
@@ -256,15 +270,47 @@ function TfdPage() {
             className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
             <FileBarChart className="size-4" /> Relatórios
           </button>
-          <button type="button" onClick={faturarMes} disabled={faturando || registros.length === 0}
+          <button type="button" onClick={() => faturarMes()} disabled={faturando || registros.length === 0}
             className="flex items-center gap-2 rounded-md border border-primary/40 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
             title="Consolida os TFDs do mês em fichas BPA-I (por profissional)">
             {faturando ? <Loader2 className="size-4 animate-spin" /> : <Receipt className="size-4" />} Gerar faturamento do mês
+          </button>
+          <button type="button" onClick={() => { setRetroMov(retroMov || proximaComp(competencia)); setRetroAberto((o) => !o); }}
+            disabled={faturando || registros.length === 0}
+            className="flex items-center gap-2 rounded-md border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+            title="Faturar as TFDs AGENDADAS desta competência num mês de produção posterior (retroativo)">
+            <Receipt className="size-4" /> Faturar retroativo…
           </button>
           <button type="button" onClick={abrirNovo}
             className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
             <Plus className="size-4" /> Novo TFD
           </button>
+        </div>
+      )}
+
+      {retroAberto && podeGerir && (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          <div className="font-semibold text-amber-900">Faturamento retroativo</div>
+          <p className="mt-0.5 text-amber-800">
+            Gera as fichas das TFDs <strong>agendadas</strong> de <strong>{compLabel(competencia)}</strong> num
+            mês de produção posterior. A <strong>competência da folha continua {compLabel(competencia)}</strong>{" "}
+            (mês das viagens) — muda só o <strong>mês do faturamento/remessa</strong>. Não mexe nas TFDs já faturadas.
+          </p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <label className="text-xs font-medium text-amber-900">
+              Mês de produção (movimento)
+              <CompetenciaSelect value={retroMov} onChange={setRetroMov} />
+            </label>
+            <button type="button" onClick={() => faturarMes(retroMov)}
+              disabled={faturando || !/^\d{6}$/.test(retroMov) || retroMov <= competencia}
+              className="rounded-md bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
+              {faturando ? "Faturando…" : `Faturar agendadas em ${compLabel(retroMov)}`}
+            </button>
+            <button type="button" onClick={() => setRetroAberto(false)} className="text-xs text-amber-700 hover:underline">cancelar</button>
+          </div>
+          {/^\d{6}$/.test(retroMov) && retroMov <= competencia && (
+            <p className="mt-1 text-xs text-rose-700">O movimento deve ser POSTERIOR à competência ({compLabel(competencia)}).</p>
+          )}
         </div>
       )}
 
