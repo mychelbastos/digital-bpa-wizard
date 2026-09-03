@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Ambulance, Plus, Search, X, Loader2, Save, MapPin, Receipt, ChevronDown, Users, Pencil, Trash2, FileBarChart, Download, FileText, Lock,
+  Ambulance, Plus, Search, X, Loader2, Save, MapPin, Receipt, ChevronDown, Users, Pencil, Trash2, FileBarChart, Download, FileText, Lock, Moon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
@@ -102,6 +102,116 @@ function CompetenciaSelect(props: { value: string; onChange: (v: string) => void
   );
 }
 
+
+type Viagem = { data: string; pernoite: "com" | "sem" };
+
+// Calendário do mês da competência para marcar as viagens com um CLIQUE por dia (em vez de
+// abrir 14 seletores de data). Ciclo por clique: vazio → viagem (sem pernoite) → com pernoite
+// (🌙) → remove. Dias futuros ficam desabilitados. Atalho "dias úteis". Uma viagem por dia
+// (o modelo do TFD é 1 ida/volta por dia; evita o duplicado que o formato antigo permitia).
+function CalendarioViagens({ competencia, viagens, onChange }: {
+  competencia: string; viagens: Viagem[]; onChange: (v: Viagem[]) => void;
+}) {
+  const ano = Number(competencia.slice(0, 4)), mes = Number(competencia.slice(4, 6));
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const valida = /^\d{6}$/.test(competencia) && mes >= 1 && mes <= 12;
+
+  // Estado por dia do mês (com > sem) + o que ficou fora do mês (legado — preservado à parte).
+  const doMes = new Map<string, "com" | "sem">();
+  const fora: Viagem[] = [];
+  for (const v of viagens) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.data)) continue;
+    if (v.data.slice(0, 7).replace("-", "") === competencia) {
+      doMes.set(v.data, doMes.get(v.data) === "com" || v.pernoite === "com" ? "com" : "sem");
+    } else fora.push(v);
+  }
+  const iso = (d: number) => `${ano}-${String(mes).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const diasNoMes = valida ? new Date(ano, mes, 0).getDate() : 0;
+  const primeiroWd = valida ? new Date(ano, mes - 1, 1).getDay() : 0;
+
+  const emitir = (m: Map<string, "com" | "sem">) => {
+    const arr: Viagem[] = [...fora];
+    [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([data, pernoite]) => arr.push({ data, pernoite }));
+    onChange(arr);
+  };
+  const clicar = (d: number) => {
+    const i = iso(d);
+    if (i > hojeIso) return;
+    const m = new Map(doMes);
+    const st = m.get(i);
+    if (!st) m.set(i, "sem"); else if (st === "sem") m.set(i, "com"); else m.delete(i);
+    emitir(m);
+  };
+  const diasUteis = () => {
+    const m = new Map(doMes);
+    for (let d = 1; d <= diasNoMes; d++) {
+      const i = iso(d); if (i > hojeIso) continue;
+      const wd = new Date(ano, mes - 1, d).getDay();
+      if (wd >= 1 && wd <= 5 && !m.has(i)) m.set(i, "sem");
+    }
+    emitir(m);
+  };
+
+  const WD = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const cells: (number | null)[] = valida
+    ? [...Array(primeiroWd).fill(null), ...Array.from({ length: diasNoMes }, (_, i) => i + 1)]
+    : [];
+  const total = doMes.size, com = [...doMes.values()].filter((p) => p === "com").length;
+
+  if (!valida) return <p className="text-xs text-muted-foreground">Selecione a competência para marcar as viagens.</p>;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <div className={label}>Viagens ({total}) — {com} c/ pernoite, {total - com} s/ pernoite</div>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={diasUteis} className="text-xs font-medium text-primary hover:underline">Dias úteis (seg–sex)</button>
+          {total > 0 && <button type="button" onClick={() => emitir(new Map())} className="text-xs font-medium text-muted-foreground hover:underline">Limpar</button>}
+        </div>
+      </div>
+      <div className="rounded-lg border border-border bg-card p-2">
+        <div className="grid grid-cols-7 gap-1">
+          {WD.map((w) => <div key={w} className="py-1 text-center text-[10px] font-semibold uppercase text-muted-foreground">{w}</div>)}
+          {cells.map((d, idx) => {
+            if (d === null) return <div key={`e${idx}`} />;
+            const i = iso(d);
+            const st = doMes.get(i);
+            const futuro = i > hojeIso;
+            const cls = futuro
+              ? "cursor-not-allowed border-transparent text-muted-foreground/30"
+              : st === "com"
+                ? "border-violet-400 bg-violet-100 font-bold text-violet-700 hover:bg-violet-200"
+                : st === "sem"
+                  ? "border-primary/50 bg-primary/15 font-bold text-primary hover:bg-primary/25"
+                  : "border-border text-foreground hover:bg-muted";
+            return (
+              <button type="button" key={i} onClick={() => clicar(d)} disabled={futuro}
+                title={futuro ? "Data futura" : st === "com" ? "Com pernoite — clique p/ remover" : st === "sem" ? "Sem pernoite — clique p/ marcar pernoite" : "Clique p/ marcar viagem"}
+                className={`relative flex h-9 items-center justify-center rounded-md border text-sm transition-colors ${cls}`}>
+                {d}
+                {st === "com" && <Moon className="absolute right-0.5 top-0.5 size-2.5" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <p className="mt-1 text-[10.5px] leading-tight text-muted-foreground">
+        1 clique = viagem (sem pernoite) · 2 cliques = com pernoite 🌙 · 3 cliques = remove.
+      </p>
+      {fora.length > 0 && (
+        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+          ⚠ {fora.length} viagem(ns) fora da competência {compLabel(competencia)}:
+          {fora.map((v, k) => (
+            <span key={k} className="ml-1 inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5">
+              {v.data.split("-").reverse().join("/")}
+              <button type="button" onClick={() => onChange(viagens.filter((x) => x !== v))} title="Remover"><X className="size-3" /></button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TfdPage() {
   const user = useAuthUser();
@@ -499,10 +609,14 @@ function FormTfd(props: {
   const [paciente, setPaciente] = useState<Paciente | null>(edicao?.paciente ?? null);
   const [destinoId, setDestinoId] = useState(et?.destino_id ?? "");
   const [distanciaKm, setDistanciaKm] = useState(et ? String(et.distancia_km) : "0");
-  // Lista de viagens: cada uma com data + pernoite. Começa com uma linha vazia (ou as da edição).
-  const [viagens, setViagens] = useState<{ data: string; pernoite: "com" | "sem" }[]>(
-    et?.viagens?.length ? et.viagens.map((v) => ({ data: v.data, pernoite: v.pernoite })) : [{ data: "", pernoite: "sem" }],
-  );
+  // Viagens (data + pernoite) — marcadas no calendário do mês (CalendarioViagens). Ao carregar
+  // uma edição, DEDUPLICA por data (com > sem): o modelo é 1 ida/volta por dia; o formato antigo
+  // deixava a mesma data repetida (erro), então normalizamos aqui.
+  const [viagens, setViagens] = useState<Viagem[]>(() => {
+    const seen = new Map<string, "com" | "sem">();
+    for (const v of et?.viagens ?? []) seen.set(v.data, seen.get(v.data) === "com" || v.pernoite === "com" ? "com" : "sem");
+    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([data, pernoite]) => ({ data, pernoite }));
+  });
   const [temAcomp, setTemAcomp] = useState(et?.tem_acompanhante ?? false);
   const [acompanhante, setAcompanhante] = useState<Paciente | null>(edicao?.acompanhante ?? null);
   const [profCns, setProfCns] = useState(et?.prof_cns ?? "");
@@ -554,10 +668,6 @@ function FormTfd(props: {
     qtdSemPernoite: semP,
     temAcompanhante: temAcomp,
   };
-  const setViagem = (i: number, patch: Partial<{ data: string; pernoite: "com" | "sem" }>) =>
-    setViagens((vs) => vs.map((v, k) => (k === i ? { ...v, ...patch } : v)));
-  const addViagem = () => setViagens((vs) => [...vs, { data: "", pernoite: "sem" }]);
-  const removeViagem = (i: number) => setViagens((vs) => (vs.length > 1 ? vs.filter((_, k) => k !== i) : vs));
   const valorDe = (codigo: string) =>
     valorOverride[codigo] !== undefined ? Number(valorOverride[codigo].replace(",", ".")) || 0 : (valores[codigo] ?? 0);
   const linhas = previaTfd(entrada);
@@ -642,27 +752,7 @@ function FormTfd(props: {
 
       {/* Viagens: uma linha por viagem (data + pernoite), com botão de adicionar */}
       <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between">
-          <div className={label}>Viagens ({viagensValidas.length}) — {comP} c/ pernoite, {semP} s/ pernoite</div>
-          <button type="button" onClick={addViagem} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-            <Plus className="size-3" /> Adicionar viagem
-          </button>
-        </div>
-        <div className="space-y-2">
-          {viagens.map((v, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input type="date" max={new Date().toISOString().slice(0, 10)} value={v.data} onChange={(e) => setViagem(i, { data: e.target.value })} className={`${campo} max-w-[180px]`} data-nocaps />
-              <select value={v.pernoite} onChange={(e) => setViagem(i, { pernoite: e.target.value as "com" | "sem" })} className={`${campo} max-w-[190px]`}>
-                <option value="sem">Sem pernoite</option>
-                <option value="com">Com pernoite</option>
-              </select>
-              <button type="button" onClick={() => removeViagem(i)} disabled={viagens.length <= 1}
-                className="shrink-0 rounded-md border border-border p-2 text-muted-foreground hover:bg-muted disabled:opacity-40" title="Remover viagem">
-                <X className="size-4" />
-              </button>
-            </div>
-          ))}
-        </div>
+        <CalendarioViagens competencia={competencia} viagens={viagens} onChange={setViagens} />
       </div>
 
       <label className="mt-3 flex items-center gap-2 text-sm">
