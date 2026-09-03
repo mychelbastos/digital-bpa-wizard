@@ -200,6 +200,11 @@ function TfdPage() {
 
   // TFD faturado só pode ser alterado por quem reabre produção (trava do fechamento).
   const travado = (r: TfdRegistroView) => r.status === "faturada" && !podeReabrir;
+  // Está na lista por causa do MOVIMENTO (faturada retroativa neste mês), não pela competência.
+  // Só visualização — pertence à competência de origem.
+  const retroDeOutraComp = (r: TfdRegistroView) => r.competencia !== competencia;
+  // Faturada em um movimento diferente da própria competência (retroativa) — para o badge.
+  const faturadaRetro = (r: TfdRegistroView) => !!r.movimento_faturamento && r.movimento_faturamento !== r.competencia;
   const avisoTravado = () => toast.error("TFD faturado. Só quem pode reabrir a produção do mês altera este TFD.");
 
   const mudarStatus = async (r: TfdRegistroView, status: TfdStatus) => {
@@ -397,6 +402,17 @@ function TfdPage() {
                 <td className="px-3 py-2">
                   <div className="font-medium text-foreground">{r.paciente_nome || "—"}</div>
                   {r.paciente_cns && <div className="text-[11px] text-muted-foreground">CNS {r.paciente_cns}</div>}
+                  {retroDeOutraComp(r) ? (
+                    <span className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                      title={`Faturada retroativamente neste movimento. Competência (realização) da folha: ${compLabel(r.competencia)}. Só para visualização — é editada na competência de origem.`}>
+                      retroativo · comp. {compLabel(r.competencia)}
+                    </span>
+                  ) : faturadaRetro(r) ? (
+                    <span className="mt-0.5 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800"
+                      title={`Faturada retroativamente no movimento ${compLabel(r.movimento_faturamento!)}.`}>
+                      → faturado em {compLabel(r.movimento_faturamento!)}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{r.destino_descricao || "—"}</td>
                 <td className="px-3 py-2 text-right">{r.qtd_com_pernoite + r.qtd_sem_pernoite}
@@ -408,7 +424,7 @@ function TfdPage() {
                 </td>
                 <td className="px-3 py-2 text-right font-medium">{brl(r.total_rs)}</td>
                 <td className="px-3 py-2 text-center">
-                  {podeGerir && !travado(r) ? (
+                  {podeGerir && !travado(r) && !retroDeOutraComp(r) ? (
                     <select value={r.status} onChange={(e) => mudarStatus(r, e.target.value as TfdStatus)}
                       className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-medium outline-none ${STATUS_META[r.status].cor}`}>
                       <option value="agendada">Agendada</option>
@@ -428,7 +444,11 @@ function TfdPage() {
                           <FileText className="size-3.5" />
                         </Link>
                       )}
-                      {travado(r) ? (
+                      {retroDeOutraComp(r) ? (
+                        <span title={`Visualização — TFD retroativo desta remessa. Edite na competência de origem (${compLabel(r.competencia)}).`} className="rounded border border-border p-1 text-muted-foreground">
+                          <Lock className="size-3.5" />
+                        </span>
+                      ) : travado(r) ? (
                         <span title="TFD faturado — travado (requer permissão de reabrir produção)" className="rounded border border-border p-1 text-muted-foreground">
                           <Lock className="size-3.5" />
                         </span>

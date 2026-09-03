@@ -198,6 +198,7 @@ export interface TfdRegistro {
   status: TfdStatus;
   ficha_id: string | null;
   observacoes: string | null;
+  movimento_faturamento: string | null; // mês de produção onde foi faturada (≠ competencia = retroativo)
 }
 
 // Uma linha de valor por procedimento do TFD (guardada por paciente em tfd_linhas).
@@ -219,14 +220,17 @@ export interface TfdRegistroView extends TfdRegistro {
 }
 
 const TFD_COLS =
-  "id, organizacao_id, cnes, paciente_id, destino_id, distancia_km, competencia, qtd_com_pernoite, qtd_sem_pernoite, viagens, data_atendimento, tem_acompanhante, acompanhante_id, prof_cns, prof_nome, prof_cbo, status, ficha_id, observacoes";
+  "id, organizacao_id, cnes, paciente_id, destino_id, distancia_km, competencia, qtd_com_pernoite, qtd_sem_pernoite, viagens, data_atendimento, tem_acompanhante, acompanhante_id, prof_cns, prof_nome, prof_cbo, status, ficha_id, observacoes, movimento_faturamento";
 
 export async function listarTfd(cnes: string, competencia: string): Promise<TfdRegistroView[]> {
   if (!supabase || !cnes || !competencia) return [];
   try {
+    // Traz as TFDs da competência (folha) E as que foram FATURADAS RETROATIVAMENTE neste mês
+    // como MOVIMENTO (competencia ≠, mas movimento_faturamento = competencia selecionada) —
+    // essas aparecem só para visualização, marcadas como "retroativo".
     const { data, error } = await supabase.from("tfd")
       .select(`${TFD_COLS}, paciente:pacientes!tfd_paciente_id_fkey(nome, cns), acompanhante:pacientes!tfd_acompanhante_id_fkey(nome, cns), tfd_destinos(descricao), tfd_linhas(quantidade, valor_unitario)`)
-      .eq("cnes", cnes).eq("competencia", competencia).order("criado_em", { ascending: false });
+      .eq("cnes", cnes).or(`competencia.eq.${competencia},movimento_faturamento.eq.${competencia}`).order("criado_em", { ascending: false });
     if (error || !data) return [];
     return (data as unknown as Array<Record<string, unknown>>).map((r) => {
       const pac = (Array.isArray(r.paciente) ? r.paciente[0] : r.paciente) as { nome?: string; cns?: string } | null;
@@ -680,7 +684,7 @@ export async function gerarFaturamentoMes(cnes: string, competencia: string, nom
           if (!eIns && nova) { if (!primeiraFichaId) primeiraFichaId = (nova as { id: string }).id; totalFichas++; }
         }
       }
-      await supabase.from("tfd").update({ status: "faturada", ficha_id: primeiraFichaId, atualizado_em: new Date().toISOString() }).in("id", g.tfdIds);
+      await supabase.from("tfd").update({ status: "faturada", ficha_id: primeiraFichaId, movimento_faturamento: mesProd, atualizado_em: new Date().toISOString() }).in("id", g.tfdIds);
     }
     return { fichas: totalFichas, tfds: tfds.length, seqs: totalSeqs, semProf };
   } catch {
