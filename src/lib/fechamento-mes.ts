@@ -197,7 +197,17 @@ export function gerarArquivoMes(
   const head = header(cfg, compApres, linhas.length, nFolhas, campoControleDe(controle));
   const conteudo = [head, ...linhas].join(CRLF) + CRLF;
   return {
-    arquivo: { conteudo, nome: `PA${compApres}.txt`, linhas: linhas.length, folhas: nFolhas },
+    arquivo: { conteudo, nome: nomeArquivoBpa(compApres, cfg.municipioIbge), linhas: linhas.length, folhas: nFolhas },
     resumo,
   };
+}
+
+// Nome do arquivo no padrão DATASUS/BPA Magnético: PA<municipio_ibge6>.<MMM> — a EXTENSÃO é a
+// abreviação de 3 letras do mês de produção (ex.: PA292720.JUL). É o mesmo padrão dos .MAR/.JUN
+// que importamos. Sem município configurado, cai no fallback PA<AAAAMM>.txt.
+const MESES_MMM = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+export function nomeArquivoBpa(compApres: string, municipioIbge: string | null | undefined): string {
+  const mmm = MESES_MMM[Number(compApres.slice(4, 6)) - 1] ?? compApres.slice(4, 6);
+  const muni6 = (municipioIbge || "").replace(/\D/g, "").slice(0, 6);
+  return muni6.length === 6 ? `PA${muni6}.${mmm}` : `PA${compApres}.txt`;
 }

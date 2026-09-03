@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gerarArquivoMes } from "./fechamento-mes";
+import { gerarArquivoMes, nomeArquivoBpa } from "./fechamento-mes";
 import { configVazia } from "./bpa-i-v2/config";
 import { emptySeq } from "./bpai-v2-layout";
 import type { FichaCompleta } from "./bpa-i-v2/fichas";
@@ -41,6 +41,14 @@ describe("geração pelo caminho real do app (competência da ficha; idade deriv
     const l = linha03([fichaBpaI({ dataAtend: cells("07112025", 8) }, "2026", "01")]);
     expect(l.slice(9, 15)).toBe("202601");
     expect(l.slice(36, 44)).toBe("20251107"); // a data de atendimento real preservada
+  });
+
+  it("nomeArquivoBpa: PA<municipio6>.<MMM> (extensão = mês) ou fallback .txt", () => {
+    expect(nomeArquivoBpa("202607", "2927200")).toBe("PA292720.JUL");
+    expect(nomeArquivoBpa("202608", "2927200")).toBe("PA292720.AGO");
+    expect(nomeArquivoBpa("202601", "292720")).toBe("PA292720.JAN");
+    expect(nomeArquivoBpa("202607", "")).toBe("PA202607.txt");   // sem município → fallback
+    expect(nomeArquivoBpa("202607", null)).toBe("PA202607.txt");
   });
 
   it("retroativasForaJanela conta folha > 3 competências antes do faturamento", () => {
