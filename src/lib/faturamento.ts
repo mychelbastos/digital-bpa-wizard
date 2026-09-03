@@ -73,8 +73,10 @@ export function rotuloMovimento(m: string): string {
   return `${MESES_ABREV[Number(m.slice(4, 6)) - 1] ?? m.slice(4, 6)}/${m.slice(0, 4)}`;
 }
 
-// Opções em torno de agora (mais recente primeiro); inclui sempre o valor atual.
-export function opcoesMovimento(atual: string, antes = 14, depois = 1): string[] {
+// Opções do movimento (mais recente primeiro). Regra: mês ATUAL + os `antes` meses anteriores
+// (default 5 → 6 no total) e NENHUM mês futuro (`depois=0`) — lista curta reduz erro. Inclui
+// sempre o valor `atual` selecionado (mesmo fora da janela), para não "sumir" o que está em uso.
+export function opcoesMovimento(atual: string, antes = 5, depois = 0): string[] {
   const base = competenciaCalendario();
   const y = Number(base.slice(0, 4)), mo = Number(base.slice(4, 6));
   const set = new Set<string>();

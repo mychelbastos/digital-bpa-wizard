@@ -44,4 +44,12 @@ describe("faturamento — rótulos e opções", () => {
     expect([...ops]).toEqual([...ops].sort((a, b) => b.localeCompare(a)));
     expect(new Set(ops).size).toBe(ops.length);
   });
+
+  it("mês atual + 5 anteriores (6 no total) e NENHUM mês futuro", () => {
+    const atual = competenciaCalendario();
+    const ops = opcoesMovimento(atual);
+    expect(ops.length).toBe(6);         // atual + 5
+    expect(ops[0]).toBe(atual);         // mais recente = mês atual (sem futuro)
+    expect(ops.every((m) => m <= atual)).toBe(true);
+  });
 });
