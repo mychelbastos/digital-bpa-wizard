@@ -11,6 +11,7 @@ import { souAdmin, usePermissoes } from "@/lib/permissoes";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { CNES_TFD } from "@/lib/tfd/tfd";
 import { useMovimentoFaturamento, opcoesMovimento, rotuloMovimento } from "@/lib/faturamento";
+import { listarProducoes } from "@/lib/producoes";
 
 const formularios = [
   { to: "/laudo-aih", label: "AIH" },
@@ -37,6 +38,17 @@ const linkBase = "flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13.5p
 function MovimentoFaturamento() {
   const { movimento, podeEditar, definir } = useMovimentoFaturamento();
   const [salvando, setSalvando] = useState(false);
+  // Meses cuja produção já está FECHADA (exportada/transmitida) — não podem ser escolhidos
+  // como movimento (teria de reabrir a produção antes). Carregado só para o faturista.
+  const [fechadas, setFechadas] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!podeEditar) return;
+    let vivo = true;
+    listarProducoes().then((ps) => {
+      if (vivo) setFechadas(new Set(ps.filter((p) => p.status !== "aberta").map((p) => p.mes_producao)));
+    });
+    return () => { vivo = false; };
+  }, [podeEditar]);
 
   const cabecalho = (
     <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-400/80">
@@ -65,17 +77,20 @@ function MovimentoFaturamento() {
         disabled={salvando}
         onChange={async (e) => {
           const alvo = e.target.value;
+          if (fechadas.has(alvo)) { toast.error(`A produção de ${rotuloMovimento(alvo)} já está fechada. Reabra em "Exportar produção" para faturar nela.`); return; }
           setSalvando(true);
           const ok = await definir(alvo);
           setSalvando(false);
           if (ok) toast.success(`Mês de faturamento da equipe: ${rotuloMovimento(alvo)}`);
           else toast.error("Não foi possível alterar o mês de faturamento.");
         }}
-        title="Mês em que a produção digitada será lançada (movimento). Vale para toda a equipe. As folhas mantêm a competência (mês de realização) delas."
+        title="Mês em que a produção digitada será lançada (movimento). Vale para toda a equipe. As folhas mantêm a competência (mês de realização) delas. Meses com produção fechada ficam bloqueados."
         className="mt-1 w-full rounded-lg border border-white/15 bg-slate-900/60 px-2 py-1.5 text-[13px] font-semibold text-white outline-none focus:border-sky-400 disabled:opacity-60"
       >
         {opcoes.map((m) => (
-          <option key={m} value={m} className="bg-slate-800 text-white">{rotuloMovimento(m)}</option>
+          <option key={m} value={m} disabled={fechadas.has(m)} className="bg-slate-800 text-white">
+            {rotuloMovimento(m)}{fechadas.has(m) ? " · fechada" : ""}
+          </option>
         ))}
       </select>
       <p className="mt-1 px-0.5 text-[10px] leading-tight text-slate-400/70">
