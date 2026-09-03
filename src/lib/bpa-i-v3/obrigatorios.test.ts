@@ -71,6 +71,25 @@ describe("motivosObrigatoriosSeq", () => {
     expect(motivosObrigatoriosSeq(s, semExig)).toContain("Data de nascimento incompleta (faltam dígitos).");
   });
 
+  it("data de nascimento com ANO absurdo (7202) é reprovada", () => {
+    const s = seqCompleta();
+    s.dataNasc = "01017202".split(""); // 01/01/7202
+    expect(motivosObrigatoriosSeq(s, semExig).join("|")).toMatch(/Data de nascimento inválida/);
+  });
+
+  it("data de nascimento no futuro é reprovada", () => {
+    const s = seqCompleta();
+    const proxAno = String(new Date().getFullYear() + 1);
+    s.dataNasc = ("0101" + proxAno).split("");
+    expect(motivosObrigatoriosSeq(s, semExig).join("|")).toMatch(/Data de nascimento inválida/);
+  });
+
+  it("data do atendimento com ano absurdo é reprovada", () => {
+    const s = seqCompleta();
+    s.dataAtend = "01017202".split("");
+    expect(motivosObrigatoriosSeq(s, semExig).join("|")).toMatch(/Data do atendimento inválida/);
+  });
+
   it("Serviço/Classe e CID são cobrados só quando o SIGTAP exige", () => {
     const s = seqCompleta(); // sem serviço/classe/cid
     expect(motivosObrigatoriosSeq(s, { exigeServico: true, exigeCid: true })).toEqual([
