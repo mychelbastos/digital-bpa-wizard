@@ -502,6 +502,21 @@ function FormTfd(props: {
     if (!paciente) { toast.error("Selecione ou cadastre o paciente."); return; }
     if (!destinoId) { toast.error("Selecione um destino para o TFD."); return; }
     if (viagensValidas.length === 0) { toast.error("Adicione ao menos uma viagem com data."); return; }
+    // Crivo das datas de viagem (= data de atendimento do BPA-I): não podem ser futuras nem
+    // ter ano absurdo, e precisam cair na COMPETÊNCIA do TFD. Pega de uma vez 0026/7202/2028/
+    // fevereiro num TFD de julho, etc.
+    const hojeIso = new Date().toISOString().slice(0, 10);
+    for (const v of viagensValidas) {
+      const br = /^\d{4}-\d{2}-\d{2}$/.test(v.data) ? v.data.split("-").reverse().join("/") : v.data;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v.data) || Number(v.data.slice(0, 4)) < 2000) {
+        toast.error(`Data de viagem inválida (${br}) — confira o ano.`); return;
+      }
+      if (v.data > hojeIso) { toast.error(`Data de viagem no futuro (${br}). Corrija.`); return; }
+      if (v.data.slice(0, 7).replace("-", "") !== competencia) {
+        toast.error(`A viagem ${br} está fora da competência ${compLabel(competencia)} do TFD — corrija a data (ou a competência).`);
+        return;
+      }
+    }
     if (temAcomp && !acompanhante) { toast.error("Cadastre/selecione o acompanhante (ou desmarque acompanhante)."); return; }
     // Profissional responsável obrigatório: o BPA-I exige nome + CNS do profissional.
     if (!profNome.trim() || !/^[0-9]{15}$/.test((profCns || "").replace(/\D/g, ""))) {
@@ -570,7 +585,7 @@ function FormTfd(props: {
         <div className="space-y-2">
           {viagens.map((v, i) => (
             <div key={i} className="flex items-center gap-2">
-              <input type="date" value={v.data} onChange={(e) => setViagem(i, { data: e.target.value })} className={`${campo} max-w-[180px]`} />
+              <input type="date" max={new Date().toISOString().slice(0, 10)} value={v.data} onChange={(e) => setViagem(i, { data: e.target.value })} className={`${campo} max-w-[180px]`} data-nocaps />
               <select value={v.pernoite} onChange={(e) => setViagem(i, { pernoite: e.target.value as "com" | "sem" })} className={`${campo} max-w-[190px]`}>
                 <option value="sem">Sem pernoite</option>
                 <option value="com">Com pernoite</option>

@@ -8,6 +8,7 @@ import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { procedimentoExigeServico, procedimentoExigeCid } from "@/lib/bpa-i-v3/exigencias-sigtap";
 import { motivosObrigatoriosSeq } from "@/lib/bpa-i-v3/obrigatorios";
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
+import { atendimentoForaDaCompetencia } from "@/lib/bpa-i-v2/validacao";
 import { assinaturaBpaI, assinaturaBpaC } from "@/lib/bpa-i-v2/folha-duplicidade";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 
@@ -84,10 +85,12 @@ function errosFichasIncompletas(fichas: FichaCompleta[]): ErroItem[] {
   for (const f of fichas) {
     if (f.tipo !== "BPA-I") continue;
     try {
-      const d = f.dados as { seqs?: SeqData[]; profNome?: string; profCns?: unknown; cnes?: unknown };
+      const d = f.dados as { seqs?: SeqData[]; profNome?: string; profCns?: unknown; cnes?: unknown; profMes?: unknown; profAno?: unknown };
       const cnes = jc(d.cnes);
       const prof = (d.profNome as string) || jc(d.profCns) || "—";
       const seqs = Array.isArray(d.seqs) ? d.seqs : [];
+      const profMesArr = Array.isArray(d.profMes) ? (d.profMes as string[]) : [];
+      const profAnoArr = Array.isArray(d.profAno) ? (d.profAno as string[]) : [];
       // Crivo do PROFISSIONAL (nível ficha): mesma regra da ficha aberta — CNS 15 díg. + nome.
       // Só cobra quando a ficha tem alguma sequência preenchida.
       if (seqs.some((s) => seqPreenchida(s))) {
@@ -109,6 +112,17 @@ function errosFichasIncompletas(fichas: FichaCompleta[]): ErroItem[] {
           out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
             competencia: "", cnes, profissional: prof, procedimento: jc(s.codProc),
             descricao: `Seq. ${i + 1}: ${m}` });
+        }
+        // Data de atendimento fora do mês/ano da competência da folha (o BPA Magnético recusa).
+        // Datas futuras/absurdas já caem em motivosObrigatoriosSeq; aqui pegamos as VÁLIDAS
+        // porém de outro mês (ex.: atendimento em 02/2026 numa folha de competência 07/2026).
+        if (atendimentoForaDaCompetencia(s.dataAtend, profMesArr, profAnoArr)) {
+          const dd = jc(s.dataAtend);
+          const atend = dd.length === 8 ? `${dd.slice(2, 4)}/${dd.slice(4, 8)}` : "—";
+          const folha = profMesArr.length && profAnoArr.length ? `${jc(profMesArr)}/${jc(profAnoArr)}` : "—";
+          out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
+            competencia: "", cnes, profissional: prof, procedimento: jc(s.codProc),
+            descricao: `Seq. ${i + 1}: Data de atendimento em ${atend} está fora da competência da folha (${folha}) — o BPA Magnético recusa; corrija a data ou a competência.` });
         }
       });
     } catch { /* ficha com shape inesperado — ignora */ }
