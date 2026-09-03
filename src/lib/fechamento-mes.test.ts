@@ -42,4 +42,13 @@ describe("geração pelo caminho real do app (competência da ficha; idade deriv
     expect(l.slice(9, 15)).toBe("202601");
     expect(l.slice(36, 44)).toBe("20251107"); // a data de atendimento real preservada
   });
+
+  it("retroativasForaJanela conta folha > 3 competências antes do faturamento", () => {
+    // Folha 02/2026 no faturamento (movimento) 07/2026 = 5 competências de retroatividade.
+    const fev = gerarArquivoMes([fichaBpaI({}, "2026", "02")], "202607", cells("2026", 4), cells("07", 2), cfg());
+    expect(fev.resumo.retroativasForaJanela).toBe(1);
+    // Folha 05/2026 no faturamento 07/2026 = 2 competências (dentro da janela) — não conta.
+    const mai = gerarArquivoMes([fichaBpaI({}, "2026", "05")], "202607", cells("2026", 4), cells("07", 2), cfg());
+    expect(mai.resumo.retroativasForaJanela).toBe(0);
+  });
 });

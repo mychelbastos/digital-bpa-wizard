@@ -90,6 +90,18 @@ describe("motivosObrigatoriosSeq", () => {
     expect(motivosObrigatoriosSeq(s, semExig).join("|")).toMatch(/Data do atendimento inválida/);
   });
 
+  it("idade acima de 130 anos é reprovada (nascimento antigo demais)", () => {
+    const s = seqCompleta();
+    s.dataNasc = "01011850".split(""); // 01/01/1850 -> ~176 anos
+    expect(motivosObrigatoriosSeq(s, semExig).join("|")).toMatch(/Idade acima de 130 anos/);
+  });
+
+  it("idade plausível (100 anos) NÃO é reprovada", () => {
+    const s = seqCompleta();
+    s.dataNasc = "01011926".split(""); // ~100 anos
+    expect(motivosObrigatoriosSeq(s, semExig).join("|")).not.toMatch(/Idade acima de 130|inválida/);
+  });
+
   it("Serviço/Classe e CID são cobrados só quando o SIGTAP exige", () => {
     const s = seqCompleta(); // sem serviço/classe/cid
     expect(motivosObrigatoriosSeq(s, { exigeServico: true, exigeCid: true })).toEqual([

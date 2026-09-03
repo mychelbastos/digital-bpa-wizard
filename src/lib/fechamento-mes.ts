@@ -60,6 +60,16 @@ export interface ResumoMes {
   // duas linhas colidem em (CNES, prof/CBO, competência, folha, sequência). Como as folhas
   // são renumeradas em sequência no arquivo, isto deve ser sempre 0 — é uma salvaguarda.
   chavesDuplicadas: number;
+  // Linhas cuja competência (folha) está mais de 3 competências ANTES do movimento de
+  // faturamento (retroatividade excessiva) — o DATASUS recusa. Ex.: folha 02/2026 no
+  // faturamento de 07/2026. > 0 = revisar a competência dessas folhas antes de transmitir.
+  retroativasForaJanela: number;
+}
+
+// Diferença em competências (a − b), AAAAMM. Ex.: 202607 − 202602 = 5.
+function mesesDiffComp(a: string, b: string): number {
+  if (!/^\d{6}$/.test(a) || !/^\d{6}$/.test(b)) return 0;
+  return (Number(a.slice(0, 4)) - Number(b.slice(0, 4))) * 12 + (Number(a.slice(4, 6)) - Number(b.slice(4, 6)));
 }
 
 // Chave de unicidade de uma linha do arquivo (Fase 5). "prof" = CNS do profissional no
@@ -96,6 +106,7 @@ export function gerarArquivoMes(
   const controle: { proc: string; qtde: string }[] = [];
   const chaves = new Set<string>();
   let chavesDuplicadas = 0;
+  let retroativasForaJanela = 0;
   const registrarChave = (k: string) => {
     if (chaves.has(k)) chavesDuplicadas++;
     else chaves.add(k);
@@ -129,6 +140,7 @@ export function gerarArquivoMes(
         registrarChave(
           chaveLinha("02", dig(st.cnes), dig(r.cbo), dig(anoLinha) + dig(mesLinha), folha, j + 1),
         );
+        if (mesesDiffComp(compApres, dig(anoLinha) + dig(mesLinha)) > 3) retroativasForaJanela++;
         linhasBpaC++;
       });
       folha++;
@@ -162,6 +174,7 @@ export function gerarArquivoMes(
         registrarChave(
           chaveLinha("03", dig(st.cnes), dig(st.profCns), dig(st.profAno) + dig(st.profMes), folha, j + 1),
         );
+        if (mesesDiffComp(compApres, dig(st.profAno) + dig(st.profMes)) > 3) retroativasForaJanela++;
         linhasBpaI++;
       });
       folha++;
@@ -176,6 +189,7 @@ export function gerarArquivoMes(
     fichasBpaI,
     fichasBpaC,
     chavesDuplicadas,
+    retroativasForaJanela,
   };
   if (linhas.length === 0) return { arquivo: null, resumo };
 

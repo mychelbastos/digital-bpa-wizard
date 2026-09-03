@@ -69,10 +69,11 @@ async function errosProducaoSigtap(rows: ProducaoBpaRow[]): Promise<ErroItem[]> 
     // CID também não se aplica ao BPA Consolidado (o formulário não registra CID).
     if (r.tipo !== "BPA-C" && cidCache.get(r.procedimento) === true && (!r.cid || r.cid.trim().length < 3))
       out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "CID obrigatório para o procedimento (SIGTAP) e está ausente." });
-    // Competência da folha (realização) muito anterior ao movimento de faturamento
-    // (retroatividade acima da janela usual de ~3 competências do SIA/SUS).
+    // Competência da folha (realização) muito anterior ao movimento de faturamento:
+    // retroatividade ACIMA da janela do SIA/SUS (~3 competências) → o DATASUS RECUSA a
+    // importação. É ERRO (não só aviso): ex.: folha de 02/2026 no faturamento de 07/2026.
     if (r.mes_producao && r.competencia && mesesDiff(r.mes_producao, r.competencia) > 3)
-      out.push({ ...base, categoria: "producao-sigtap", gravidade: "aviso", descricao: `Competência ${r.competencia} (realização) faturada em ${r.mes_producao} — retroatividade acima de 3 competências; confira se o SIA/SUS ainda aceita.` });
+      out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: `Competência ${r.competencia} (realização) faturada em ${r.mes_producao} — retroatividade de ${mesesDiff(r.mes_producao, r.competencia)} competências (acima do limite ~3). O BPA Magnético recusa; corrija a competência da folha.` });
   }
   return out;
 }

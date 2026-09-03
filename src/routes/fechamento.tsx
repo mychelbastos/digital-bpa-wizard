@@ -296,6 +296,15 @@ function Fechamento() {
                 importação — não feche esta produção e reporte.
               </p>
             )}
+            {res.resumo.retroativasForaJanela > 0 && (
+              <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                ⚠️ Retroatividade: {res.resumo.retroativasForaJanela} linha(s) com a competência da
+                folha mais de <strong>3 competências</strong> antes do faturamento de{" "}
+                <strong>{comp}</strong> (ex.: folha de fevereiro no faturamento de julho). O BPA
+                Magnético costuma <strong>recusar</strong> — revise a competência dessas folhas na
+                <strong> Consistência da produção</strong> antes de transmitir.
+              </p>
+            )}
             {res.arquivo ? (
               <>
                 <div className="mt-4 flex flex-wrap gap-2">

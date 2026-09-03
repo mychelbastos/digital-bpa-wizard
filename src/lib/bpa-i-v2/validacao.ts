@@ -88,6 +88,31 @@ export function dataFuturaOuInvalida(d: string[]): boolean {
   return dataParaNumero(d) > hojeNumero();
 }
 
+// Idade em anos completos HOJE a partir da data de nascimento (DDMMYYYY). Aceita QUALQUER
+// ano com dia/mês reais (NÃO usa dataValida, que floreia 1900–2100) — assim o teto de idade
+// consegue reprovar datas antigas demais (ex.: 1850 => 176 anos). null se dia/mês inválidos
+// ou data incompleta.
+export function idadeAnosHoje(dataNasc: string[]): number | null {
+  if (!dataCompleta(dataNasc)) return null;
+  const s = dataNasc.join("");
+  const dn = Number(s.slice(0, 2)), mn = Number(s.slice(2, 4)), an = Number(s.slice(4, 8));
+  if (mn < 1 || mn > 12) return null;
+  const dias = new Date(an, mn, 0).getDate();
+  if (dn < 1 || dn > dias) return null;
+  const h = new Date();
+  let anos = h.getFullYear() - an;
+  const dm = (h.getMonth() + 1) - mn;
+  if (dm < 0 || (dm === 0 && h.getDate() < dn)) anos -= 1; // ainda não fez aniversário
+  return anos;
+}
+
+// Idade acima do teto (default 130 anos) — data de nascimento antiga demais (erro de
+// digitação). Só acende com data válida; incompleta/invalida têm alerta próprio.
+export function idadeAcimaDoTeto(dataNasc: string[], teto = 130): boolean {
+  const i = idadeAnosHoje(dataNasc);
+  return i !== null && i > teto;
+}
+
 // Atendimento com mais de 120 dias — aviso não-bloqueante (a pessoa pode confirmar
 // e seguir mesmo assim). Só considera datas de calendário válidas e não-futuras
 // (essas já têm o alerta próprio de dataFuturaOuInvalida).

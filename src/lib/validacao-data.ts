@@ -21,3 +21,15 @@ export function nascimentoValido(iso: string | null | undefined): boolean {
   if (dt.getTime() > Date.now()) return false; // sem datas futuras
   return true;
 }
+
+// Idade acima do teto (default 130 anos) a partir do nascimento ISO "AAAA-MM-DD".
+// Ninguém vivo passa de ~130 anos → provável erro de digitação no ano.
+export function idadeAcimaDoTetoIso(iso: string | null | undefined, teto = 130): boolean {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false; // formato tratado à parte
+  const [a, m, d] = iso.split("-").map(Number);
+  const h = new Date();
+  let anos = h.getFullYear() - a;
+  const dm = (h.getMonth() + 1) - m;
+  if (dm < 0 || (dm === 0 && h.getDate() < d)) anos -= 1;
+  return anos > teto;
+}

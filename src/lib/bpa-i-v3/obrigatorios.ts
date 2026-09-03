@@ -7,7 +7,7 @@
 // Todo o resto é obrigatório. Campos de tamanho fixo (identificação, datas, CEP, IBGE)
 // precisam estar COMPLETOS.
 import type { SeqData } from "@/lib/bpai-v2-layout";
-import { dataCompleta, dataFuturaOuInvalida } from "@/lib/bpa-i-v2/validacao";
+import { dataCompleta, dataFuturaOuInvalida, idadeAcimaDoTeto } from "@/lib/bpa-i-v2/validacao";
 import { RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { identificarPaciente } from "./identificacao";
 
@@ -84,6 +84,7 @@ export function motivosObrigatoriosSeq(
   // Data de nascimento: obrigatória e completa (8 dígitos).
   if (digs(s.dataNasc).length === 0) m.push("Data de nascimento é obrigatória.");
   else if (!dataCompleta(s.dataNasc)) m.push("Data de nascimento incompleta (faltam dígitos).");
+  else if (idadeAcimaDoTeto(s.dataNasc)) m.push("Idade acima de 130 anos — verifique a data de nascimento (provável erro de digitação no ano).");
   else if (dataFuturaOuInvalida(s.dataNasc)) m.push("Data de nascimento inválida — confira o ANO (ex.: 7202) e o dia/mês; não pode ser data futura.");
 
   if (vazio(s.nacionalidade)) m.push("Nacionalidade é obrigatória.");

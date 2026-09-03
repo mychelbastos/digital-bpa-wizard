@@ -14,7 +14,7 @@ import { validarCns } from "@/lib/bpa-i-v2/validacao";
 import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
 import { emailValido } from "@/lib/validacao-email";
 import { telefoneValido, cepValido } from "@/lib/validacao-contato";
-import { anoAte4Digitos, nascimentoValido } from "@/lib/validacao-data";
+import { anoAte4Digitos, nascimentoValido, idadeAcimaDoTetoIso } from "@/lib/validacao-data";
 import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/nacionalidades";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
@@ -283,10 +283,15 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
     // Crivo da data de nascimento: DD/MM/AAAA com ano de 4 dígitos (rejeita "26" -> "0026",
     // datas impossíveis e futuras). Só checa quando preenchida (ausência já cai em `faltam`).
     const nascInvalido = !!nascimento && !nascimentoValido(nascimento);
-    if (nascInvalido && !faltam.includes("nascimento")) faltam.push("nascimento");
+    const idadeAbsurda = !!nascimento && !nascInvalido && idadeAcimaDoTetoIso(nascimento);
+    if ((nascInvalido || idadeAbsurda) && !faltam.includes("nascimento")) faltam.push("nascimento");
     setFaltando(faltam);
     if (nascInvalido) {
       toast.error("Data de nascimento inválida — use DD/MM/AAAA com ano de 4 dígitos (ex.: 2026), sem dígitos a mais ou a menos.");
+      return;
+    }
+    if (idadeAbsurda) {
+      toast.error("Idade acima de 130 anos — verifique a data de nascimento (provável erro no ano).");
       return;
     }
     if (faltam.length > 0) {
