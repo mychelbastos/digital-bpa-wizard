@@ -194,10 +194,11 @@ export function gerarArquivoMes(
   if (linhas.length === 0) return { arquivo: null, resumo };
 
   const nFolhas = folha - 1;
-  const head = header(cfg, compApres, linhas.length, nFolhas, campoControleDe(controle));
+  const controleN = campoControleDe(controle);
+  const head = header(cfg, compApres, linhas.length, nFolhas, controleN);
   const conteudo = [head, ...linhas].join(CRLF) + CRLF;
   return {
-    arquivo: { conteudo, nome: nomeArquivoBpa(compApres, cfg.municipioIbge), linhas: linhas.length, folhas: nFolhas },
+    arquivo: { conteudo, nome: nomeArquivoBpa(compApres, cfg.municipioIbge), linhas: linhas.length, folhas: nFolhas, controle: controleN },
     resumo,
   };
 }

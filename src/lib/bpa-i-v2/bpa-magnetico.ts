@@ -242,6 +242,7 @@ export interface ArquivoBpa {
   nome: string;
   linhas: number;
   folhas: number;
+  controle?: number; // campo de controle do header (p/ o RELEXP.PRN)
 }
 
 // Gera o arquivo completo (header + linhas). base de folha vem de profFolha (ou 1). BPA
