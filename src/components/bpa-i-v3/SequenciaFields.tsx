@@ -62,7 +62,7 @@ interface Props {
 const IDENT_MOTIVO = "Identificação do paciente inválida — confira o CPF (11 díg.) ou o CNS (15 díg.).";
 const DATA_INVALIDA_MOTIVO = "Data inválida ou no futuro.";
 const CARATER_MOTIVO = "Caráter de atendimento é obrigatório.";
-const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês da competência — o BPA Magnético costuma criticar. Confirme a data ou a competência.";
+const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês/ano da competência da folha — o BPA Magnético recusa. Corrija a data ou a competência (Mês/Ano).";
 
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
@@ -139,10 +139,10 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
   const cepIncompleto = hydrated && parcialIncompleto(s.cep, 8);
   const ibgeIncompleto = hydrated && parcialIncompleto(s.ibge, 7);
   const dnInvalida = dnInvalidaData || (hydrated && val.idadeInvalida) || dnIncompleta;
-  const daInvalida = daInvalidaData || (hydrated && val.idadeInvalida) || daIncompleta;
+  const daInvalida = daInvalidaData || (hydrated && val.idadeInvalida) || daIncompleta || daForaCompetencia;
   const dnTitle = dnIncompleta ? "Data de nascimento incompleta — faltam dígitos." : dnInvalidaData ? DATA_INVALIDA_MOTIVO : val.idadeMotivo;
   const daTitle = daIncompleta ? "Data do atendimento incompleta — faltam dígitos." : daInvalidaData ? DATA_INVALIDA_MOTIVO : (daForaCompetencia ? DATA_COMPETENCIA_AVISO : val.idadeMotivo);
-  const daWarn = daAntiga || daForaCompetencia;
+  const daWarn = daAntiga; // "fora da competência" virou ERRO bloqueante (não mais aviso)
 
   // Cruza CEP × Cód. IBGE Município: busca o município real do CEP (ViaCEP, com
   // fallback por nome via BrasilAPI), compara com o município selecionado no campo ao
@@ -224,6 +224,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     identInvalida && IDENT_MOTIVO,
     identParcial && "Identificação do paciente incompleta — CPF tem 11 e CNS tem 15 dígitos.",
     (dnInvalidaData || daInvalidaData) && DATA_INVALIDA_MOTIVO,
+    daForaCompetencia && "Data de atendimento fora do mês/ano da competência da folha — o BPA Magnético recusa. Corrija a data ou a competência (Mês/Ano).",
     dnIncompleta && "Data de nascimento incompleta (faltam dígitos).",
     daIncompleta && "Data do atendimento incompleta (faltam dígitos).",
     cepIncompleto && "CEP incompleto (8 dígitos).",
