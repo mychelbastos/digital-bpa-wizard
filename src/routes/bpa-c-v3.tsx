@@ -60,13 +60,23 @@ interface State {
   respData: string[]; // 8 dígitos — data da formalização (auto: hoje)
 }
 
-// Mês/Ano da competência atual (pré-preenchidos por padrão; o usuário pode alterar).
+// Mês/Ano do mês do calendário (fallback).
 const competenciaAtual = () => {
   const agora = new Date();
   return {
     mes: String(agora.getMonth() + 1).padStart(2, "0").split(""),
     ano: String(agora.getFullYear()).padStart(4, "0").split(""),
   };
+};
+
+// Competência PADRÃO de uma ficha NOVA = mês da PRODUÇÃO EM ABERTO (movimento de faturamento),
+// não o mês do calendário — mesma regra do BPA-I (ver competenciaPadrao no engine). O usuário
+// ainda pode alterar o Mês/Ano manualmente (produção retroativa).
+const competenciaPadrao = () => {
+  const m = movimentoFaturamento();
+  return /^\d{6}$/.test(m)
+    ? { mes: m.slice(4, 6).split(""), ano: m.slice(0, 4).split("") }
+    : competenciaAtual();
 };
 
 // Data de hoje como 8 dígitos [D,D,M,M,A,A,A,A] — pré-preenche o campo DATA da assinatura.
@@ -83,8 +93,8 @@ const initialState = (): State => ({
   nome: "",
   profNome: "",
   uf: Array(2).fill(""),
-  mes: competenciaAtual().mes,
-  ano: competenciaAtual().ano,
+  mes: competenciaPadrao().mes,
+  ano: competenciaPadrao().ano,
   folha: Array(3).fill(""),
   rows: Array.from({ length: 20 }, emptyRow),
   respConfirmacao: null,

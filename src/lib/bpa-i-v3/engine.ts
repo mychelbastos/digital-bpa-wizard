@@ -18,6 +18,7 @@ import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais, buscarCbosVinculo, buscarNomePorCns, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { proximaFolhaBpaI, assinaturaBpaI, acharDuplicataBpaI, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { movimentoFaturamento } from "@/lib/faturamento";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { statusDaFicha, retificarFicha, registrarLeituraFicha, type FichaStatus } from "@/lib/producoes";
 import { registrarUso } from "@/lib/bpa-i-v2/historico";
@@ -63,13 +64,25 @@ export interface State {
 // Preenche uma string em exatamente n células (index → char), completando com "".
 export const cells = (s: string, n: number): string[] => Array.from({ length: n }, (_, i) => s[i] ?? "");
 
-// Mês/Ano da competência atual (preenchidos por padrão; o usuário pode alterar).
+// Mês/Ano do mês do calendário (fallback).
 export const competenciaAtual = () => {
   const agora = new Date();
   return {
     mes: String(agora.getMonth() + 1).padStart(2, "0").split(""),
     ano: String(agora.getFullYear()).padStart(4, "0").split(""),
   };
+};
+
+// Competência PADRÃO de uma ficha NOVA = mês da PRODUÇÃO EM ABERTO (movimento de faturamento),
+// não o mês do calendário. Ex.: se a produção aberta é 08/2026, a folha nova entra com 08/2026
+// (e não 09 só porque hoje é setembro) — evita o bloqueio de "competência posterior ao
+// movimento" e o retrabalho de corrigir o cabeçalho. Cai no mês atual se o movimento não estiver
+// definido. O usuário ainda pode alterar o Mês/Ano manualmente (produção retroativa).
+export const competenciaPadrao = () => {
+  const m = movimentoFaturamento();
+  return /^\d{6}$/.test(m)
+    ? { mes: m.slice(4, 6).split(""), ano: m.slice(0, 4).split("") }
+    : competenciaAtual();
 };
 
 // Data de hoje como 8 dígitos [D,D,M,M,A,A,A,A] — pré-preenche o campo Data do rodapé.
@@ -87,8 +100,8 @@ export const initialState = (): State => ({
   profCns: Array(15).fill(""),
   profNome: "",
   profCbo: Array(6).fill(""),
-  profMes: competenciaAtual().mes,
-  profAno: competenciaAtual().ano,
+  profMes: competenciaPadrao().mes,
+  profAno: competenciaPadrao().ano,
   profEquipe: "",
   profFolha: Array(3).fill(""),
   seqs: [emptySeq(), emptySeq(), emptySeq()],
