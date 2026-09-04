@@ -7,7 +7,7 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { CNES_TFD } from "@/lib/tfd/tfd";
 import { RelatoriosCtx, type RelatoriosCtxValue } from "@/components/relatorios/ctx";
-import { competenciaAtual, mesLabel } from "@/components/relatorios/comum";
+import { competenciaPadrao, mesLabel } from "@/components/relatorios/comum";
 
 export const Route = createFileRoute("/relatorios")({
   head: () => ({ meta: [{ title: "Relatórios — SPA Digital" }] }),
@@ -20,8 +20,8 @@ const CHAVE_FILTROS = "relatorios-filtros-base";
 // mantém os FILTROS-BASE (período + unidade) persistidos e provê tudo às páginas via contexto.
 function RelatoriosLayout() {
   const user = useAuthUser();
-  const [compDe, setCompDe] = useState(competenciaAtual());
-  const [compAte, setCompAte] = useState(competenciaAtual());
+  const [compDe, setCompDe] = useState(competenciaPadrao());
+  const [compAte, setCompAte] = useState(competenciaPadrao());
   const [cnesSel, setCnesSel] = useState<Set<string>>(new Set());
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
   const [logo, setLogo] = useState<string | null>(null);

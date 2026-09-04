@@ -16,6 +16,7 @@ import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { construirPdfFpo } from "@/lib/fpo/relatorio-fpo";
 import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
+import { competenciaPadrao } from "@/lib/faturamento";
 
 export const Route = createFileRoute("/fpo")({
   // Aceita ?cnes=&comp= para abrir já numa unidade/competência (vindo do card da dashboard).
@@ -27,10 +28,6 @@ export const Route = createFileRoute("/fpo")({
   component: FpoPage,
 });
 
-const competenciaAtual = () => {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const int = (n: number) => n.toLocaleString("pt-BR");
 const compLabel = (c: string) => `${c.slice(4, 6)}/${c.slice(0, 4)}`;
@@ -42,7 +39,7 @@ function FpoPage() {
   const [cnesOpcoes, setCnesOpcoes] = useState<{ cnes: string; nome: string }[]>([]);
   const [editaveis, setEditaveis] = useState<Set<string>>(new Set());
   const [cnes, setCnes] = useState(search.cnes ?? "");
-  const [competencia, setCompetencia] = useState(search.comp ?? competenciaAtual());
+  const [competencia, setCompetencia] = useState(search.comp ?? competenciaPadrao());
   const [rows, setRows] = useState<FpoComparacaoRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);

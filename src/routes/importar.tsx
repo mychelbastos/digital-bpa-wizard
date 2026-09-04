@@ -9,6 +9,7 @@ import { parseArquivoMagnetico, type ResultadoMagnetico } from "@/lib/bpa-magnet
 import { gravarMagnetico, contarImportadasNoMes } from "@/lib/bpa-magnetico/importar-magnetico";
 import { parseAas, type AasImportado } from "@/lib/raas/raas-aas";
 import { gravarRaas, contarRaasNoMes } from "@/lib/raas/importar-aas";
+import { competenciaPadrao } from "@/lib/faturamento";
 
 export const Route = createFileRoute("/importar")({
   head: () => ({ meta: [{ title: "Importar produção" }] }),
@@ -32,7 +33,7 @@ function ImportarPage() {
   const [fileName, setFileName] = useState("");
   const [parsed, setParsed] = useState<ResultadoMagnetico | null>(null);
   const [parsedRaas, setParsedRaas] = useState<AasImportado | null>(null);
-  const [mesProducao, setMesProducao] = useState(competenciaAtual());
+  const [mesProducao, setMesProducao] = useState(competenciaPadrao());
   const [nomesEstab, setNomesEstab] = useState<Record<string, string>>({});
   const [jaImportadas, setJaImportadas] = useState(0);
   const [processando, setProcessando] = useState(false);

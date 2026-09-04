@@ -18,6 +18,7 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { statusDaFicha, retificarFicha, type FichaStatus } from "@/lib/producoes";
 import { Snowflake, GitBranch } from "lucide-react";
+import { competenciaPadraoMesAno } from "@/lib/faturamento";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS,
@@ -51,14 +52,7 @@ interface State {
   respData: string[]; // 8 dígitos — data da formalização (auto: hoje)
 }
 
-// Mês/Ano da competência atual (pré-preenchidos por padrão; o usuário pode alterar).
-const competenciaAtual = () => {
-  const agora = new Date();
-  return {
-    mes: String(agora.getMonth() + 1).padStart(2, "0").split(""),
-    ano: String(agora.getFullYear()).padStart(4, "0").split(""),
-  };
-};
+// Competência padrão (mês/ano) = movimento de faturamento em aberto — ver competenciaPadraoMesAno.
 
 // Data de hoje como 8 dígitos [D,D,M,M,A,A,A,A] — pré-preenche o campo DATA da assinatura.
 const hojeDigits = (): string[] => {
@@ -73,8 +67,8 @@ const initialState = (): State => ({
   cnes: Array(7).fill(""),
   nome: "",
   uf: Array(2).fill(""),
-  mes: competenciaAtual().mes,
-  ano: competenciaAtual().ano,
+  mes: competenciaPadraoMesAno().mes,
+  ano: competenciaPadraoMesAno().ano,
   folha: Array(3).fill(""),
   rows: Array.from({ length: 20 }, emptyRow),
   respConfirmacao: null,

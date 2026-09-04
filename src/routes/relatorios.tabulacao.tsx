@@ -9,7 +9,7 @@ import { construirPdfTabulacao, type DimTab } from "@/lib/relatorios/tabulacao-p
 import { ProcedimentoPicker } from "@/components/relatorios/ProcedimentoPicker";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { useRelatoriosCtx } from "@/components/relatorios/ctx";
-import { CabecalhoRelatorio, SemAcesso, cardCls, selCls2, lblCls2, mesLabel, competenciaAtual, ultimosMesesMod } from "@/components/relatorios/comum";
+import { CabecalhoRelatorio, SemAcesso, cardCls, selCls2, lblCls2, mesLabel, competenciaPadrao, ultimosMesesMod } from "@/components/relatorios/comum";
 
 export const Route = createFileRoute("/relatorios/tabulacao")({
   component: TabulacaoPage,
@@ -27,8 +27,8 @@ function TabulacaoPage() {
   const { pode } = usePermissoes();
   const { cnesOpcoes: unidades, logo, cor } = useRelatoriosCtx();
   const { abrirPreview, previewNode } = usePreviewPdf();
-  const [compDe, setCompDe] = useState(competenciaAtual());
-  const [compAte, setCompAte] = useState(competenciaAtual());
+  const [compDe, setCompDe] = useState(competenciaPadrao());
+  const [compAte, setCompAte] = useState(competenciaPadrao());
   const [cnes, setCnes] = useState("todas");
   const [tipo, setTipo] = useState<"todos" | "BPA-I" | "RAAS">("todos");
   const [procs, setProcs] = useState<string[]>([]);

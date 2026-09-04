@@ -9,6 +9,9 @@ export const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "S
 export const mesLabel = (comp: string) =>
   (comp.length === 6 ? `${MESES[Number(comp.slice(4, 6)) - 1] ?? comp.slice(4, 6)}/${comp.slice(0, 4)}` : comp);
 export const competenciaAtual = () => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`; };
+// Default inicial dos filtros de relatório = movimento de faturamento EM ABERTO (não o mês do
+// calendário). competenciaAtual continua servindo aos presets de período ("Mês atual" etc.).
+export { competenciaPadrao } from "@/lib/faturamento";
 // Desloca um AAAAMM em n meses (n<0 = passado). Ex.: mesOffset("202608", -2) = "202606".
 export const mesOffset = (base: string, n: number): string => {
   let a = Number(base.slice(0, 4)); let m = Number(base.slice(4, 6)) + n;

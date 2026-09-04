@@ -25,6 +25,7 @@ import {
 import { CODIGOS_TFD } from "@/lib/relatorios/tfd-rel";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
+import { competenciaPadrao } from "@/lib/faturamento";
 import { construirPdfTfd } from "@/lib/tfd/relatorio-tfd";
 
 export const Route = createFileRoute("/tfd")({
@@ -300,7 +301,9 @@ function TfdPage() {
   const [geriveis, setGeriveis] = useState<Set<string>>(new Set());
   const [reabriveis, setReabriveis] = useState<Set<string>>(new Set());
   const [cnes, setCnes] = useState(search.cnes ?? "");
-  const [competencia, setCompetencia] = useState(search.comp ?? competenciaAtual());
+  // Padrão = movimento de faturamento em aberto (não o mês do calendário). O competenciaAtual
+  // local segue servindo só de teto p/ a navegação do calendário (não deixar ir p/ o futuro).
+  const [competencia, setCompetencia] = useState(search.comp ?? competenciaPadrao());
   const [orgId, setOrgId] = useState<string | null>(null);
   const [destinos, setDestinos] = useState<TfdDestino[]>([]);
   const [valores, setValores] = useState<Record<string, number>>({});

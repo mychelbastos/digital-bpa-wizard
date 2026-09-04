@@ -25,6 +25,7 @@ import { registrarUso } from "@/lib/bpa-i-v2/historico";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import * as L from "@/lib/bpai-v2-layout";
 import { emptySeq, type SeqData } from "@/lib/bpai-v2-layout";
+import { competenciaPadraoMesAno } from "@/lib/faturamento";
 
 export const Route = createFileRoute("/bpa-i-v2")({
   head: () => ({
@@ -56,14 +57,7 @@ interface State {
   gestData: string[];
 }
 
-// Mês/Ano da competência atual (preenchidos por padrão; o usuário pode alterar).
-const competenciaAtual = () => {
-  const agora = new Date();
-  return {
-    mes: String(agora.getMonth() + 1).padStart(2, "0").split(""),
-    ano: String(agora.getFullYear()).padStart(4, "0").split(""),
-  };
-};
+// Competência padrão (mês/ano) = movimento de faturamento em aberto — ver competenciaPadraoMesAno.
 
 // Data de hoje como 8 dígitos [D,D,M,M,A,A,A,A] — pré-preenche o campo Data do rodapé.
 const hojeDigits = (): string[] => {
@@ -80,8 +74,8 @@ const initialState = (): State => ({
   profCns: Array(15).fill(""),
   profNome: "",
   profCbo: Array(6).fill(""),
-  profMes: competenciaAtual().mes,
-  profAno: competenciaAtual().ano,
+  profMes: competenciaPadraoMesAno().mes,
+  profAno: competenciaPadraoMesAno().ano,
   profEquipe: "",
   profFolha: Array(3).fill(""),
   seqs: [emptySeq(), emptySeq(), emptySeq()],

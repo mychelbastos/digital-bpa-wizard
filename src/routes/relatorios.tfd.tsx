@@ -9,7 +9,7 @@ import { baixarCsv } from "@/lib/relatorios/producao";
 import { montarRelatorioTfd, csvTabela, AGRUPAMENTOS, STATUS_ROTULO, compLabelTfd, brlTfd, type AgrupamentoRel } from "@/lib/relatorios/tfd-rel";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { useRelatoriosCtx } from "@/components/relatorios/ctx";
-import { CabecalhoRelatorio, SemAcesso, cardCls, selCls2, lblCls2, mesLabel, competenciaAtual, ultimosMesesMod } from "@/components/relatorios/comum";
+import { CabecalhoRelatorio, SemAcesso, cardCls, selCls2, lblCls2, mesLabel, competenciaPadrao, ultimosMesesMod } from "@/components/relatorios/comum";
 
 export const Route = createFileRoute("/relatorios/tfd")({
   component: TfdPage,
@@ -21,8 +21,8 @@ function TfdPage() {
   const unidades = useMemo(() => cnesOpcoes.filter((u) => CNES_TFD.includes(u.cnes)), [cnesOpcoes]);
   const { abrirPreview, previewNode } = usePreviewPdf();
   const [cnes, setCnes] = useState("");
-  const [compDe, setCompDe] = useState(competenciaAtual());
-  const [compAte, setCompAte] = useState(competenciaAtual());
+  const [compDe, setCompDe] = useState(competenciaPadrao());
+  const [compAte, setCompAte] = useState(competenciaPadrao());
   const [status, setStatus] = useState<"" | TfdStatus>("");
   const [agrup, setAgrup] = useState<AgrupamentoRel>("detalhado");
   const [formato, setFormato] = useState<"porUnidade" | "consolidado">("porUnidade");

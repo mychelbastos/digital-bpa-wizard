@@ -34,6 +34,22 @@ export function movimentoFaturamento(): string {
   return competenciaCalendario();
 }
 
+// Competência PADRÃO para QUALQUER formulário/tela que trabalhe com faturamento e competência
+// (BPA-I/C, TFD, RAAS, importação, dashboard, relatórios): o MOVIMENTO DE FATURAMENTO EM ABERTO,
+// não o mês do calendário. Ex.: se o movimento aberto é 08/2026, tudo entra por padrão em 08/2026
+// mesmo que hoje seja setembro. Cai no mês do calendário se a org não definiu movimento. É só o
+// PADRÃO — o usuário pode alterar (produção retroativa). Fonte única para não divergir por tela.
+export function competenciaPadrao(): string {
+  return movimentoFaturamento();
+}
+
+// Mesma competência padrão, já quebrada em dígitos [M,M] e [A,A,A,A] — para os cabeçalhos do
+// BPA que guardam mês/ano como arrays de char.
+export function competenciaPadraoMesAno(): { mes: string[]; ano: string[] } {
+  const m = movimentoFaturamento();
+  return { mes: m.slice(4, 6).split(""), ano: m.slice(0, 4).split("") };
+}
+
 function guardarEspelho(m: string) {
   _cache = m;
   try { localStorage.setItem(CHAVE, m); } catch { /* ignora */ }

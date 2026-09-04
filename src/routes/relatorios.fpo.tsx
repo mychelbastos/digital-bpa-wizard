@@ -7,7 +7,7 @@ import { carregarComparacaoFpo, type FpoComparacaoRow } from "@/lib/fpo/fpo";
 import { construirPdfFpo, construirPdfFpoPorUnidade } from "@/lib/fpo/relatorio-fpo";
 import { usePreviewPdf } from "@/components/relatorios/PreviewPdfModal";
 import { useRelatoriosCtx } from "@/components/relatorios/ctx";
-import { CabecalhoRelatorio, SemAcesso, cardCls, selCls2, lblCls2, mesLabel, competenciaAtual, ultimosMesesMod } from "@/components/relatorios/comum";
+import { CabecalhoRelatorio, SemAcesso, cardCls, selCls2, lblCls2, mesLabel, competenciaPadrao, ultimosMesesMod } from "@/components/relatorios/comum";
 
 export const Route = createFileRoute("/relatorios/fpo")({
   component: FpoPage,
@@ -32,7 +32,7 @@ function FpoPage() {
   const { cnesOpcoes: unidades, logo, cor, nomeUsuario: responsavel } = useRelatoriosCtx();
   const { abrirPreview, previewNode } = usePreviewPdf();
   const [cnes, setCnes] = useState(unidades.length > 1 ? "todas" : (unidades[0]?.cnes ?? ""));
-  const [competencia, setCompetencia] = useState(competenciaAtual());
+  const [competencia, setCompetencia] = useState(competenciaPadrao());
   const [formato, setFormato] = useState<"porUnidade" | "consolidado">("porUnidade");
   const [gerando, setGerando] = useState(false);
 

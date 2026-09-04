@@ -17,6 +17,7 @@ import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
 import { paletaRelatorio } from "@/lib/relatorio-cor";
 import spaEmblem from "@/assets/spa-emblem.png";
 import { SPA_EMBLEMA_DATA_URI } from "@/lib/spa-emblem-pdf";
+import { competenciaPadrao } from "@/lib/faturamento";
 
 const CARATER_NOME = new Map(CARATERES.map((c) => [c.code, c.label]));
 const nomeCarater = (code: string | null) => (code ? CARATER_NOME.get(code) ?? null : null);
@@ -31,10 +32,6 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-const competenciaAtual = () => {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
 
 const mesLabel = (comp: string) => {
   if (comp.length !== 6) return comp;
@@ -105,7 +102,7 @@ function agrupar<T extends string>(rows: ProducaoBpaRow[], key: (r: ProducaoBpaR
 function Home() {
   const [rows, setRows] = useState<ProducaoBpaRow[]>([]);
   const [vinculos, setVinculos] = useState<VinculoResumo[]>([]);
-  const [competencia, setCompetencia] = useState(competenciaAtual());
+  const [competencia, setCompetencia] = useState(competenciaPadrao());
   const [cnes, setCnes] = useState("todos");
   const [profissional, setProfissional] = useState("todos");
   const [procedimento, setProcedimento] = useState("todos");

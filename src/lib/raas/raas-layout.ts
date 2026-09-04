@@ -10,6 +10,7 @@
 // "YYYYMMDD" só na exportação; competência como "AAAAMM".
 import type { ComboOption } from "@/lib/bpa-i-v2/racas";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
+import { competenciaPadrao } from "@/lib/faturamento";
 
 export type { ComboOption };
 
@@ -207,7 +208,8 @@ export function emptyRaasState(): RaasState {
     cnes: "",
     estabelecimentoNome: "",
     coduf: "",
-    competencia: competenciaAtual(),
+    // Padrão = movimento de faturamento em aberto (não o mês do calendário).
+    competencia: competenciaPadrao(),
     validadeInicio: "",
     validadeFim: "",
     pacienteId: null,
