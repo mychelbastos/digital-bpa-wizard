@@ -105,13 +105,17 @@ function CompetenciaSelect(props: { value: string; onChange: (v: string) => void
 
 type Viagem = { data: string; pernoite: "com" | "sem" };
 
-// Calendário do mês da competência para marcar as viagens com um CLIQUE por dia (em vez de
-// abrir 14 seletores de data). Ciclo por clique: vazio → viagem (sem pernoite) → com pernoite
-// (🌙) → remove. Dias futuros ficam desabilitados. Atalho "dias úteis". Uma viagem por dia
-// (o modelo do TFD é 1 ida/volta por dia; evita o duplicado que o formato antigo permitia).
-function CalendarioViagens({ competencia, viagens, onChange }: {
-  competencia: string; viagens: Viagem[]; onChange: (v: Viagem[]) => void;
+const MESES_LONGO = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+// Calendário do mês para marcar as viagens com UM CLIQUE por dia (em vez de abrir N seletores).
+// O TIPO (sem/com pernoite) é escolhido num seletor explícito — clicar num dia adiciona com o
+// tipo selecionado; clicar de novo (mesmo tipo) remove; clicar com o outro tipo troca. Dias
+// futuros desabilitados. Atalho "dias úteis". Uma viagem por dia. As setas ‹ › trocam o mês
+// (competência) — útil p/ viagem retroativa.
+function CalendarioViagens({ competencia, viagens, onChange, onCompetenciaChange }: {
+  competencia: string; viagens: Viagem[]; onChange: (v: Viagem[]) => void; onCompetenciaChange?: (c: string) => void;
 }) {
+  const [tipoSel, setTipoSel] = useState<"com" | "sem">("sem");
   const ano = Number(competencia.slice(0, 4)), mes = Number(competencia.slice(4, 6));
   const hojeIso = new Date().toISOString().slice(0, 10);
   const valida = /^\d{6}$/.test(competencia) && mes >= 1 && mes <= 12;
@@ -139,7 +143,7 @@ function CalendarioViagens({ competencia, viagens, onChange }: {
     if (i > hojeIso) return;
     const m = new Map(doMes);
     const st = m.get(i);
-    if (!st) m.set(i, "sem"); else if (st === "sem") m.set(i, "com"); else m.delete(i);
+    if (!st) m.set(i, tipoSel); else if (st === tipoSel) m.delete(i); else m.set(i, tipoSel);
     emitir(m);
   };
   const diasUteis = () => {
@@ -147,10 +151,18 @@ function CalendarioViagens({ competencia, viagens, onChange }: {
     for (let d = 1; d <= diasNoMes; d++) {
       const i = iso(d); if (i > hojeIso) continue;
       const wd = new Date(ano, mes - 1, d).getDay();
-      if (wd >= 1 && wd <= 5 && !m.has(i)) m.set(i, "sem");
+      if (wd >= 1 && wd <= 5 && !m.has(i)) m.set(i, tipoSel);
     }
     emitir(m);
   };
+  const mudarMes = (delta: number) => {
+    if (!onCompetenciaChange || !valida) return;
+    const d = new Date(ano, mes - 1 + delta, 1);
+    const alvo = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (alvo > competenciaAtual()) return; // não navega para meses futuros
+    onCompetenciaChange(alvo);
+  };
+  const noMesAtual = valida && competencia >= competenciaAtual();
 
   const WD = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const cells: (number | null)[] = valida
@@ -162,11 +174,27 @@ function CalendarioViagens({ competencia, viagens, onChange }: {
 
   return (
     <div>
+      {onCompetenciaChange && (
+        <div className="mb-1.5 flex items-center justify-center gap-3">
+          <button type="button" onClick={() => mudarMes(-1)} className="rounded-md border border-border px-2 py-0.5 text-sm font-bold hover:bg-muted" title="Mês anterior">‹</button>
+          <span className="min-w-[10rem] text-center text-sm font-semibold text-foreground">{valida ? `${MESES_LONGO[mes - 1]} / ${ano}` : "—"}</span>
+          <button type="button" onClick={() => mudarMes(1)} disabled={noMesAtual} className="rounded-md border border-border px-2 py-0.5 text-sm font-bold hover:bg-muted disabled:opacity-30" title={noMesAtual ? "Não há mês futuro" : "Próximo mês"}>›</button>
+        </div>
+      )}
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
         <div className={label}>Viagens ({total}) — {com} c/ pernoite, {total - com} s/ pernoite</div>
         <div className="flex items-center gap-3">
           <button type="button" onClick={diasUteis} className="text-xs font-medium text-primary hover:underline">Dias úteis (seg–sex)</button>
           {total > 0 && <button type="button" onClick={() => emitir(new Map())} className="text-xs font-medium text-muted-foreground hover:underline">Limpar</button>}
+        </div>
+      </div>
+      <div className="mb-1.5 flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Tipo da viagem:</span>
+        <div className="inline-flex overflow-hidden rounded-lg border border-border">
+          <button type="button" onClick={() => setTipoSel("sem")}
+            className={`px-2.5 py-1 font-medium ${tipoSel === "sem" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-muted"}`}>Sem pernoite</button>
+          <button type="button" onClick={() => setTipoSel("com")}
+            className={`flex items-center gap-1 border-l border-border px-2.5 py-1 font-medium ${tipoSel === "com" ? "bg-violet-600 text-white" : "bg-background text-foreground hover:bg-muted"}`}><Moon className="size-3" /> Com pernoite</button>
         </div>
       </div>
       <div className="rounded-lg border border-border bg-card p-2">
@@ -186,7 +214,7 @@ function CalendarioViagens({ competencia, viagens, onChange }: {
                   : "border-border text-foreground hover:bg-muted";
             return (
               <button type="button" key={i} onClick={() => clicar(d)} disabled={futuro}
-                title={futuro ? "Data futura" : st === "com" ? "Com pernoite — clique p/ remover" : st === "sem" ? "Sem pernoite — clique p/ marcar pernoite" : "Clique p/ marcar viagem"}
+                title={futuro ? "Data futura" : st === "com" ? "Com pernoite" : st === "sem" ? "Sem pernoite" : "Clique para marcar viagem"}
                 className={`relative flex h-9 items-center justify-center rounded-md border text-sm transition-colors ${cls}`}>
                 {d}
                 {st === "com" && <Moon className="absolute right-0.5 top-0.5 size-2.5" />}
@@ -196,7 +224,7 @@ function CalendarioViagens({ competencia, viagens, onChange }: {
         </div>
       </div>
       <p className="mt-1 text-[10.5px] leading-tight text-muted-foreground">
-        1 clique = viagem (sem pernoite) · 2 cliques = com pernoite 🌙 · 3 cliques = remove.
+        Escolha o tipo acima e clique nos dias · clicar de novo (mesmo tipo) remove · 🌙 = com pernoite.
       </p>
       {fora.length > 0 && (
         <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
@@ -468,6 +496,7 @@ function TfdPage() {
           key={editando?.tfd.id ?? "novo"}
           orgId={orgId} cnes={cnes} competencia={competencia} destinos={destinos} valores={valores}
           edicao={editando ?? undefined}
+          onCompetenciaChange={setCompetencia}
           onFecha={fecharForm}
           onDestinosMudou={recarregarDestinos}
           onSalvo={aoSalvarForm}
@@ -602,7 +631,7 @@ function TfdPage() {
 // ---------------------------------------------------------------------------
 function FormTfd(props: {
   orgId: string; cnes: string; competencia: string; destinos: TfdDestino[]; valores: Record<string, number>;
-  edicao?: TfdEdicao; onFecha: () => void; onDestinosMudou: () => void; onSalvo: () => void;
+  edicao?: TfdEdicao; onCompetenciaChange?: (c: string) => void; onFecha: () => void; onDestinosMudou: () => void; onSalvo: () => void;
 }) {
   const { orgId, cnes, competencia, destinos, valores, edicao } = props;
   const et = edicao?.tfd;
@@ -752,7 +781,7 @@ function FormTfd(props: {
 
       {/* Viagens: uma linha por viagem (data + pernoite), com botão de adicionar */}
       <div className="mt-3">
-        <CalendarioViagens competencia={competencia} viagens={viagens} onChange={setViagens} />
+        <CalendarioViagens competencia={competencia} viagens={viagens} onChange={setViagens} onCompetenciaChange={props.onCompetenciaChange} />
       </div>
 
       <label className="mt-3 flex items-center gap-2 text-sm">
