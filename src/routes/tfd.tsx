@@ -120,12 +120,19 @@ function CalendarioViagens({ competencia, viagens, onChange, onCompetenciaChange
   const hojeIso = new Date().toISOString().slice(0, 10);
   const valida = /^\d{6}$/.test(competencia) && mes >= 1 && mes <= 12;
 
-  // Estado por dia do mês (com > sem) + o que ficou fora do mês (legado — preservado à parte).
+  // Estado por dia do mês (com > sem). Nada é DESCARTADO em silêncio: o que não vira uma célula
+  // do calendário é preservado à parte e MOSTRADO — assim o total sempre bate com a listagem.
+  //   fora        = data válida, porém de outro mês (legado)
+  //   malformadas = data com lixo (ex.: ano "72026") — não dá p/ desenhar; precisa consertar
+  //   repetidas   = mesmo dia lançado 2+ vezes (o calendário mostra o dia uma vez só)
   const doMes = new Map<string, "com" | "sem">();
   const fora: Viagem[] = [];
+  const malformadas: Viagem[] = [];
+  const repetidas: Viagem[] = [];
   for (const v of viagens) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.data)) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.data)) { malformadas.push(v); continue; }
     if (v.data.slice(0, 7).replace("-", "") === competencia) {
+      if (doMes.has(v.data)) repetidas.push(v);
       doMes.set(v.data, doMes.get(v.data) === "com" || v.pernoite === "com" ? "com" : "sem");
     } else fora.push(v);
   }
@@ -134,7 +141,9 @@ function CalendarioViagens({ competencia, viagens, onChange, onCompetenciaChange
   const primeiroWd = valida ? new Date(ano, mes - 1, 1).getDay() : 0;
 
   const emitir = (m: Map<string, "com" | "sem">) => {
-    const arr: Viagem[] = [...fora];
+    // Preserva o que não é célula do calendário (fora do mês, datas inválidas e repetidas) —
+    // só saem pelos botões "remover"/"corrigir". Assim clicar num dia não apaga viagem em silêncio.
+    const arr: Viagem[] = [...fora, ...malformadas, ...repetidas];
     [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([data, pernoite]) => arr.push({ data, pernoite }));
     onChange(arr);
   };
@@ -155,6 +164,16 @@ function CalendarioViagens({ competencia, viagens, onChange, onCompetenciaChange
     }
     emitir(m);
   };
+  // Conserta uma data com lixo (ex.: "72026-07-30") snapando para o MESMO DIA na competência
+  // exibida. O dia é o último grupo de dígitos da string. Se não der p/ encaixar (dia inválido,
+  // futuro, ou já existe), remove a entrada — nunca deixa a data-lixo para trás.
+  const corrigirMalformada = (v: Viagem) => {
+    const m = v.data.match(/(\d{1,2})\D*$/);
+    const dia = m ? Number(m[1]) : NaN;
+    const nova = dia >= 1 && dia <= diasNoMes ? iso(dia) : "";
+    if (!nova || nova > hojeIso || doMes.has(nova)) { onChange(viagens.filter((x) => x !== v)); return; }
+    onChange(viagens.map((x) => (x === v ? { ...x, data: nova } : x)));
+  };
   const mudarMes = (delta: number) => {
     if (!onCompetenciaChange || !valida) return;
     const d = new Date(ano, mes - 1 + delta, 1);
@@ -168,7 +187,11 @@ function CalendarioViagens({ competencia, viagens, onChange, onCompetenciaChange
   const cells: (number | null)[] = valida
     ? [...Array(primeiroWd).fill(null), ...Array.from({ length: diasNoMes }, (_, i) => i + 1)]
     : [];
-  const total = doMes.size, com = [...doMes.values()].filter((p) => p === "com").length;
+  // Contador = TOTAL REAL de viagens (igual ao da listagem), não só as células do calendário.
+  // Se houver repetidas/fora/malformadas, o nº de dias pintados é menor — os avisos abaixo
+  // explicam a diferença para que os números sempre reconciliem.
+  const total = viagens.length, com = viagens.filter((v) => v.pernoite === "com").length;
+  const naoExibidas = repetidas.length + fora.length + malformadas.length;
 
   if (!valida) return <p className="text-xs text-muted-foreground">Selecione a competência para marcar as viagens.</p>;
 
@@ -226,6 +249,35 @@ function CalendarioViagens({ competencia, viagens, onChange, onCompetenciaChange
       <p className="mt-1 text-[10.5px] leading-tight text-muted-foreground">
         Escolha o tipo acima e clique nos dias · clicar de novo (mesmo tipo) remove · 🌙 = com pernoite.
       </p>
+      {naoExibidas > 0 && (
+        <p className="mt-1.5 text-[10.5px] leading-tight text-amber-700">
+          O calendário pinta {doMes.size} dia(s), mas há {total} viagem(ns) no total — as {naoExibidas} abaixo
+          não cabem numa célula (data repetida, fora do mês ou inválida). Confira para os números baterem com a listagem.
+        </p>
+      )}
+      {malformadas.length > 0 && (
+        <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800">
+          ⚠ {malformadas.length} data(s) inválida(s) (lixo do formato antigo — corrija para aparecer no calendário):
+          {malformadas.map((v, k) => (
+            <span key={k} className="ml-1 inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5">
+              {v.data}
+              <button type="button" onClick={() => corrigirMalformada(v)} className="font-semibold text-primary hover:underline" title={`Corrigir para ${compLabel(competencia)}`}>corrigir</button>
+              <button type="button" onClick={() => onChange(viagens.filter((x) => x !== v))} title="Remover"><X className="size-3" /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      {repetidas.length > 0 && (
+        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+          ⚠ {repetidas.length} viagem(ns) em data repetida (o mesmo dia foi lançado 2+ vezes):
+          {repetidas.map((v, k) => (
+            <span key={k} className="ml-1 inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5">
+              {v.data.split("-").reverse().join("/")}
+              <button type="button" onClick={() => onChange(viagens.filter((x) => x !== v))} title="Remover a viagem repetida"><X className="size-3" /></button>
+            </span>
+          ))}
+        </div>
+      )}
       {fora.length > 0 && (
         <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
           ⚠ {fora.length} viagem(ns) fora da competência {compLabel(competencia)}:
@@ -641,11 +693,11 @@ function FormTfd(props: {
   // Viagens (data + pernoite) — marcadas no calendário do mês (CalendarioViagens). Ao carregar
   // uma edição, DEDUPLICA por data (com > sem): o modelo é 1 ida/volta por dia; o formato antigo
   // deixava a mesma data repetida (erro), então normalizamos aqui.
-  const [viagens, setViagens] = useState<Viagem[]>(() => {
-    const seen = new Map<string, "com" | "sem">();
-    for (const v of et?.viagens ?? []) seen.set(v.data, seen.get(v.data) === "com" || v.pernoite === "com" ? "com" : "sem");
-    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([data, pernoite]) => ({ data, pernoite }));
-  });
+  // Preserva TODAS as viagens gravadas (sem deduplicar/descartar) — o total do form tem que bater
+  // com a listagem. Datas repetidas/inválidas são tratadas e mostradas dentro do CalendarioViagens.
+  const [viagens, setViagens] = useState<Viagem[]>(() =>
+    [...(et?.viagens ?? [])].sort((a, b) => a.data.localeCompare(b.data)),
+  );
   const [temAcomp, setTemAcomp] = useState(et?.tem_acompanhante ?? false);
   const [acompanhante, setAcompanhante] = useState<Paciente | null>(edicao?.acompanhante ?? null);
   const [profCns, setProfCns] = useState(et?.prof_cns ?? "");
