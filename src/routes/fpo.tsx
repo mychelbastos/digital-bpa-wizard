@@ -8,6 +8,7 @@ import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { buscarProcedimentosPorNome } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { parseFpoHtml, type FpoArquivoParsed } from "@/lib/fpo/parse-fpo";
+import { ehFpoMagnetico, parseFpoMagnetico } from "@/lib/fpo/parse-fpo-magnetico";
 import {
   carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, definirTetoVigente, excluirTetoFpo,
   cnesEditaveisFpo, type FpoComparacaoRow, type FpoItemResolvido,
@@ -657,8 +658,12 @@ function AdicionarProcedimentoModal({ cnes, nomeUnidade, competencia, userId, ex
   );
 }
 
+// Grupo (uma unidade) vindo do arquivo NATIVO do FPO Magnético (.IMP), que traz várias.
+interface GrupoMag { cnes: string; nome: string; competencia: string; itens: FpoItemResolvido[]; }
+
 // Modal de importação: lê o arquivo, resolve os códigos e pede confirmação (CNES +
-// competência + prévia) antes de gravar.
+// competência + prévia) antes de gravar. Aceita o .xls da SESAB (1 unidade) e o .IMP do
+// FPO Magnético (todas as unidades do município de uma vez).
 function ImportarFpoModal({ cnesEsperado, nomeUnidade, userId, onClose, onImportado }: {
   cnesEsperado: string;
   nomeUnidade: string;
@@ -669,24 +674,57 @@ function ImportarFpoModal({ cnesEsperado, nomeUnidade, userId, onClose, onImport
   const inputRef = useRef<HTMLInputElement>(null);
   const [parsed, setParsed] = useState<FpoArquivoParsed | null>(null);
   const [itens, setItens] = useState<FpoItemResolvido[]>([]);
+  const [grupos, setGrupos] = useState<GrupoMag[] | null>(null); // .IMP: várias unidades
+  const [avisosMag, setAvisosMag] = useState<string[]>([]);
   const [competencia, setCompetencia] = useState("");
   const [processando, setProcessando] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const aoEscolher = async (file: File) => {
     setProcessando(true);
+    setParsed(null); setGrupos(null); setAvisosMag([]);
     try {
       const buf = await file.arrayBuffer();
-      const html = new TextDecoder("iso-8859-1").decode(buf);
-      const p = parseFpoHtml(html, file.name);
-      setParsed(p);
-      setCompetencia(p.competencia ?? "");
-      setItens(await resolverLinhasFpo(p.linhas));
+      const texto = new TextDecoder("iso-8859-1").decode(buf);
+      if (ehFpoMagnetico(texto)) {
+        // Arquivo NATIVO do FPO Magnético (.IMP) — a programação inteira, várias unidades.
+        const p = parseFpoMagnetico(texto);
+        const gs = await Promise.all(p.grupos.map(async (g) => ({
+          cnes: g.cnes,
+          nome: (await buscarEstabelecimento(g.cnes)) || g.cnes,
+          competencia: g.competencia,
+          itens: await resolverLinhasFpo(g.linhas),
+        })));
+        setGrupos(gs);
+        setAvisosMag(p.avisos);
+        setCompetencia(p.competencia ?? "");
+      } else {
+        const p = parseFpoHtml(texto, file.name);
+        setParsed(p);
+        setCompetencia(p.competencia ?? "");
+        setItens(await resolverLinhasFpo(p.linhas));
+      }
     } catch {
-      toast.error("Não consegui ler o arquivo. Confirme que é o .xls (HTML) da FPO.");
+      toast.error("Não consegui ler o arquivo. Envie o .xls (HTML) da FPO ou o .IMP do FPO Magnético.");
     } finally {
       setProcessando(false);
     }
+  };
+
+  // Grava todas as unidades do .IMP na competência confirmada (uma chamada por unidade).
+  const salvarMag = async () => {
+    if (!grupos || !compValida) return;
+    setSalvando(true);
+    let unidades = 0, itensTot = 0, falhas = 0;
+    for (const g of grupos) {
+      const n = await salvarTetosFpo(g.cnes, competencia, g.itens, userId);
+      if (n == null) falhas++; else { unidades += 1; itensTot += n; }
+    }
+    setSalvando(false);
+    if (unidades === 0) { toast.error("Falha ao gravar. Verifique sua permissão de edição nas unidades."); return; }
+    if (falhas > 0) toast.warning(`${falhas} unidade(s) não gravada(s) — provável falta de permissão.`);
+    toast.success(`FPO importada: ${itensTot} procedimento(s) em ${unidades} unidade(s) — ${compLabel(competencia)}.`);
+    onImportado(competencia);
   };
 
   const cnesArquivo = parsed?.cnes ?? null;
@@ -714,13 +752,57 @@ function ImportarFpoModal({ cnesEsperado, nomeUnidade, userId, onClose, onImport
 
         <div className="space-y-4 p-5">
           <div>
-            <input ref={inputRef} type="file" accept=".xls,.xlsx,.html,.htm" className="hidden"
+            <input ref={inputRef} type="file" accept=".xls,.xlsx,.html,.htm,.imp,.IMP" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) aoEscolher(f); }} />
             <button onClick={() => inputRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-6 text-sm text-muted-foreground hover:border-primary hover:text-foreground">
-              {processando ? <><Loader2 className="size-4 animate-spin" /> Lendo arquivo…</> : <><FileSpreadsheet className="size-5" /> Escolher o arquivo .xls da FPO</>}
+              {processando ? <><Loader2 className="size-4 animate-spin" /> Lendo arquivo…</> : <><FileSpreadsheet className="size-5" /> Escolher arquivo da FPO</>}
             </button>
-            <p className="mt-1 text-center text-[11px] text-muted-foreground">Um arquivo = uma unidade + uma competência.</p>
+            <p className="mt-1 text-center text-[11px] text-muted-foreground">.xls da SESAB (uma unidade) ou .IMP do FPO Magnético (todas de uma vez).</p>
           </div>
+
+          {grupos && (
+            <>
+              {avisosMag.length > 0 && (
+                <ul className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  {avisosMag.map((a, i) => <li key={i}>• {a}</li>)}
+                </ul>
+              )}
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <p className="text-sm">
+                  <strong>{grupos.length}</strong> unidade(s) · <strong>{grupos.reduce((s, g) => s + g.itens.length, 0)}</strong> procedimento(s)
+                  <span className="block text-[11px] text-muted-foreground">Arquivo do FPO Magnético — importa a programação inteira.</span>
+                </p>
+                <label className="text-sm">
+                  <span className="text-[11px] font-medium text-muted-foreground">Competência</span>
+                  <input type="month" value={compValida ? `${competencia.slice(0, 4)}-${competencia.slice(4, 6)}` : ""}
+                    onChange={(e) => e.target.value && setCompetencia(e.target.value.replace("-", ""))}
+                    className="mt-1 block h-9 rounded-lg border border-border bg-background px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                </label>
+              </div>
+              <div className="max-h-60 space-y-1.5 overflow-y-auto">
+                {grupos.map((g) => {
+                  const naoRes = g.itens.filter((i) => !i.resolvido).length;
+                  const totalG = g.itens.reduce((s, i) => s + i.qtdOrcada * i.valorUnitario, 0);
+                  return (
+                    <div key={g.cnes} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{g.nome}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          CNES {g.cnes} · {int(g.itens.length)} proc.
+                          {naoRes > 0 && <> · <span className="text-amber-700">{naoRes} não resolvido(s)</span></>}
+                        </p>
+                      </div>
+                      <span className="shrink-0 font-semibold tabular-nums">{brl(totalG)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={salvarMag} disabled={!compValida || grupos.length === 0 || salvando}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                {salvando ? <><Loader2 className="size-4 animate-spin" /> Gravando…</> : <><Save className="size-4" /> Importar {grupos.length} unidade(s) {compValida ? `(${compLabel(competencia)})` : ""}</>}
+              </button>
+            </>
+          )}
 
           {parsed && (
             <>
