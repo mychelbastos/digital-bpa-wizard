@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { mensagemErroBanco } from "@/lib/erros";
 
 // Cadastro central de pacientes (tabela `pacientes`, por organização, dedup por CNS/CPF).
 // PII sensível: toda leitura de um paciente deve chamar registrarLeituraPaciente (log LGPD,
@@ -169,15 +170,19 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
     atualizado_em: new Date().toISOString(),
     ...(input.tfd ? { tfd: true } : {}), // só marca; nunca desmarca num update
   };
-  const erroBanco = (msg: string | undefined): string =>
-    /23505|duplicate key/i.test(msg ?? "") ? "CNS ou CPF já cadastrado para outra pessoa." : "Falha ao salvar.";
+  // Traduz o erro real do banco (RLS/permissão, duplicidade, etc.) em vez de esconder tudo
+  // sob "Falha ao salvar" — assim o usuário sabe o MOTIVO (ex.: sem permissão nesta unidade).
+  const erroBanco = (error: { message?: string; code?: string } | null | undefined): string =>
+    /23505|duplicate key/i.test(error?.message ?? "")
+      ? "CNS ou CPF já cadastrado para outra pessoa."
+      : mensagemErroBanco(error, "Falha ao salvar.");
 
   try {
     // Atualização explícita por id (edição/complemento de um paciente já selecionado).
     // Editar pelo cadastro = revisão feita → dá baixa na marca de conflito.
     if (input.id) {
       const { data, error } = await supabase.from("pacientes").update({ ...row, flag_revisao: false }).eq("id", input.id).select(COLS).single();
-      if (error || !data) return { paciente: null, erro: erroBanco(error?.message) };
+      if (error || !data) return { paciente: null, erro: erroBanco(error) };
       await propagarParaFichas(input.id); // cadastro manda: nome/nascimento vão p/ as fichas
       return { paciente: data as Paciente };
     }
@@ -194,14 +199,14 @@ export async function salvarPaciente(input: PacienteInput): Promise<SalvarPacien
     }
     if (existente) {
       const { data, error } = await supabase.from("pacientes").update(row).eq("id", existente.id).select(COLS).single();
-      if (error || !data) return { paciente: null, erro: erroBanco(error?.message) };
+      if (error || !data) return { paciente: null, erro: erroBanco(error) };
       await propagarParaFichas(existente.id); // cadastro manda: propaga p/ as fichas
       return { paciente: data as Paciente };
     }
     // Criação: carimba `origem` (primeira aparição) quando informada.
     const rowInsert = input.origem ? { ...row, origem: input.origem } : row;
     const { data, error } = await supabase.from("pacientes").insert(rowInsert).select(COLS).single();
-    return error || !data ? { paciente: null, erro: erroBanco(error?.message) } : { paciente: data as Paciente };
+    return error || !data ? { paciente: null, erro: erroBanco(error) } : { paciente: data as Paciente };
   } catch {
     return { paciente: null, erro: "Falha ao salvar." };
   }
