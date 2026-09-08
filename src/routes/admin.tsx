@@ -88,6 +88,8 @@ const escopoDoCargo = (p: string): Escopo => ESCOPO_CARGO[p] ?? "cnes";
 // Fallback: se surgir uma permissão nova no catálogo sem rótulo aqui, usa a descrição
 // do banco e, na falta dela, o próprio código — nunca fica em branco.
 const LABEL_PERM: Record<string, string> = {
+  gerir_pacientes: "Cadastrar/editar pacientes",
+  gerir_tfd: "Registrar e gerir TFD",
   criar_ficha: "Criar ficha",
   editar_ficha_propria: "Editar a própria ficha",
   conferir_ficha: "Conferir/assinar ficha",
