@@ -50,7 +50,7 @@ function BpaI() {
     congelada, substituidaPor, refreshStatus, retificando, retificar,
     fichaIdRef, fichaTituloRef, fichaTitulo, setFichaTitulo,
     pdfPendente, setPdfPendente,
-    errosSeq, onValidacaoChangeSeq,
+    errosSeq, onValidacaoChangeSeq, dupOutraFolha,
     cnsProfInvalido, temSeqAtiva, motivosInvalidos, temCamposInvalidos,
     competencia, cnesEstab, profCnsDig, profCboDig,
     estabAutoCnesRef, cnsResolvidoRef,
@@ -472,6 +472,23 @@ function BpaI() {
               </p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4">
                 {motivosInvalidos.map((m, i) => <li key={i}>{m}</li>)}
+              </ul>
+            </div>
+          </div>
+        )}
+        {dupOutraFolha.length > 0 && (
+          <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+            <div className="mx-auto max-w-[1100px]">
+              <p className="font-semibold">⚠ Já digitado em OUTRA folha (confira para não faturar em dobro):</p>
+              <ul className="mt-1 space-y-0.5">
+                {dupOutraFolha.map((d, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-1.5">
+                    <span>Sequência {d.seqIndex + 1}: esse paciente, com esse procedimento e essa data, já está na <strong>folha {d.folha || "?"}</strong>{d.titulo ? ` — ${d.titulo}` : ""}.</span>
+                    <button type="button"
+                      onClick={() => window.open(`/bpa-i-v3?ficha=${d.fichaId}`, "_blank", "popup,noopener,width=1024,height=800")}
+                      className="font-semibold text-primary underline hover:no-underline">abrir para conferir →</button>
+                  </li>
+                ))}
               </ul>
             </div>
           </div>

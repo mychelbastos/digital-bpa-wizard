@@ -89,6 +89,20 @@ export function duplicatasNaFolhaSeq(seqs: SeqData[]): Record<number, number> {
   return dup;
 }
 
+// Chave para o crivo de duplicidade ENTRE folhas: `documento|procedimento|data` (só o
+// documento — o servidor não tem o nome normalizado). null quando a seq está incompleta ou
+// sem documento (aí não dá p/ afirmar que é a mesma produção). Espelha a RPC
+// duplicatas_bpai_outras_folhas.
+export function chaveDupOutraFolha(s: SeqData): string | null {
+  const cns = digs(s.cnsPac);
+  const cpf = digs(s.cpfPac ?? []);
+  const doc = cns.length === 15 || cns.length === 11 ? cns : cpf.length === 11 ? cpf : "";
+  const proc = digs(s.codProc);
+  const data = digs(s.dataAtend);
+  if (!doc || proc.length !== 10 || data.length !== 8) return null;
+  return `${doc}|${proc}|${data}`;
+}
+
 // Obrigatórios de uma sequência ATIVA (com procedimento). Não inclui Caráter nem os
 // cruzamentos do SIGTAP (esses já vêm do componente), p/ não duplicar mensagens.
 export function motivosObrigatoriosSeq(

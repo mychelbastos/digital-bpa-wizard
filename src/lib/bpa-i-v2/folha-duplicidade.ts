@@ -146,3 +146,27 @@ export async function acharDuplicataBpaC(
     return null;
   }
 }
+
+// ---------------- Duplicidade ENTRE folhas (BPA-I) ----------------
+
+export interface DuplicataOutraFolha { chave: string; fichaId: string; folha: string; titulo: string; }
+
+// Para as chaves `documento|procedimento|data` das seqs da ficha em edição, devolve em qual
+// OUTRA folha (mesma unidade+competência) cada uma já foi digitada. Via RPC (respeita a RLS —
+// enxerga o que o usuário já pode ver, tipicamente a unidade). É AVISO/conferência, não bloqueia.
+export async function acharDuplicatasOutraFolhaBpaI(
+  cnes: string, competencia: string, idAtual: string | null, chaves: string[],
+): Promise<DuplicataOutraFolha[]> {
+  if (!supabase || !/^\d{7}$/.test(cnes) || !/^\d{6}$/.test(competencia) || chaves.length === 0) return [];
+  try {
+    const { data, error } = await supabase.rpc("duplicatas_bpai_outras_folhas", {
+      _cnes: cnes, _competencia: competencia, _id_atual: idAtual, _chaves: chaves,
+    });
+    if (error || !data) return [];
+    return (data as { chave: string; ficha_id: string; folha: string; titulo: string }[]).map((r) => ({
+      chave: r.chave, fichaId: r.ficha_id, folha: r.folha, titulo: r.titulo,
+    }));
+  } catch {
+    return [];
+  }
+}

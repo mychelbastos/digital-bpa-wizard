@@ -12,11 +12,11 @@ import { ancorarCharsDireita } from "@/lib/digitos-direita";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { cnsInvalido } from "@/lib/bpa-i-v2/validacao";
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
-import { motivosCabecalho, duplicatasNaFolhaSeq } from "@/lib/bpa-i-v3/obrigatorios";
+import { motivosCabecalho, duplicatasNaFolhaSeq, chaveDupOutraFolha } from "@/lib/bpa-i-v3/obrigatorios";
 import { orgDoCnes } from "@/lib/tfd/tfd";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais, buscarCbosVinculo, buscarNomePorCns, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
-import { proximaFolhaBpaI, assinaturaBpaI, acharDuplicataBpaI, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
+import { proximaFolhaBpaI, assinaturaBpaI, acharDuplicataBpaI, acharDuplicatasOutraFolhaBpaI, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
 import { movimentoFaturamento } from "@/lib/faturamento";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
@@ -172,6 +172,8 @@ export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; f
   const [fichaTitulo, setFichaTitulo] = useState<string | null>(null);
   const [pdfPendente, setPdfPendente] = useState(false);
   const [errosSeq, setErrosSeq] = useState<Record<number, string[]>>({});
+  // AVISO (não bloqueia): paciente+procedimento+data já digitado em OUTRA folha. Por índice de seq.
+  const [dupOutraFolha, setDupOutraFolha] = useState<{ seqIndex: number; folha: string; fichaId: string; titulo: string }[]>([]);
 
   const congelada = ficStatus?.congelada ?? false;
   const substituidaPor = ficStatus?.substituida_por ?? null;
@@ -209,6 +211,32 @@ export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; f
   const temCamposInvalidos = motivosInvalidos.length > 0;
   const profCnsDig = state.profCns.join("").replace(/\D/g, "");
   const profCboDig = state.profCbo.join("").replace(/\D/g, "");
+
+  // Crivo de duplicidade ENTRE folhas (AVISO/conferência): a cada mudança, com debounce,
+  // pergunta ao servidor se algum paciente+procedimento+data desta ficha já está em OUTRA
+  // folha (mesma unidade+competência). Não bloqueia — só mostra o aviso com link p/ abrir.
+  const compAtual = competencia();
+  const seqsChaves = state.seqs.map(chaveDupOutraFolha).join(",");
+  useEffect(() => {
+    if (!hydrated) { setDupOutraFolha([]); return; }
+    const idxByChave = new Map<string, number>();
+    state.seqs.forEach((s, i) => { const k = chaveDupOutraFolha(s); if (k && !idxByChave.has(k)) idxByChave.set(k, i); });
+    const chaves = [...idxByChave.keys()];
+    if (chaves.length === 0 || !/^\d{7}$/.test(cnesEstab) || !/^\d{6}$/.test(compAtual)) { setDupOutraFolha([]); return; }
+    let cancel = false;
+    const t = setTimeout(() => {
+      acharDuplicatasOutraFolhaBpaI(cnesEstab, compAtual, fichaIdRef.current, chaves).then((res) => {
+        if (cancel) return;
+        setDupOutraFolha(
+          res
+            .map((r) => ({ seqIndex: idxByChave.get(r.chave), folha: r.folha, fichaId: r.fichaId, titulo: r.titulo }))
+            .filter((x): x is { seqIndex: number; folha: string; fichaId: string; titulo: string } => x.seqIndex !== undefined),
+        );
+      });
+    }, 700);
+    return () => { cancel = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, cnesEstab, compAtual, seqsChaves]);
 
   // Lista de sequências dinâmica (usada pelo V4: "nova sequência"/"duplicar última"/remover).
   // O V3 não chama; o .MAR só usa as seqs preenchidas, então a contagem não o afeta.
@@ -487,7 +515,7 @@ export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; f
     ficStatus, setFicStatus, congelada, substituidaPor, refreshStatus, retificando, retificar,
     fichaIdRef, fichaTituloRef, fichaTitulo, setFichaTitulo,
     pdfPendente, setPdfPendente,
-    errosSeq, onValidacaoChangeSeq,
+    errosSeq, onValidacaoChangeSeq, dupOutraFolha,
     cnsProfInvalido, temSeqAtiva, motivosInvalidos, temCamposInvalidos,
     competencia, cnesEstab, profCnsDig, profCboDig,
     estabAutoCnesRef, cnsResolvidoRef, folhaAutoChaveRef,
