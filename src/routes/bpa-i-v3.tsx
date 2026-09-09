@@ -17,6 +17,8 @@ import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { carregarFicha, competenciaPosteriorAoMovimento } from "@/lib/bpa-i-v2/fichas";
 import { movimentoFaturamento } from "@/lib/faturamento";
 import { type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
+import { souSuperAdmin } from "@/lib/permissoes";
+import { EditorCoordenadas } from "@/components/bpa-i-v3/EditorCoordenadas";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -78,6 +80,9 @@ function BpaI() {
   const [dupModal, setDupModal] = useState<{ dup: FichaDuplicada; prosseguir: () => void } | null>(null);
   const user = useAuthUser();
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Editor de coordenadas (ferramenta de layout) — visível SÓ para a conta master (super-admin).
+  const [souMaster, setSouMaster] = useState(false);
+  useEffect(() => { souSuperAdmin().then(setSouMaster); }, []);
   const autoPrintRef = useRef(false);
   const capturaRef = useRef(false);
   const [prontoImprimir, setProntoImprimir] = useState(false);
@@ -636,6 +641,9 @@ function BpaI() {
               onVincularPaciente={(p) => vincularPaciente(si, p)}
             />
           ))}
+
+          {/* Ferramenta de layout (só master): medir coordenadas dos campos na folha */}
+          {souMaster && <EditorCoordenadas />}
 
           {/* Footer — responsável + gestor */}
           <ConfirmarResponsavel

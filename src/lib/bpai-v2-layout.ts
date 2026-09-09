@@ -64,11 +64,10 @@ export const REL = {
   dataAtendMes: digitBoxes([10.3, 11.9], 1.6),
   dataAtendAno: digitBoxes([14.1, 15.5, 16.9, 18.3], 1.4),
   codProc: digitBoxes([19.72, 22.58, 25.44, 28.31, 31.17, 34.03, 36.89, 39.75, 42.62, 45.48], 2.86),
-  // Quantidade: limitada a 3 dígitos, justificada à direita (usa as 3 células finais
-  // do campo impresso, alinhadas à borda direita ~54.69%). Mesmo span total do campo
-  // impresso (51.52 a 54.69), só redistribuído com pequenas folgas entre os dígitos
-  // p/ não ficarem colados — não muda onde o campo termina (não invade o CNPJ).
-  qtde: digitBoxes([51.52, 52.62, 53.72], 0.97),
+  // Quantidade: 3 dígitos, justificada à direita. As caixinhas preenchem TODO o vão impresso
+  // (51.52 a 54.69, sem invadir o CNPJ) — antes tinham 0.97% de largura e os números ficavam
+  // "espremidos"; agora ~1.05% cada, encostadas, dando mais respiro ao dígito.
+  qtde: digitBoxes([51.52, 52.585, 53.64], 1.05),
   cnpj: digitBoxes([54.69, 57.55, 60.4, 63.26, 66.12, 68.97, 71.83, 74.69, 77.54, 80.4, 83.25, 86.11, 88.97, 91.82], 2.86),
 
   procRow2: 16.9,
