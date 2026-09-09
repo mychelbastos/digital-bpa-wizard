@@ -11,6 +11,7 @@ import { buscarProcedimentosPorNome, buscarServClassDoProcedimento, type ServCla
 import { buscarNomeCid, buscarCidPorTermo } from "@/lib/bpa-i-v2/nomes-sigtap";
 import { buscarProfissionais, buscarCbosVinculo, sincronizarProfissionais, type ProfissionalCache, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { TravaEdicaoFicha } from "@/components/TravaEdicaoFicha";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
@@ -356,6 +357,8 @@ function RaasPage() {
   const user = useAuthUser();
 
   const fichaIdRef = useRef<string | null>(null);
+  // Proteção contra alteração acidental: ficha salva/aberta entra travada; "EDITAR FICHA" libera.
+  const [travado, setTravado] = useState(false);
   const fichaTituloRef = useRef<string | null>(null);
   const [fichaTitulo, setFichaTitulo] = useState<string | null>(null);
 
@@ -405,6 +408,7 @@ function RaasPage() {
         fichaTituloRef.current = localStorage.getItem(FICHA_TITULO_KEY);
         setFichaTitulo(fichaTituloRef.current);
       } catch { /* noop */ }
+      setTravado(Boolean(fichaIdRef.current)); // rascunho de ficha já salva volta travado
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -479,6 +483,7 @@ function RaasPage() {
     setState(base);
     resetHistorico(); // trocar de ficha zera o histórico de desfazer
     persistFicha(id, titulo ?? ficha.titulo ?? "Ficha RAAS");
+    setTravado(true); // ficha salva aberta → protegida
   };
 
   // Documento do paciente para o rótulo (CNS ou CPF).
@@ -516,6 +521,7 @@ function RaasPage() {
     persistFicha(id, titulo);
     setSalvarOpen(false);
     setSalvarComoNovo(false);
+    setTravado(true); // salvou → protege
     toast.success(idAlvo ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
 
@@ -531,6 +537,7 @@ function RaasPage() {
     setState(c ? { ...emptyRaasState(), cnes: c, estabelecimentoNome: CNES_RAAS_PADRAO[c] ?? "" } : emptyRaasState());
     resetHistorico();
     limparFichaPersistida();
+    setTravado(false); // nova ficha → destravada
   };
 
   // ----- paciente: autofill a partir do cadastro compartilhado -----
@@ -715,7 +722,9 @@ function RaasPage() {
         )}
       </header>
 
-      <main className="mx-auto mt-4 max-w-[1100px] space-y-4 px-4">
+      <main className="relative mx-auto mt-4 max-w-[1100px] space-y-4 px-4">
+        {/* Proteção: ficha salva fica travada até clicar "EDITAR FICHA" */}
+        <TravaEdicaoFicha travado={travado} onEditar={() => setTravado(false)} />
         {/* 1. Identificação do estabelecimento de saúde */}
         <Secao titulo="Identificação do estabelecimento de saúde" cols={3}>
           <Campo label="Nome do estabelecimento de saúde" span>

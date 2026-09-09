@@ -22,6 +22,7 @@ import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { statusDaFicha, retificarFicha, type FichaStatus } from "@/lib/producoes";
+import { TravaEdicaoFicha } from "@/components/TravaEdicaoFicha";
 import { Snowflake, GitBranch, Undo2, Files } from "lucide-react";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
@@ -146,6 +147,8 @@ function BpaCV3() {
   const [hydrated, setHydrated] = useState(false);
   const [printing, setPrinting] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Proteção contra alteração acidental: ficha salva/aberta entra travada; "EDITAR FICHA" libera.
+  const [travado, setTravado] = useState(false);
   // Impressão a partir de "Minhas fichas" (?print=1): carrega, renderiza e gera o PDF sozinho.
   // BPA-C é consolidado (sem PII de paciente), então não passa pelo log F4.
   const autoPrintRef = useRef(false);
@@ -269,6 +272,7 @@ function BpaCV3() {
         setFichaTitulo(fichaTituloRef.current);
       } catch { /* noop */ }
       refreshStatus(fichaIdRef.current);
+      setTravado(Boolean(fichaIdRef.current)); // rascunho de ficha já salva volta travado
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -449,6 +453,7 @@ function BpaCV3() {
     persistFicha(id, titulo);
     setSalvarOpen(false);
     setSalvarComoNovo(false);
+    setTravado(true); // salvou → protege
     toast.success(idAlvo ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
   const salvarNaNuvem = async (titulo: string) => {
@@ -467,6 +472,7 @@ function BpaCV3() {
     setSalvandoDireto(false);
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
     persistFicha(id, fichaTituloRef.current!);
+    setTravado(true); // salvou → protege
     toast.success("Alterações salvas na nuvem.");
   };
   const salvarClique = async () => {
@@ -488,6 +494,7 @@ function BpaCV3() {
     persistFicha(id, titulo ?? ficha.titulo ?? "Ficha BPA-C");
     refreshStatus(id);
     if (autoPrintRef.current) setProntoImprimir(true);
+    setTravado(true); // ficha salva aberta → protegida
   };
   // Carrega uma ficha só p/ CAPTURA (iframe de /imprimir): popula o estado e dispara a
   // rasterização, SEM persistir no localStorage.
@@ -529,7 +536,7 @@ function BpaCV3() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prontoImprimir]);
-  const novaFicha = () => { resetHistorico(); folhaAutoChaveRef.current = ""; setState(initialState()); limparFichaPersistida(); setFicStatus(null); };
+  const novaFicha = () => { resetHistorico(); folhaAutoChaveRef.current = ""; setState(initialState()); limparFichaPersistida(); setFicStatus(null); setTravado(false); };
   const retificar = async () => {
     if (!fichaIdRef.current) return;
     setRetificando(true);
@@ -707,6 +714,8 @@ function BpaCV3() {
           style={{ aspectRatio: "553.5 / 786.3" }}
         >
           <img src={bpacBg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
+          {/* Proteção: ficha salva fica travada até clicar "EDITAR FICHA" */}
+          <TravaEdicaoFicha travado={travado} onEditar={() => setTravado(false)} />
 
           <DigitBoxesClearableContext.Provider value={true}>
           {/* Header */}
