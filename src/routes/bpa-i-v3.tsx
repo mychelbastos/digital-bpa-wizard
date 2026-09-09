@@ -19,6 +19,7 @@ import { movimentoFaturamento } from "@/lib/faturamento";
 import { type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
 import { souSuperAdmin } from "@/lib/permissoes";
 import { EditorCoordenadas } from "@/components/bpa-i-v3/EditorCoordenadas";
+import { TravaEdicaoFicha } from "@/components/TravaEdicaoFicha";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { ConfirmarResponsavel } from "@/components/bpa-i-v2/ConfirmarResponsavel";
@@ -83,6 +84,9 @@ function BpaI() {
   // Editor de coordenadas (ferramenta de layout) — visível SÓ para a conta master (super-admin).
   const [souMaster, setSouMaster] = useState(false);
   useEffect(() => { souSuperAdmin().then(setSouMaster); }, []);
+  // Proteção contra alteração acidental: ficha salva/aberta entra TRAVADA (só leitura); o botão
+  // "EDITAR FICHA" destrava. Ficha nova começa destravada (está sendo criada).
+  const [travado, setTravado] = useState(false);
   const autoPrintRef = useRef(false);
   const capturaRef = useRef(false);
   const [prontoImprimir, setProntoImprimir] = useState(false);
@@ -102,7 +106,7 @@ function BpaI() {
     if (fichaParam && capturaRef.current) {
       carregarParaCaptura(fichaParam);
     } else if (fichaParam) {
-      engCarregarFichaSalva(fichaParam).then((ok) => { if (ok && autoPrintRef.current) setProntoImprimir(true); });
+      engCarregarFichaSalva(fichaParam).then((ok) => { if (ok) { if (autoPrintRef.current) setProntoImprimir(true); setTravado(true); } });
     } else {
       setState(loadState());
       try {
@@ -111,13 +115,16 @@ function BpaI() {
         setFichaTitulo(fichaTituloRef.current);
       } catch { /* noop */ }
       refreshStatus(fichaIdRef.current);
+      setTravado(Boolean(fichaIdRef.current)); // rascunho de ficha já salva volta travado
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Abrir ficha salva (Minhas fichas) — sem auto-print.
-  const carregarFichaSalva = (id: string, titulo?: string) => { void engCarregarFichaSalva(id, titulo); };
+  // Abrir ficha salva (Minhas fichas) — sem auto-print. Entra travada (proteção).
+  const carregarFichaSalva = (id: string, titulo?: string) => { void engCarregarFichaSalva(id, titulo).then((ok) => { if (ok) setTravado(true); }); };
+  // Começar ficha nova = destravada (está sendo criada).
+  const iniciarNovaFicha = () => { novaFicha(); setTravado(false); };
   // Nome sugerido ao salvar (depende do modo "Salvar como" da UI).
   const nomeSugerido = () => nomeSugeridoEng(salvarComoNovo);
 
@@ -140,6 +147,7 @@ function BpaI() {
     const atualizou = Boolean(idAlvo);
     setSalvarOpen(false);
     setSalvarComoNovo(false);
+    setTravado(true); // salvou → protege contra alteração acidental
     toast.success(atualizou ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
   const salvarNaNuvem = async (titulo: string) => {
@@ -157,6 +165,7 @@ function BpaI() {
     const id = await reconciliarESalvar(fichaTituloRef.current!, fichaIdRef.current);
     setSalvandoDireto(false);
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
+    setTravado(true); // salvou → protege contra alteração acidental
     toast.success("Alterações salvas na nuvem.");
   };
   // Confirmação eletrônica do Responsável obrigatória para salvar e gerar o PDF.
@@ -322,7 +331,7 @@ function BpaI() {
         title="Nova ficha"
         confirmLabel="Começar nova ficha"
         onCancel={() => setNovaFichaOpen(false)}
-        onConfirm={() => { setNovaFichaOpen(false); novaFicha(); }}
+        onConfirm={() => { setNovaFichaOpen(false); iniciarNovaFicha(); }}
       >
         Começar uma nova ficha em branco? Alterações não salvas serão perdidas.
       </ConfirmModal>
@@ -514,7 +523,7 @@ function BpaI() {
         fichaAtualId={fichaIdRef.current}
         onClose={() => setFichasOpen(false)}
         onCarregar={carregarFichaSalva}
-        onNova={novaFicha}
+        onNova={iniciarNovaFicha}
         onRenomeada={persistFicha}
       />
 
@@ -644,6 +653,9 @@ function BpaI() {
 
           {/* Ferramenta de layout (só master): medir coordenadas dos campos na folha */}
           {souMaster && <EditorCoordenadas />}
+
+          {/* Proteção: ficha salva fica travada até clicar "EDITAR FICHA" */}
+          <TravaEdicaoFicha travado={travado} onEditar={() => setTravado(false)} />
 
           {/* Footer — responsável + gestor */}
           <ConfirmarResponsavel
