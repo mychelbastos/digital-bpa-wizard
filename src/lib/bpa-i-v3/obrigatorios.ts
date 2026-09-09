@@ -68,6 +68,12 @@ export function motivosObrigatoriosSeq(
 ): string[] {
   const m: string[] = [];
 
+  // Código do procedimento: a sequência só está ATIVA por causa dele — precisa ter os 10
+  // dígitos do SIGTAP. Faltando um dígito (ex.: digitou 9), o BPA Magnético DESCARTA a linha
+  // silenciosamente na exportação, então o teto/produção sai errado. Bloqueia aqui no save.
+  // (Código completo porém inexistente no SIGTAP já é barrado pelo cruzamento do componente.)
+  if (digs(s.codProc).length !== 10) m.push("Procedimento incompleto — o código do SIGTAP tem 10 dígitos.");
+
   // Identificação do paciente: obrigatória e completa. Aceita CPF/CNS no campo principal
   // (cnsPac: 11 ou 15 díg.) OU o CPF na cauda `cpfPac` (11 díg.) — mesma regra do formulário
   // (identidadeParaPacienteInput/seqTemIdentidade). Fichas importadas do BPA magnético gravam

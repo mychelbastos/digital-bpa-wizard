@@ -7,6 +7,7 @@ const semExig = { exigeServico: null, exigeCid: null } as const;
 // Sequência completa e válida (CPF válido de 11 díg. + demais obrigatórios preenchidos).
 function seqCompleta() {
   const s = emptySeq();
+  s.codProc = "0301010153".split(""); // procedimento SIGTAP completo (10 díg.)
   s.cnsPac = ["1", "1", "1", "4", "4", "4", "7", "7", "7", "3", "5", "", "", "", ""];
   s.nomePac = "FULANO DE TAL";
   s.sexo = "M";
@@ -25,6 +26,12 @@ function seqCompleta() {
 describe("motivosObrigatoriosSeq", () => {
   it("sequência completa não gera nenhum motivo", () => {
     expect(motivosObrigatoriosSeq(seqCompleta(), semExig)).toEqual([]);
+  });
+
+  it("procedimento com menos de 10 dígitos bloqueia (faltou um dígito)", () => {
+    const s = seqCompleta();
+    s.codProc = "030101015".split(""); // 9 dígitos
+    expect(motivosObrigatoriosSeq(s, semExig)).toContain("Procedimento incompleto — o código do SIGTAP tem 10 dígitos.");
   });
 
   it("sequência vazia cobra os campos obrigatórios (CEP/IBGE/Nacionalidade já vêm com padrão)", () => {
