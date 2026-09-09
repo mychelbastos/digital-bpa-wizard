@@ -61,24 +61,15 @@ interface Props {
   // "Repetir de cima": quando fornecido, um botão ↑ aparece ao focar o campo VAZIO,
   // copiando o valor da linha anterior (definido pelo pai). Some assim que há dígito.
   onRepeat?: () => void;
-  // Não completa com ZEROS À ESQUERDA ao sair (só p/ rightAlign numérico). Ex.: Quantidade —
-  // digitar 1 fica "  1" (alinhado à direita, sem "001"). A exportação pad/zera por conta dela.
-  semZeroEsquerda?: boolean;
 }
 
-export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title, uppercase = false, dimEmpty = false, onRepeat, semZeroEsquerda = false }: Props) {
+export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric = true, compact = false, registerRefs, clearable, onComplete, rightAlign = false, invalid = false, warn = false, readOnly = false, separated = false, title, uppercase = false, dimEmpty = false, onRepeat }: Props) {
 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const ctxClearable = useContext(DigitBoxesClearableContext);
   const showClear = clearable ?? ctxClearable;
   const [focused, setFocused] = useState(false);
-  // Valores exibidos/editados. Com semZeroEsquerda (Quantidade), tira os zeros à esquerda e
-  // reancora à direita — assim "001" (digitado ou vindo de ficha salva) aparece como "  1".
-  // Sem o prop, `vals === values` (nenhum outro campo muda).
-  const vals = semZeroEsquerda
-    ? ancorarCharsDireita(values.join("").replace(/\D/g, "").replace(/^0+/, ""), boxes.length)
-    : values;
-  const vazio = !vals.some((v) => v && v.trim() !== "");
+  const vazio = !values.some((v) => v && v.trim() !== "");
 
   useEffect(() => {
     if (registerRefs) registerRefs(refs.current.filter(Boolean) as HTMLInputElement[]);
@@ -128,7 +119,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     if (numeric && val && !/[0-9]/.test(val)) return;
     if (uppercase && val) val = val.toUpperCase();
     if (rightAlign) {
-      if (val) setRightAligned(vals.filter(Boolean).join("") + val); // acumula à direita
+      if (val) setRightAligned(values.filter(Boolean).join("") + val); // acumula à direita
       return;
     }
     const next = [...values];
@@ -149,7 +140,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
       // Digitação estilo calculadora tratada AQUI (keydown), não no onChange: como cada
       // caixinha tem maxLength=1 e o foco fica sempre na caixa cheia da direita, o onChange
       // não dispararia no 2º dígito. Capturamos a tecla e montamos o número nós mesmos.
-      const atual = vals.filter((v) => v && v.trim() !== "").join("");
+      const atual = values.filter((v) => v && v.trim() !== "").join("");
       // Aceita 1 dígito (numérico) ou 1 caractere não-branco (alfanumérico, ex.: "S/N").
       const ehEntrada = e.key.length === 1 && (numeric ? /[0-9]/.test(e.key) : !/\s/.test(e.key));
       if (ehEntrada) {
@@ -178,7 +169,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
   // campos numéricos ancorados à direita (Quantidade/Idade). Campo totalmente vazio
   // permanece vazio; já cheio não muda. Basta um padStart no número acumulado.
   const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (!rightAlign || !numeric || semZeroEsquerda) return; // semZeroEsquerda: mantém "  1", não "001"
+    if (!rightAlign || !numeric) return;
     const next = e.relatedTarget as HTMLInputElement | null;
     if (next && refs.current.includes(next)) return; // ainda navegando dentro do grupo
     const atual = values.filter((v) => v && v.trim() !== "").join("");
@@ -192,7 +183,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
     e.preventDefault();
     const chars = numeric ? text.replace(/\D/g, "").split("") : (uppercase ? text.toUpperCase() : text).split("");
     if (rightAlign) {
-      setRightAligned(vals.filter(Boolean).join("") + chars.join(""));
+      setRightAligned(values.filter(Boolean).join("") + chars.join(""));
       return;
     }
     const next = [...values];
@@ -212,7 +203,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           ref={(el) => {
             refs.current[i] = el;
           }}
-          value={(uppercase ? (vals[i] || "").toUpperCase() : vals[i]) || ""}
+          value={(uppercase ? (values[i] || "").toUpperCase() : values[i]) || ""}
           onChange={(e) => handle(i, e.target.value)}
           onKeyDown={(e) => onKey(i, e)}
           onBlur={onBlur}
@@ -223,7 +214,7 @@ export function DigitBoxes({ id, top, height, boxes, values, onChange, numeric =
           readOnly={readOnly}
           tabIndex={readOnly ? -1 : undefined}
           title={invalid || warn ? title : undefined}
-          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}${dimEmpty && !vals[i] ? " form-digit--dim" : ""}`}
+          className={`form-digit${compact ? " form-digit--compact" : ""}${separated ? " form-digit--separated" : ""}${invalid ? " ring-2 ring-rose-400/80" : warn ? " ring-2 ring-amber-400/80" : ""}${readOnly ? " bg-muted/40" : ""}${dimEmpty && !values[i] ? " form-digit--dim" : ""}`}
           style={{
             position: "absolute",
             top: `${top}%`,
