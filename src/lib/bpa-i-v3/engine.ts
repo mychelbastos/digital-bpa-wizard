@@ -12,7 +12,7 @@ import { ancorarCharsDireita } from "@/lib/digitos-direita";
 import type { Confirmacao } from "@/lib/bpa-i-v2/confirmacao";
 import { cnsInvalido } from "@/lib/bpa-i-v2/validacao";
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
-import { motivosCabecalho } from "@/lib/bpa-i-v3/obrigatorios";
+import { motivosCabecalho, duplicatasNaFolhaSeq } from "@/lib/bpa-i-v3/obrigatorios";
 import { orgDoCnes } from "@/lib/tfd/tfd";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais, buscarCbosVinculo, buscarNomePorCns, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
@@ -195,10 +195,16 @@ export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; f
   const cnsProfInvalido = hydrated && cnsInvalido(state.profCns.join(""));
   const temSeqAtiva = state.seqs.some(seqPreenchida);
   const motivosCab = hydrated && temSeqAtiva ? motivosCabecalho(state) : [];
+  // Duplicidade DENTRO da folha: mesmo paciente + procedimento + data em 2 sequências → bloqueia
+  // (é a mesma produção; o SIA glosa a repetida). Ver duplicatasNaFolhaSeq.
+  const dupFolha = hydrated ? duplicatasNaFolhaSeq(state.seqs) : {};
+  const motivosDup = Object.entries(dupFolha).map(([si, de]) =>
+    `Sequência ${Number(si) + 1}: mesmo paciente, procedimento e data da Sequência ${Number(de) + 1} — é a mesma produção; remova a repetida.`);
   const motivosInvalidos = [
     ...motivosCab.map((m) => `Cabeçalho: ${m}`),
     ...(cnsProfInvalido ? ["Profissional: CNS inválido (dígito verificador não confere)."] : []),
     ...Object.entries(errosSeq).flatMap(([si, motivos]) => motivos.map((m) => `Sequência ${Number(si) + 1}: ${m}`)),
+    ...motivosDup,
   ];
   const temCamposInvalidos = motivosInvalidos.length > 0;
   const profCnsDig = state.profCns.join("").replace(/\D/g, "");

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { emptySeq } from "@/lib/bpai-v2-layout";
-import { motivosObrigatoriosSeq, motivosCabecalho, identificacaoIncompleta, parcialIncompleto } from "./obrigatorios";
+import { motivosObrigatoriosSeq, motivosCabecalho, identificacaoIncompleta, parcialIncompleto, duplicatasNaFolhaSeq } from "./obrigatorios";
 
 const semExig = { exigeServico: null, exigeCid: null } as const;
 
@@ -117,6 +117,44 @@ describe("motivosObrigatoriosSeq", () => {
     ]);
     // exig desconhecido (null) não bloqueia:
     expect(motivosObrigatoriosSeq(s, semExig)).toEqual([]);
+  });
+});
+
+describe("duplicatasNaFolhaSeq", () => {
+  const seqProc = (cns: string, data: string, proc: string) => {
+    const s = seqCompleta();
+    s.cnsPac = cns.padEnd(15, " ").split("").slice(0, 15);
+    s.dataAtend = data.split("");
+    s.codProc = proc.split("");
+    return s;
+  };
+  it("2 seqs iguais (mesmo paciente+proc+data) → a 2ª é duplicata da 1ª", () => {
+    const seqs = [
+      seqProc("11144477735", "01072026", "0301010153"),
+      seqProc("11144477735", "01072026", "0301010153"),
+    ];
+    expect(duplicatasNaFolhaSeq(seqs)).toEqual({ 1: 0 });
+  });
+  it("mesma pessoa e proc, mas DATA diferente → não é duplicata", () => {
+    const seqs = [
+      seqProc("11144477735", "01072026", "0301010153"),
+      seqProc("11144477735", "02072026", "0301010153"),
+    ];
+    expect(duplicatasNaFolhaSeq(seqs)).toEqual({});
+  });
+  it("mesma pessoa e data, mas PROCEDIMENTO diferente → não é duplicata", () => {
+    const seqs = [
+      seqProc("11144477735", "01072026", "0301010153"),
+      seqProc("11144477735", "01072026", "0301010161"),
+    ];
+    expect(duplicatasNaFolhaSeq(seqs)).toEqual({});
+  });
+  it("ignora seq com procedimento incompleto (9 díg.)", () => {
+    const seqs = [
+      seqProc("11144477735", "01072026", "030101015"),
+      seqProc("11144477735", "01072026", "030101015"),
+    ];
+    expect(duplicatasNaFolhaSeq(seqs)).toEqual({});
   });
 });
 

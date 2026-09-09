@@ -60,6 +60,35 @@ export function identificacaoIncompleta(cnsPac: string[]): boolean {
   return !identificarPaciente(d).completo; // 1–10 ou 12–14 díg. = faltando caracteres
 }
 
+// Chave de identidade do paciente numa sequência: documento (CNS 15/11 ou CPF na cauda 11) e,
+// na falta dele, o nome. Usada p/ detectar a MESMA pessoa entre sequências.
+function pacienteChave(s: SeqData): string {
+  const cns = digs(s.cnsPac);
+  const cpf = digs(s.cpfPac ?? []);
+  const doc = cns.length === 15 || cns.length === 11 ? cns : cpf.length === 11 ? cpf : "";
+  return doc || (s.nomePac || "").trim().toUpperCase();
+}
+
+// Duplicidade DENTRO da folha (BPA-I): duas sequências com o MESMO paciente + MESMO procedimento
+// + MESMA data de atendimento são a mesma produção — no BPA Magnético contariam em dobro (o SIA
+// glosa). Retorna { índiceDaRepetida: índiceDaPrimeira }. Só considera seqs com procedimento
+// completo (10 díg.), data completa (8 díg.) e paciente identificado.
+export function duplicatasNaFolhaSeq(seqs: SeqData[]): Record<number, number> {
+  const dup: Record<number, number> = {};
+  const vistos = new Map<string, number>();
+  seqs.forEach((s, i) => {
+    const proc = digs(s.codProc);
+    const data = digs(s.dataAtend);
+    const pac = pacienteChave(s);
+    if (proc.length !== 10 || data.length !== 8 || !pac) return;
+    const chave = `${proc}|${data}|${pac}`;
+    const antes = vistos.get(chave);
+    if (antes !== undefined) dup[i] = antes;
+    else vistos.set(chave, i);
+  });
+  return dup;
+}
+
 // Obrigatórios de uma sequência ATIVA (com procedimento). Não inclui Caráter nem os
 // cruzamentos do SIGTAP (esses já vêm do componente), p/ não duplicar mensagens.
 export function motivosObrigatoriosSeq(
