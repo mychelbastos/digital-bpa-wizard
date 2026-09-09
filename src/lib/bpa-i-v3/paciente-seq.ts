@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import type { SeqData } from "@/lib/bpai-v2-layout";
 import { acharPacientePorDocumento, salvarPaciente, type Paciente, type PacienteInput } from "@/lib/pacientes";
 import { ancorarCharsDireita } from "@/lib/digitos-direita";
+import { nacionalidadeParaCombo } from "@/lib/bpa-i-v2/nacionalidades";
 
 const soDig = (v: unknown): string => (Array.isArray(v) ? v.join("") : String(v ?? "")).replace(/\D/g, "");
 
@@ -52,7 +53,7 @@ export function pacienteParaIdentidade(p: Paciente): Partial<SeqData> {
     nomePac: (p.nome ?? "").toUpperCase(),
     sexo: p.sexo === "M" || p.sexo === "F" ? p.sexo : "",
     dataNasc: dataIsoParaArr(p.nascimento),
-    nacionalidade: p.nacionalidade || "1",
+    nacionalidade: nacionalidadeParaCombo(p.nacionalidade) || "010",
     racaCor: p.raca_cor ?? "",
     etnia: p.etnia ?? "",
     cep: digArr(p.cep, 8),

@@ -146,7 +146,7 @@ export const emptySeq = (): SeqData => ({
   nomePac: "",
   sexo: "",
   dataNasc: Array(8).fill(""),
-  nacionalidade: "1", // v2: padrão Brasileiro (situação de nacionalidade, código CADSUS)
+  nacionalidade: "010", // padrão Brasileiro (código da tabela NACIONALIDADE do BPA Magnético)
   racaCor: "",
   etnia: "", // v2: só preenchido quando Raça/Cor = Indígena (Portaria 508, Art. 2º)
   cep: "46800000".split(""), // padrão da unidade (CEP)

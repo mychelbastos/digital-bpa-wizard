@@ -15,7 +15,7 @@ import { validarCpf } from "@/lib/bpa-i-v3/identificacao";
 import { emailValido } from "@/lib/validacao-email";
 import { telefoneValido, cepValido } from "@/lib/validacao-contato";
 import { anoAte4Digitos, nascimentoValido, idadeAcimaDoTetoIso } from "@/lib/validacao-data";
-import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO } from "@/lib/bpa-i-v2/nacionalidades";
+import { NACIONALIDADES, NACIONALIDADE_BRASILEIRO, nacionalidadeParaCombo } from "@/lib/bpa-i-v2/nacionalidades";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
 import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
@@ -198,7 +198,8 @@ export function PacienteForm(props: CtxPaciente & { orgId: string; paciente?: Pa
     ini?.responsavel_tipo === "paciente" || ini?.responsavel_tipo === "mae" ? ini.responsavel_tipo : "",
   );
   const [nomeResponsavel, setNomeResponsavel] = useState(ini?.nome_responsavel ?? "");
-  const [nacionalidade, setNacionalidade] = useState(ini?.nacionalidade ?? NACIONALIDADE_BRASILEIRO);
+  // Normaliza valor legado ("1"/"2"/"3") para o código do BPA (010/020/030); vazio vira o padrão.
+  const [nacionalidade, setNacionalidade] = useState(nacionalidadeParaCombo(ini?.nacionalidade) || NACIONALIDADE_BRASILEIRO);
   const [racaCor, setRacaCor] = useState(ini?.raca_cor ?? "");
   const [etnia, setEtnia] = useState(ini?.etnia ?? "");
   const [situacaoRua, setSituacaoRua] = useState<"" | "S" | "N">((ini?.situacao_rua as "S" | "N") ?? "");

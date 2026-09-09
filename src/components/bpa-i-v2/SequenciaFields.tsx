@@ -6,7 +6,7 @@ import { AtendimentoAntigoAviso } from "@/components/bpa-i-v2/AtendimentoAntigoA
 import { ProcedimentoField } from "@/components/bpa-i-v2/ProcedimentoField";
 import { RACAS, RACA_INDIGENA } from "@/lib/bpa-i-v2/racas";
 import { ETNIAS } from "@/lib/bpa-i-v2/etnias";
-import { NACIONALIDADES } from "@/lib/bpa-i-v2/nacionalidades";
+import { NACIONALIDADES, nacionalidadeParaCombo } from "@/lib/bpa-i-v2/nacionalidades";
 import { TIPOS_LOGRADOURO } from "@/lib/bpa-i-v2/tipos-logradouro";
 import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
@@ -151,7 +151,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       {/* Idade NÃO tem campo no papel do BPA-I nem input na tela: derivada na geração.
           SeqData.idade permanece só como override opcional do modelo (harness). */}
       <ComboField top={seqTop + R.row2} left={R.nacionalidade.left} width={R.nacionalidade.width} height={L.DIGIT_H}
-        options={NACIONALIDADES} value={s.nacionalidade} onChange={(v) => u("nacionalidade", v)} />
+        options={NACIONALIDADES} value={nacionalidadeParaCombo(s.nacionalidade)} onChange={(v) => u("nacionalidade", v)} />
       <ComboField top={seqTop + R.row2} left={R.racaCor.left} width={R.racaCor.width} height={L.DIGIT_H}
         options={RACAS} value={s.racaCor}
         onChange={(v) => {
