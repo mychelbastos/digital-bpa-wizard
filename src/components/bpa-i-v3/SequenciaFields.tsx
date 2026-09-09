@@ -393,7 +393,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         values={s.codProc} onChange={(v) => u("codProc", v)} clearable
         naoEncontrado={hydrated && val.procNaoEncontrado} nomeEncontrado={val.proc?.nome ?? null} />
       <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
-        values={s.qtde} onChange={(v) => u("qtde", v)} rightAlign invalid={hydrated && val.qtdeInvalida} title={val.qtdeMotivo} clearable compact separated />
+        values={s.qtde} onChange={(v) => u("qtde", v)} rightAlign semZeroEsquerda invalid={hydrated && val.qtdeInvalida} title={val.qtdeMotivo} clearable compact separated />
       <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
         values={s.cnpj} onChange={(v) => u("cnpj", v)} clearable compact />
 
