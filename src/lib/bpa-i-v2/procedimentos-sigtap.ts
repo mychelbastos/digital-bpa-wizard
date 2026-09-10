@@ -161,10 +161,11 @@ export interface ServClassOpcao {
   label: string;          // "servico nome · classificacao nome" (para o seletor)
 }
 
-// Combinações de Serviço/Classificação de um procedimento no SIGTAP (com nomes p/ exibir).
-// Uma combinação -> preenche automático; várias -> o chamador oferece a escolha (não temos os
-// serviços HABILITADOS do CNES no banco p/ filtrar). Dedup por (servico, classificacao).
-export async function buscarServClassDoProcedimento(procedimento: string, competencia?: string | null): Promise<ServClassOpcao[]> {
+// Combinações de Serviço/Classificação de um procedimento no SIGTAP (com nomes p/ exibir),
+// já CRUZADAS com os serviços cadastrados no CNES (quando `cnes` é informado). Uma combinação
+// resultante -> o chamador preenche automático; várias -> oferece a escolha. Dedup por
+// (servico, classificacao). O filtro por CNES degrada com segurança (ver dentro da função).
+export async function buscarServClassDoProcedimento(procedimento: string, competencia?: string | null, cnes?: string): Promise<ServClassOpcao[]> {
   if (!supabase || procedimento.length !== 10) return [];
   try {
     const comp = await resolverCompetencia(competencia);
@@ -191,15 +192,58 @@ export async function buscarServClassDoProcedimento(procedimento: string, compet
     for (const r of (sc ?? []) as { servico: string; classificacao: string; nome: string }[]) nomeCls.set(`${r.servico}|${r.classificacao}`, r.nome);
     const nomeSrv = new Map<string, string>();
     for (const r of (srv ?? []) as { codigo: string; nome: string }[]) nomeSrv.set(r.codigo, r.nome);
-    return lista
+    const resultado = lista
       .map((c) => {
         const ns = nomeSrv.get(c.servico), nc = nomeCls.get(`${c.servico}|${c.classificacao}`);
         const label = `${ns ? `${c.servico} ${ns}` : c.servico} · ${nc ? `${c.classificacao} ${nc}` : c.classificacao}`;
         return { servico: c.servico, classificacao: c.classificacao, label };
       })
       .sort((a, b) => a.servico.localeCompare(b.servico) || a.classificacao.localeCompare(b.classificacao));
+
+    // CRUZA COM O CNES: das combinações do SIGTAP, mantém só as CADASTRADAS no estabelecimento
+    // (serviço × classificação do SCNES, em cache). Assim, se a unidade só tem 1 das várias →
+    // preenche automático; se tem mais de uma → o seletor mostra só as dela. Degrada com
+    // segurança: se a unidade não tem o dado (cache vazio mesmo após sync) ou a interseção fica
+    // vazia, mantém as do SIGTAP — nunca bloqueia a digitação.
+    if (cnes && /^\d{7}$/.test(cnes) && resultado.length > 1) {
+      const doCnes = await servicosDoCnes(cnes);
+      if (doCnes.size > 0) {
+        const filtrado = resultado.filter((o) => doCnes.has(`${o.servico}|${o.classificacao}`));
+        if (filtrado.length > 0) return filtrado;
+      }
+    }
+    return resultado;
   } catch {
     return [];
+  }
+}
+
+// Serviços×classificações CADASTRADOS no CNES (cache local). Se vazio, dispara o sync do SCNES
+// e reconsulta (lazy). Retorna um Set de "servico|classificacao". Nunca lança.
+export async function servicosDoCnes(cnes: string): Promise<Set<string>> {
+  if (!supabase || !/^\d{7}$/.test(cnes)) return new Set();
+  const ler = async (): Promise<Set<string>> => {
+    const { data } = await supabase!.from("estabelecimento_servicos").select("servico, classificacao").eq("cnes", cnes);
+    return new Set((data ?? []).map((r) => `${(r as { servico: string }).servico}|${(r as { classificacao: string }).classificacao}`));
+  };
+  try {
+    let set = await ler();
+    if (set.size === 0) { await sincronizarServicosCnes(cnes); set = await ler(); }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
+// Sincroniza os serviços do estabelecimento a partir do SCNES (edge function; grava no cache).
+export async function sincronizarServicosCnes(cnes: string): Promise<number> {
+  if (!supabase || !/^\d{7}$/.test(cnes)) return 0;
+  try {
+    const { data, error } = await supabase.functions.invoke("cnes-profissionais", { body: { cnes, servicos: true } });
+    if (error) return 0;
+    return (data as { total?: number } | null)?.total ?? 0;
+  } catch {
+    return 0;
   }
 }
 

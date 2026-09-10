@@ -56,6 +56,9 @@ interface Props {
   // (escopo da org). Escolher um vincula (autofill + trava a identidade).
   orgId?: string | null;
   onVincularPaciente?: (p: Paciente) => void;
+  // CNES do estabelecimento (cabeçalho) — usado p/ cruzar Serviço×Classificação do SIGTAP com
+  // os serviços cadastrados no CNES ao digitar o procedimento.
+  cnes?: string;
 }
 
 // v3: identificação do paciente aceita CPF (11 díg.) OU CNS (15 díg.) no mesmo campo.
@@ -67,7 +70,7 @@ const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês/ano da competê
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
 // (não dá pra chamar hooks dentro do .map() do componente pai).
-export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente, identidadeTravada = false, orgId, onVincularPaciente }: Props) {
+export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente, identidadeTravada = false, orgId, onVincularPaciente, cnes }: Props) {
   const R = L.REL;
 
   // ---- Busca inline de paciente (na própria folha: campo CPF/CNS ou Nome) ----
@@ -184,7 +187,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
     servClassProcRef.current = codProc;
     setServClassOpcoes([]);
     const comp = `${profAno.join("")}${profMes.join("")}`;
-    buscarServClassDoProcedimento(codProc, /^\d{6}$/.test(comp) ? comp : null).then((combos) => {
+    buscarServClassDoProcedimento(codProc, /^\d{6}$/.test(comp) ? comp : null, cnes).then((combos) => {
       if (servClassProcRef.current !== codProc) return;
       const vazio = !s.servico.some(Boolean) && !s.classProc.some(Boolean);
       if (!vazio && !eraTroca) return; // respeita serviço já preenchido (ficha carregada)
@@ -192,7 +195,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
       else if (combos.length > 1) setServClassOpcoes(combos);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [codProc]);
+  }, [codProc, cnes]);
 
   // Nome/descrição do CID — só existe se o código estiver na tabela CID-10 (SIGTAP) importada.
   // Quando o código digitado (>=3) NÃO consta na tabela, marca cidNaoEncontrado = aviso

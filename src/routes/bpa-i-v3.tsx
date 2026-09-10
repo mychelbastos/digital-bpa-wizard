@@ -647,6 +647,7 @@ function BpaI() {
               onRepetirPaciente={prevTemPaciente(si) ? () => repetirPaciente(si) : undefined}
               identidadeTravada={Boolean(state.seqs[si].pacienteId)}
               orgId={orgId}
+              cnes={cnesEstab}
               onVincularPaciente={(p) => vincularPaciente(si, p)}
             />
           ))}
