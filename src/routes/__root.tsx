@@ -8,11 +8,10 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import faviconUrl from "@/assets/spa-emblem-64.png?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { useAuthState } from "@/lib/bpa-i-v2/auth";
 import { LoginScreen } from "@/components/LoginScreen";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -45,10 +44,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
-
   const detalhe = (error?.message || String(error) || "Erro desconhecido").trim();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">

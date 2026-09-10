@@ -15,9 +15,10 @@ Fluxo mental do domínio:
 
 ## 2. Stack e como rodar
 
-- **Front:** React + TypeScript + **TanStack Router** (rotas por arquivo em `src/routes/*.tsx`), Vite, Tailwind, Radix. Estado local + hooks; sem Redux.
-- **Back:** **Supabase** (Postgres + **RLS** + Edge Functions Deno). Cliente em `src/lib/supabase.ts`.
-- **Deploy:** **Lovable**. `git push origin main` → o Lovable reconstrói o app. **Não reescrever histórico** (nada de force‑push/rebase — ver `AGENTS.md`). Mudanças de **banco / edge function / dados** feitas pela management API são **imediatas** (não dependem do rebuild).
+- **Front/full‑stack:** **TanStack Start** (SSR sobre TanStack Router; rotas por arquivo em `src/routes/*.tsx`) + React + TypeScript, **Vite 8**, **Tailwind 4**, Radix. Estado local + hooks; sem Redux. Entry de servidor em `src/server.ts` (wrapper de erro SSR).
+- **Back:** **Supabase** (Postgres + **RLS** + Edge Functions Deno). Cliente em `src/lib/supabase.ts` (só `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`, ambos públicos por design).
+- **Build/hospedagem:** o `vite.config.ts` usa um preset que embute os plugins (TanStack Start, viteReact, tailwind, tsconfigPaths, injeção `VITE_*`, alias `@`, e **nitro** com alvo **Cloudflare**). ⚠️ **Não adicione esses plugins na mão** (quebra por duplicidade) e **não troque o preset sem planejar a migração do build+hospedagem** — é a fundação do deploy.
+- **Deploy:** o pipeline observa a branch **`main`** — `git push origin main` reconstrói/publica. **Não reescrever histórico** (ver `AGENTS.md`). Mudanças de **banco / edge function / dados** via management API/CLI são **imediatas** (independem do rebuild do front).
 - **Ref do projeto Supabase:** `qxtzlorofhuuxzqkbpli`.
 
 **Checks antes de commitar (sempre):**
@@ -114,7 +115,21 @@ curl -s -X POST "https://api.supabase.com/v1/projects/qxtzlorofhuuxzqkbpli/datab
 
 ---
 
-## 6. Armadilhas / regras de ouro
+## 6. Segurança (o que protege os dados)
+
+Auditado nesta base — resumo do modelo de proteção contra acesso indevido (inclusive via F12/console):
+
+- **Nada de segredo no front.** O bundle só carrega `VITE_SUPABASE_URL` e a **anon key** (publishable) — projetadas para serem públicas. **Service‑role key, token da management API e credenciais do SCNES ficam só no servidor** (env das edge functions), nunca no browser. `.env` está no `.gitignore` (não versionado); só contém URL + anon key.
+- **RLS ligada em 100% das tabelas.** Quem **não** está logado (só com a anon key) **não lê nada** de `pacientes`, `fichas`, `tfd`, etc. — as políticas exigem `auth.uid()` com **vínculo ativo**. Tabelas sem política ficam **deny‑all**. Ou seja: abrir o console e chamar o Supabase com a anon key **não vaza dados de paciente**.
+- **Autorização por vínculo/permissão.** Um usuário logado só enxerga o que a RLS libera para ele (sua unidade/organização — `ver_fichas_da_unidade`/`ver_fichas_do_municipio` e permissões). Não dá para "escalar" pelo front: a regra está no **banco** (funções `security definer` + RLS), não no JavaScript.
+- **Edge functions autenticadas.** `admin-criar-usuario` exige sessão válida + `gerenciar_vinculos` (401/403). `cnes-profissionais` (devolve PII de profissionais) **valida a sessão do usuário no corpo** — chamada anônima (só anon key) recebe **401**.
+- **LGPD.** Leituras de PII de paciente são logadas (`leituras_paciente`/`leituras_ficha`); o CPF do profissional não é guardado.
+
+**Regra de ouro de segurança:** toda autorização mora no **banco (RLS / RPC `security definer`)**. O front é "burro" — nunca confie em checagem só no cliente. Todo dado sensível novo precisa da política de RLS correspondente; toda edge function que devolve dado sensível precisa **validar a sessão no corpo** (`auth.getUser()`), porque a anon key é um JWT válido e `verify_jwt` no gateway **sozinho não basta**.
+
+---
+
+## 7. Armadilhas / regras de ouro
 
 1. **Não deduzir o layout do BPA Magnético** por conta própria — ler as fontes (`bpa-magnetico.ts`, `fechamento-mes.ts`) e/ou inspecionar `.MAR/.JUN` reais.
 2. **PostgREST tem teto de 1.000 linhas** por consulta — some no cliente exige paginar (`buscarTodasPaginado`). Já causou dashboard errado e "Minhas Fichas" só 200.
@@ -126,7 +141,7 @@ curl -s -X POST "https://api.supabase.com/v1/projects/qxtzlorofhuuxzqkbpli/datab
 
 ---
 
-## 7. Onde procurar cada coisa (índice rápido)
+## 8. Onde procurar cada coisa (índice rápido)
 
 | Preciso mexer em… | Vá para… |
 |---|---|
@@ -141,3 +156,20 @@ curl -s -X POST "https://api.supabase.com/v1/projects/qxtzlorofhuuxzqkbpli/datab
 | FPO (import/compara) | `src/lib/fpo/*`, `src/routes/fpo.tsx` |
 | TFD | `src/lib/tfd/tfd.ts`, `src/routes/tfd.tsx` |
 | Erros do banco → PT‑BR | `src/lib/erros.ts` |
+
+---
+
+## 9. Troubleshooting rápido
+
+| Sintoma | Provável causa / onde olhar |
+|---|---|
+| "Falha ao salvar" numa ficha/paciente | Erro de RLS/permissão engolido — hoje `salvarPaciente` mostra o motivo real (`mensagemErroBanco`). Cheque permissão (`gerir_pacientes`) e o congelamento da produção. |
+| Ficha não deixa editar | Produção **exportada** → fichas congeladas (trigger). Reabrir o movimento ou retificar. Ou a **trava "EDITAR FICHA"** (clique para liberar). |
+| Contagem/soma errada em dashboard/relatório | Teto de **1.000 linhas** do PostgREST — paginar (`buscarTodasPaginado`). |
+| `.txt`/PA sai a menos / linha some | Procedimento incompleto (≠10 díg.) é descartado na exportação — hoje o crivo bloqueia salvar assim. Cheque também a competência × movimento. |
+| BPA Magnético recusa importação | Cabeçalho/versão (D0x.xx), nacionalidade (tem de ser 010/020/030), datas válidas. Não deduzir o layout — conferir `bpa-magnetico.ts`. |
+| Edge function retorna BOOT_ERROR | Import `esm.sh` — trocar por `npm:`. Redeploy via `supabase functions deploy`. |
+| Profissional que saiu ainda aparece | Aguardar o próximo sync do CNES (TTL 7 dias) ou forçar (`{forcar:true}`) — o sync substitui o retrato. |
+| Campo em % desalinhado na folha | Usar o **Editor de coordenadas** (só master) para medir e ajustar em `bpai-v2-layout.ts`. |
+
+Antes de qualquer commit: `npx tsc --noEmit && npx vitest run` (e `npm run build` para mudanças de UI/rota). O golden `equivalencia.golden.test.ts` garante que BPA‑I V3 e V4 gerem o mesmo `.MAR`.
