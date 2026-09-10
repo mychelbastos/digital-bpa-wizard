@@ -5,6 +5,7 @@ import {
   buscarProcedimentoSigtap,
   servicoClassificacaoValida,
   cidValidoParaProcedimento,
+  cboValidoParaProcedimento,
   sexoIncompativel,
   quantidadeExcedida,
   idadeForaDaFaixa,
@@ -20,6 +21,7 @@ export interface ValidacaoProcedimento {
   qtdeInvalida: boolean;
   servicoInvalido: boolean; // combinação Serviço+Classe não existe p/ este procedimento
   cidInvalido: boolean;
+  cboIncompativel: boolean; // procedimento NÃO permitido para a ocupação (CBO) do profissional
   // Motivo legível de cada checagem (undefined quando ela está ok) — vira tooltip do
   // campo em vermelho. `motivos` junta tudo p/ o resumo/bloqueio de exportar-salvar.
   procNaoEncontradoMotivo?: string;
@@ -28,6 +30,7 @@ export interface ValidacaoProcedimento {
   qtdeMotivo?: string;
   servicoMotivo?: string;
   cidMotivo?: string;
+  cboMotivo?: string;
   motivos: string[];
   temErro: boolean;
 }
@@ -45,9 +48,10 @@ function formatarMeses(meses: number): string {
 // classificação, CID) contra a tabela oficial do SIGTAP — uma única busca do
 // procedimento por sequência, compartilhada entre todas as checagens derivadas.
 // Não bloqueia nada; só calcula os sinais visuais (bordas) que a UI decide mostrar.
-export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
+export function useValidacaoProcedimento(s: SeqData, cbo?: string): ValidacaoProcedimento {
   const codProc = s.codProc.join("");
   const procCompleto = codProc.length === 10;
+  const cboDig = (cbo ?? "").replace(/\D/g, "");
 
   // Competência da linha = data do atendimento (prd-cmp). Se não estiver carregada no
   // SIGTAP, o crivo cai na mais recente (ver resolverCompetencia).
@@ -99,6 +103,18 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
   }, [procCompleto, codProc, cid, competencia]);
   const cidInvalido = cidValido === false;
 
+  // CBO: o procedimento é permitido para a OCUPAÇÃO (CBO) do profissional do cabeçalho? Só
+  // critica quando o profissional tem CBO (6 díg.) E o procedimento tem CBOs cadastrados no
+  // SIGTAP e o do profissional não está entre eles (false). null/true não bloqueiam.
+  const [cboValido, setCboValido] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!procCompleto || cboDig.length !== 6) { setCboValido(null); return; }
+    let cancel = false;
+    cboValidoParaProcedimento(codProc, cboDig, competencia).then((v) => { if (!cancel) setCboValido(v); });
+    return () => { cancel = true; };
+  }, [procCompleto, codProc, cboDig, competencia]);
+  const cboIncompativel = cboValido === false;
+
   const procNaoEncontradoMotivo = procNaoEncontrado ? "Código não encontrado na tabela oficial do SIGTAP." : undefined;
   const sexoMotivo = sexoInvalido
     ? `Este procedimento é exclusivo para pacientes do sexo ${proc!.sexo === "M" ? "Masculino" : "Feminino"}.`
@@ -116,14 +132,15 @@ export function useValidacaoProcedimento(s: SeqData): ValidacaoProcedimento {
     ? `Combinação Serviço ${servico} + Classificação ${classProc} não é válida para este procedimento.`
     : undefined;
   const cidMotivo = cidInvalido ? `CID ${cid} não é aceito para este procedimento.` : undefined;
+  const cboMotivo = cboIncompativel ? "Procedimento incompatível com o profissional." : undefined;
 
-  const motivos = [procNaoEncontradoMotivo, sexoMotivo, idadeMotivo, qtdeMotivo, servicoMotivo, cidMotivo].filter(
+  const motivos = [procNaoEncontradoMotivo, sexoMotivo, idadeMotivo, qtdeMotivo, servicoMotivo, cidMotivo, cboMotivo].filter(
     (m): m is string => Boolean(m),
   );
 
   return {
-    proc, procCompleto, procNaoEncontrado, sexoInvalido, idadeInvalida, qtdeInvalida, servicoInvalido, cidInvalido,
-    procNaoEncontradoMotivo, sexoMotivo, idadeMotivo, qtdeMotivo, servicoMotivo, cidMotivo,
+    proc, procCompleto, procNaoEncontrado, sexoInvalido, idadeInvalida, qtdeInvalida, servicoInvalido, cidInvalido, cboIncompativel,
+    procNaoEncontradoMotivo, sexoMotivo, idadeMotivo, qtdeMotivo, servicoMotivo, cidMotivo, cboMotivo,
     motivos, temErro: motivos.length > 0,
   };
 }

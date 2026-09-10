@@ -648,6 +648,7 @@ function BpaI() {
               identidadeTravada={Boolean(state.seqs[si].pacienteId)}
               orgId={orgId}
               cnes={cnesEstab}
+              profCbo={profCboDig}
               onVincularPaciente={(p) => vincularPaciente(si, p)}
             />
           ))}

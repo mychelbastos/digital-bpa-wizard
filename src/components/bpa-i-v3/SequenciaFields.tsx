@@ -59,6 +59,8 @@ interface Props {
   // CNES do estabelecimento (cabeçalho) — usado p/ cruzar Serviço×Classificação do SIGTAP com
   // os serviços cadastrados no CNES ao digitar o procedimento.
   cnes?: string;
+  // CBO (ocupação) do profissional do cabeçalho — p/ criticar procedimento incompatível.
+  profCbo?: string;
 }
 
 // v3: identificação do paciente aceita CPF (11 díg.) OU CNS (15 díg.) no mesmo campo.
@@ -70,7 +72,7 @@ const DATA_COMPETENCIA_AVISO = "Data de atendimento fora do mês/ano da competê
 // Uma "sequência" (linha de paciente) do BPA-I v2 — extraído da rota p/ poder chamar
 // useValidacaoProcedimento (hook) uma vez por sequência, sem violar as regras do React
 // (não dá pra chamar hooks dentro do .map() do componente pai).
-export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente, identidadeTravada = false, orgId, onVincularPaciente, cnes }: Props) {
+export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onUpdate: u, regBox, focusBox, inputsOf, endOf, onValidacaoChange, onRepetirPaciente, identidadeTravada = false, orgId, onVincularPaciente, cnes, profCbo }: Props) {
   const R = L.REL;
 
   // ---- Busca inline de paciente (na própria folha: campo CPF/CNS ou Nome) ----
@@ -120,7 +122,7 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
 
   // Cruza procedimento × quantidade × idade × sexo × serviço/classe × CID contra o
   // SIGTAP oficial (uma única busca do procedimento, compartilhada entre as checagens).
-  const val = useValidacaoProcedimento(s);
+  const val = useValidacaoProcedimento(s, profCbo);
   // v3: Serviço/Classe e CID são obrigatórios quando o SIGTAP os exige p/ o procedimento.
   const exig = useExigenciasSigtap(s.codProc.join(""));
   // Regras de obrigatoriedade só valem quando a sequência vai virar linha (tem procedimento).
@@ -388,7 +390,8 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
         ativo={daAntiga} onConfirmar={() => u("dataAtendConfirmada", true)} />
       <ProcedimentoField id={`s${si}-cp`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.codProc}
         values={s.codProc} onChange={(v) => u("codProc", v)} clearable
-        naoEncontrado={hydrated && val.procNaoEncontrado} nomeEncontrado={val.proc?.nome ?? null} />
+        naoEncontrado={hydrated && val.procNaoEncontrado} nomeEncontrado={val.proc?.nome ?? null}
+        duplicada={hydrated && val.cboIncompativel} duplicadaTitle={val.cboMotivo} />
       <DigitBoxes id={`s${si}-q`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.qtde}
         values={s.qtde} onChange={(v) => u("qtde", v)} rightAlign invalid={hydrated && val.qtdeInvalida} title={val.qtdeMotivo} clearable compact separated />
       <DigitBoxes id={`s${si}-cnpj`} top={seqTop + R.procRow1} height={L.DIGIT_H} boxes={R.cnpj}
