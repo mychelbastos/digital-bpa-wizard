@@ -19,7 +19,7 @@ import { dataFuturaOuInvalida, atendimentoAntigo, atendimentoForaDaCompetencia }
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { NomeAoFocarPopover } from "@/components/bpa-i-v2/NomeAoFocarPopover";
-import { identificarPaciente, validarCpf } from "@/lib/bpa-i-v3/identificacao";
+import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
 import { motivosObrigatoriosSeq, identificacaoIncompleta, parcialIncompleto } from "@/lib/bpa-i-v3/obrigatorios";
 import * as L from "@/lib/bpai-v2-layout";
@@ -99,18 +99,12 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
   // não poluir; some assim que começa a digitar/copiar).
   const pacienteVazio = !s.cnsPac.some(Boolean) && !s.nomePac.trim() && !(s.cpfPac?.some(Boolean));
   const focarNome = () => setTimeout(() => document.getElementById(`s${si}-nome`)?.focus(), 0);
-  // Ao completar um CPF válido (11 díg.), alinha os números à DIREITA (folgas à esquerda,
-  // terminando na borda como o CNS) e pula direto para o Nome — sem obrigar Tab nas
-  // 4 células vazias. Comprimentos diferentes seguem o fluxo normal (esq→dir).
-  const onChangeIdent = (v: string[]) => {
-    const digits = v.join("").replace(/\D/g, "");
-    if (digits.length === 11 && validarCpf(digits)) {
-      u("cnsPac", [...Array(R.cnsPacBoxes.length - 11).fill(""), ...digits.split("")]);
-      focarNome();
-    } else {
-      u("cnsPac", v);
-    }
-  };
+  // Campo "CNS ou CPF": entrada LIVRE, esquerda→direita. NÃO decide nem pula no 11º dígito —
+  // isso interrompia a digitação de um CNS de 15 díg. cujos 11 primeiros coincidem com um CPF
+  // válido (bug real). A distinção CPF(11)/CNS(15) é por comprimento (identificarPaciente, para
+  // o selo/validação) e vale ao CONCLUIR. O salto para o Nome acontece ao completar 15 díg.
+  // (onComplete, CNS) ou quando a pessoa dá Tab/Enter (CPF de 11 díg.).
+  const onChangeIdent = (v: string[]) => u("cnsPac", v);
   // Campo inteligente CPF/CNS: detecta o tipo pelo comprimento e valida o dígito.
   const ident = identificarPaciente(s.cnsPac);
   const identInvalida = hydrated && ident.invalido;
