@@ -67,6 +67,16 @@ function parseCbos(xml: string): { codigo: string; descricao: string }[] {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
+    // SEGURANÇA: a função devolve PII (nome/CNS de profissionais do SCNES). Exige um USUÁRIO
+    // autenticado — a anon key (pública, no bundle) é um JWT válido, então verify_jwt no gateway
+    // não basta; validamos a sessão do usuário aqui e barramos chamadas anônimas.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const caller = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: auth } = await caller.auth.getUser();
+    if (!auth?.user) return json({ erro: "Sem autenticação." }, 401);
+
     const body = await req.json().catch(() => ({}));
 
     // ===== Modo CBO do vínculo (CNS + CNES) =====
