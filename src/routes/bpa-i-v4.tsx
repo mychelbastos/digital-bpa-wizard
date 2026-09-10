@@ -10,6 +10,10 @@ import { PacienteSeqCard } from "@/components/bpa-i-v3/PacienteSeqCard";
 import { useValidacaoProcedimento } from "@/lib/bpa-i-v2/use-validacao-procedimento";
 import { useExigenciasSigtap } from "@/lib/bpa-i-v3/exigencias-sigtap";
 import { motivosObrigatoriosSeq } from "@/lib/bpa-i-v3/obrigatorios";
+import { identificarPaciente } from "@/lib/bpa-i-v3/identificacao";
+import { atendimentoForaDaCompetencia } from "@/lib/bpa-i-v2/validacao";
+import { buscarInfoCep } from "@/lib/bpa-i-v2/cep";
+import { MUNICIPIOS_IBGE } from "@/lib/bpa-i-v2/municipios-ibge";
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { buscarNomeServicoClasse, buscarNomeCid } from "@/lib/bpa-i-v2/nomes-sigtap";
 import { CARATERES } from "@/lib/bpa-i-v2/carateres";
@@ -219,7 +223,8 @@ function BpaIV4() {
         <div className="space-y-4">
           {state.seqs.map((sq, si) => (
             <SeqCardV4
-              key={si} si={si} seq={sq} orgId={orgId} profCnsDig={profCnsDig} profCboDig={profCboDig} travado={congelada}
+              key={si} si={si} seq={sq} orgId={orgId} profCnsDig={profCnsDig} profCboDig={profCboDig}
+              profMes={state.profMes} profAno={state.profAno} cnes={cnesEstab} travado={congelada}
               onUpdate={(field, value) => updateSeq(si, field, value)}
               onValidacao={(m) => onValidacaoChangeSeq(si, m)}
               onVincular={(p) => vincularPaciente(si, p)}
@@ -259,7 +264,8 @@ function BpaIV4() {
 
 // ---- Um cartão de sequência (paciente reusa o PacienteSeqCard; procedimento é card novo) ----
 function SeqCardV4(props: {
-  si: number; seq: SeqData; orgId: string | null; profCnsDig: string; profCboDig: string; travado: boolean;
+  si: number; seq: SeqData; orgId: string | null; profCnsDig: string; profCboDig: string;
+  profMes: string[]; profAno: string[]; cnes: string; travado: boolean;
   onUpdate: <K extends keyof SeqData>(field: K, value: SeqData[K]) => void;
   onValidacao: (motivos: string[]) => void;
   onVincular: (p: import("@/lib/pacientes").Paciente) => void;
@@ -269,17 +275,45 @@ function SeqCardV4(props: {
   onRemover?: () => void;
 }) {
   const { si, seq: s, onUpdate: u } = props;
-  const val = useValidacaoProcedimento(s);
+  const val = useValidacaoProcedimento(s, props.profCboDig); // inclui o crivo de CBO (incompatível)
   const exig = useExigenciasSigtap(dig(s.codProc));
   const ativa = seqPreenchida(s);
   const vinculado = Boolean(s.pacienteId);
 
+  // Crivos que o V3 aplica FORA do motivosObrigatoriosSeq — replicados aqui p/ paridade TOTAL:
+  // dígito verificador do CPF/CNS, Caráter obrigatório e data de atendimento fora da competência.
+  const identInvalida = identificarPaciente(s.cnsPac).invalido;
+  const caraterFaltando = ativa && s.carater.join("").trim().length === 0;
+  const daForaCompetencia = atendimentoForaDaCompetencia(s.dataAtend, props.profMes, props.profAno);
+
+  // CEP × município (IBGE): busca o município real do CEP e compara com o selecionado (igual ao V3).
+  const cepDig = dig(s.cep), ibgeDig = dig(s.ibge);
+  const [cepMotivo, setCepMotivo] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (cepDig.length !== 8) { setCepMotivo(undefined); return; }
+    let cancel = false;
+    buscarInfoCep(cepDig).then(({ ibge: ibgeCep }) => {
+      if (cancel) return;
+      if (!ibgeCep || ibgeDig.length !== 7 || ibgeCep === ibgeDig) { setCepMotivo(undefined); return; }
+      const nomeCep = MUNICIPIOS_IBGE.find((m) => m.code === ibgeCep)?.label ?? ibgeCep;
+      const nomeSel = MUNICIPIOS_IBGE.find((m) => m.code === ibgeDig)?.label ?? ibgeDig;
+      setCepMotivo(`CEP pertence a ${nomeCep}, mas o município selecionado é ${nomeSel}.`);
+    });
+    return () => { cancel = true; };
+  }, [cepDig, ibgeDig]);
+
   // Motivos de erro desta seq (mesma regra do V3) → reporta ao motor (barra de pendências).
   const motivos = useMemo(() => {
     const m = ativa ? motivosObrigatoriosSeq(s, exig) : [];
-    return [...new Set([...m, ...val.motivos])];
+    return [...new Set([
+      ...m, ...val.motivos,
+      identInvalida && "Identificação do paciente inválida — confira o CPF (11 díg.) ou o CNS (15 díg.).",
+      caraterFaltando && "Caráter de atendimento é obrigatório.",
+      daForaCompetencia && "Data de atendimento fora do mês/ano da competência da folha — o BPA Magnético recusa. Corrija a data ou a competência (Mês/Ano).",
+      cepMotivo,
+    ].filter((x): x is string => Boolean(x)))];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(s), exig.exigeServico, exig.exigeCid, val.motivos.join("|")]);
+  }, [JSON.stringify(s), exig.exigeServico, exig.exigeCid, val.motivos.join("|"), identInvalida, caraterFaltando, daForaCompetencia, cepMotivo]);
   useEffect(() => { props.onValidacao(motivos); /* eslint-disable-next-line */ }, [motivos.join("|")]);
 
   const [procBusca, setProcBusca] = useState(""); // busca de procedimento por nome
@@ -304,7 +338,8 @@ function SeqCardV4(props: {
     const eraTroca = anterior.length === 10;
     servClassProcRef.current = codProcSC;
     setServClassOpcoes([]);
-    buscarServClassDoProcedimento(codProcSC).then((combos) => {
+    const comp = `${dig(props.profAno)}${dig(props.profMes)}`;
+    buscarServClassDoProcedimento(codProcSC, /^\d{6}$/.test(comp) ? comp : null, props.cnes).then((combos) => {
       if (servClassProcRef.current !== codProcSC) return;
       const vazio = !dig(s.servico) && !dig(s.classProc);
       if (!vazio && !eraTroca) return;
@@ -312,7 +347,7 @@ function SeqCardV4(props: {
       else if (combos.length > 1) setServClassOpcoes(combos);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [codProcSC]);
+  }, [codProcSC, props.cnes]);
   const [nomeCid, setNomeCid] = useState<string | null>(null);
   useEffect(() => {
     const c = dig(s.cid).trim();
