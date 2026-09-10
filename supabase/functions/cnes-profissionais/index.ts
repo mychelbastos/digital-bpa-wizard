@@ -64,6 +64,31 @@ function parseCbos(xml: string): { codigo: string; descricao: string }[] {
   return cods.map((codigo, i) => ({ codigo, descricao: descs[i] ?? "" }));
 }
 
+// Serviços especializados do estabelecimento: pares serviço(3) × classificação(3). O layout
+// exato do SCNES ainda será confirmado (usar o flag debug); esta é uma extração tolerante:
+// para cada bloco <...Servico>...</...Servico>, pega o código do serviço e cada classificação.
+function parseServicos(xml: string): { servico: string; classificacao: string }[] {
+  const out: { servico: string; classificacao: string }[] = [];
+  const seen = new Set<string>();
+  const push = (s?: string, c?: string) => {
+    if (!s || !c) return;
+    const sv = s.replace(/\D/g, "").padStart(3, "0").slice(-3);
+    const cl = c.replace(/\D/g, "").padStart(3, "0").slice(-3);
+    const k = `${sv}|${cl}`;
+    if (sv !== "000" && cl !== "000" && !seen.has(k)) { seen.add(k); out.push({ servico: sv, classificacao: cl }); }
+  };
+  for (const b of xml.match(/<[a-zA-Z0-9]*:?Servico\b[\s\S]*?<\/[a-zA-Z0-9]*:?Servico>/g) ?? []) {
+    const serv = b.match(/[cC]odigo(?:Servico)?[^>]*>\s*([0-9]{1,3})\s*</)?.[1];
+    const cls = [...b.matchAll(/[cC]lassificacao[\s\S]{0,120}?[cC]odigo[^>]*>\s*([0-9]{1,3})\s*</g)].map((m) => m[1]);
+    if (cls.length) for (const c of cls) push(serv, c);
+    else { // serviço sem classificação aninhada explícita: tenta codigoClassificacao no mesmo bloco
+      const c2 = b.match(/[cC]odigoClassificacao[^>]*>\s*([0-9]{1,3})\s*</)?.[1];
+      push(serv, c2);
+    }
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -78,6 +103,37 @@ Deno.serve(async (req) => {
     if (!auth?.user) return json({ erro: "Sem autenticação." }, 401);
 
     const body = await req.json().catch(() => ({}));
+
+    // ===== Modo SERVIÇOS ESPECIALIZADOS do estabelecimento (CNES) =====
+    // Busca no SCNES os serviços (serviço × classificação) cadastrados no estabelecimento e
+    // grava no cache `estabelecimento_servicos` (substitui o retrato). Usado para cruzar com o
+    // SIGTAP na digitação. `debug:true` devolve um trecho do XML cru (p/ calibrar o parser).
+    if (body.servicos === true && body.cnes) {
+      const cnes = String(body.cnes);
+      if (!/^[0-9]{7}$/.test(cnes)) return json({ erro: "CNES inválido (7 dígitos)" }, 400);
+      const estabUrl = SOAP_URL.replace("ProfissionalSaudeService", "EstabelecimentoSaudeService");
+      const env = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:est="http://servicos.saude.gov.br/cnes/v1r0/estabelecimentosaudeservice" xmlns:fil="http://servicos.saude.gov.br/wsdl/mensageria/v1r0/filtropesquisaestabelecimentosaude" xmlns:cod="http://servicos.saude.gov.br/schema/cnes/v1r0/codigocnes">
+<soapenv:Header>${wsseHeader("", "soapenv:")}</soapenv:Header>
+<soapenv:Body><est:requestConsultarEstabelecimentoSaude><fil:FiltroPesquisaEstabelecimentoSaude><cod:CodigoCNES><cod:codigo>${cnes}</cod:codigo></cod:CodigoCNES></fil:FiltroPesquisaEstabelecimentoSaude></est:requestConsultarEstabelecimentoSaude></soapenv:Body></soapenv:Envelope>`;
+      let xml = "";
+      try {
+        const resp = await fetch(estabUrl, { method: "POST", headers: { "Content-Type": "text/xml;charset=UTF-8", "SOAPAction": '""' }, body: env });
+        xml = await resp.text();
+      } catch (e) {
+        return json({ erro: `rede: ${String(e)}` }, 502);
+      }
+      if (body.debug === true) return json({ status: "debug", tamanho: xml.length, trecho: xml.slice(0, 3500) });
+      const pares = parseServicos(xml);
+      if (pares.length) {
+        const ts = new Date().toISOString();
+        const rows = pares.map((p) => ({ cnes, servico: p.servico, classificacao: p.classificacao, ambiente: AMBIENTE, atualizado_em: ts }));
+        const { error } = await supabase.from("estabelecimento_servicos").upsert(rows, { onConflict: "cnes,servico,classificacao" });
+        if (error) return json({ erro: `upsert: ${error.message}`, total: pares.length }, 500);
+        await supabase.from("estabelecimento_servicos").delete().eq("cnes", cnes).neq("atualizado_em", ts);
+      }
+      return json({ fonte: "api", total: pares.length });
+    }
 
     // ===== Modo CBO do vínculo (CNS + CNES) =====
     if (body.cns && body.cnes) {
