@@ -125,6 +125,13 @@ Deno.serve(async (req) => {
       const rows = profs.map((p) => ({ cnes, cns: p.cns, nome: p.nome, ambiente: AMBIENTE, atualizado_em: new Date().toISOString() }));
       const { error } = await supabase.from("profissionais").upsert(rows, { onConflict: "cnes,cns" });
       if (error) return json({ erro: `upsert: ${error.message}`, total: profs.length }, 500);
+      // SUBSTITUI O RETRATO: remove desta unidade quem NÃO está mais na lista atual do CNES
+      // (ex.: profissional que saiu numa competência seguinte). Assim ele deixa de aparecer na
+      // seleção e não produz mais; a série histórica fica intacta (a ficha guarda o nome). Só
+      // roda quando veio uma lista de verdade (profs.length > 0), nunca zera por falha da API.
+      const vigentes = profs.map((p) => `"${p.cns}"`).join(",");
+      const { error: errDel } = await supabase.from("profissionais").delete().eq("cnes", cnes).not("cns", "in", `(${vigentes})`);
+      if (errDel) return json({ erro: `limpeza: ${errDel.message}`, total: profs.length }, 500);
     }
     return json({ fonte: "api", total: profs.length });
   } catch (e) {
