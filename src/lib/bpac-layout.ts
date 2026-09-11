@@ -99,3 +99,23 @@ export function emptyRow(): RowData {
     quantidade: Array(5).fill(""),
   };
 }
+
+// Reordena as sequências por IDADE crescente (usado ao salvar o BPA-C), movendo a LINHA
+// INTEIRA junto (procedimento, CBO, idade, quantidade — não só a coluna de idade). Linhas
+// preenchidas (com procedimento) vêm primeiro, ordenadas pela idade; entre elas, as sem
+// idade vão por último (idade tratada como +∞); as linhas vazias ficam no fim. Empate
+// mantém a ordem original (ordenação estável) e o total de linhas é preservado.
+export function ordenarRowsPorIdade(rows: RowData[]): RowData[] {
+  const preenchida = (r: RowData) => r.procedimento.join("").replace(/\D/g, "") !== "";
+  const idadeNum = (r: RowData) => {
+    const s = r.idade.join("").replace(/\D/g, "");
+    return s === "" ? Number.POSITIVE_INFINITY : Number(s);
+  };
+  const usadas = rows
+    .map((r, i) => ({ r, i }))
+    .filter((x) => preenchida(x.r))
+    .sort((a, b) => idadeNum(a.r) - idadeNum(b.r) || a.i - b.i)
+    .map((x) => x.r);
+  const vazias = rows.filter((r) => !preenchida(r));
+  return [...usadas, ...vazias];
+}

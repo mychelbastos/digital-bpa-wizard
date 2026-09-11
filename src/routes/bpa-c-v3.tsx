@@ -33,7 +33,7 @@ import {
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS, CBO_LEFTS,
   qtdBoxes, TOTAL_TOP, TOTAL_HEIGHT, RESP_CONFIRM,
   RESP_DATA_TOP, RESP_DATA_H, RESP_DATA_DIA, RESP_DATA_MES, RESP_DATA_ANO,
-  emptyRow, type RowData,
+  emptyRow, ordenarRowsPorIdade, type RowData,
 } from "@/lib/bpac-v3-layout";
 
 export const Route = createFileRoute("/bpa-c-v3")({
@@ -474,7 +474,10 @@ function BpaCV3() {
   const gravarNaNuvem = async (titulo: string) => {
     if (competenciaFuturaBloqueia()) return;
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
-    const id = await salvarFicha(idAlvo, titulo, competencia(), state, metaFicha());
+    // Reordena as sequências por idade crescente (linha inteira junto) e reflete na tela.
+    const stateOrd = { ...state, rows: ordenarRowsPorIdade(state.rows) };
+    setState(stateOrd);
+    const id = await salvarFicha(idAlvo, titulo, competencia(), stateOrd, metaFicha());
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
     persistFicha(id, titulo);
     setSalvarOpen(false);
@@ -494,7 +497,10 @@ function BpaCV3() {
   const gravarNaFichaAtual = async () => {
     if (competenciaFuturaBloqueia()) return;
     setSalvandoDireto(true);
-    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current!, competencia(), state, metaFicha());
+    // Reordena as sequências por idade crescente (linha inteira junto) e reflete na tela.
+    const stateOrd = { ...state, rows: ordenarRowsPorIdade(state.rows) };
+    setState(stateOrd);
+    const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current!, competencia(), stateOrd, metaFicha());
     setSalvandoDireto(false);
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
     persistFicha(id, fichaTituloRef.current!);
