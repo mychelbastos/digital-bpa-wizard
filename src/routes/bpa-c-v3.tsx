@@ -10,6 +10,8 @@ import { NomeProfissionalAutocomplete } from "@/components/bpa-c-v3/NomeProfissi
 import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
+import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
+import { ufSiglaDeIbge } from "@/lib/bpa-i-v2/municipios-ibge";
 import { salvarFicha, carregarFicha, competenciaPosteriorAoMovimento } from "@/lib/bpa-i-v2/fichas";
 import { movimentoFaturamento } from "@/lib/faturamento";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
@@ -345,6 +347,25 @@ function BpaCV3() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.cnes, state.mes, state.ano, state.profNome, hydrated]);
+
+  // UF da organização (prefeitura): derivada do código IBGE do município — os 2 primeiros
+  // dígitos são o código da UF (2927200 -> 29 -> "BA"). Carrega uma vez, do espelho local
+  // (síncrono) e depois confirma com a org (async). A UF do estabelecimento é a mesma da
+  // prefeitura à qual o CNES pertence, então a org é a fonte confiável.
+  const [orgUf, setOrgUf] = useState("");
+  useEffect(() => {
+    setOrgUf(ufSiglaDeIbge(loadConfig().municipioIbge));
+    sincronizarConfigDaOrg().then((cfg) => { if (cfg) setOrgUf(ufSiglaDeIbge(cfg.municipioIbge)); });
+  }, []);
+
+  // Auto-preenche a UF quando o campo está VAZIO (ficha nova ou após "nova ficha"). NUNCA
+  // sobrescreve uma UF já preenchida (ficha salva/importada ou digitada à mão); degrada em
+  // silêncio quando a UF da org é desconhecida (orgUf vazio).
+  useEffect(() => {
+    if (!hydrated || !orgUf) return;
+    if (state.uf.join("").trim()) return;
+    setState((p) => (p.uf.join("").trim() ? p : { ...p, uf: orgUf.split("") }));
+  }, [hydrated, orgUf, state.uf]);
 
   const set = <K extends keyof State>(key: K, value: State[K]) =>
     setState((prev) => ({ ...prev, [key]: value }));

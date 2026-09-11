@@ -5577,3 +5577,22 @@ export const MUNICIPIOS_IBGE: ComboOption[] = [
   { code: "1505106", label: "Óbidos - PA" },
   { code: "3533809", label: "Óleo - SP" },
 ];
+
+// Mapa oficial IBGE: os 2 primeiros dígitos do código do município são o código da UF.
+// (11=RO, 29=BA, 35=SP, 53=DF, etc.) Usado p/ derivar a SIGLA da UF a partir do município
+// do estabelecimento/organização — ex.: 2927200 (Ruy Barbosa) -> 29 -> "BA".
+const UF_POR_CODIGO: Record<string, string> = {
+  "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP", "17": "TO",
+  "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB", "26": "PE", "27": "AL", "28": "SE", "29": "BA",
+  "31": "MG", "32": "ES", "33": "RJ", "35": "SP",
+  "41": "PR", "42": "SC", "43": "RS",
+  "50": "MS", "51": "MT", "52": "GO", "53": "DF",
+};
+
+// Sigla da UF (2 letras) a partir de um código IBGE de município (7 díg.) ou do próprio
+// código de UF (2 díg.). Retorna "" quando o código é vazio/desconhecido — o chamador
+// então NÃO auto-preenche (degrada sem quebrar).
+export function ufSiglaDeIbge(ibge: string | null | undefined): string {
+  const cod2 = (ibge || "").replace(/\D/g, "").slice(0, 2);
+  return UF_POR_CODIGO[cod2] ?? "";
+}
