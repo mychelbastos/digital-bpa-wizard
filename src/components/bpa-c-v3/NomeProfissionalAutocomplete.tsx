@@ -9,13 +9,16 @@ interface Props {
   cnes: string; // CNES do estabelecimento (7 díg.) — escopo da busca no cache
   nome: string;
   onChangeNome: (nome: string) => void;
+  // Escolher uma sugestão entrega o profissional inteiro (com CNS) — usado p/ resolver o
+  // CBO do vínculo e pré-preencher a 1ª sequência. Opcional (retrocompatível).
+  onPick?: (prof: ProfissionalCache) => void;
 }
 
 // Campo NOME DO PROFISSIONAL (BPA-C v3) com autocomplete a partir do cache `profissionais`
 // do estabelecimento (mesma fonte do BPA-I). Texto livre em MAIÚSCULAS — se a base não
 // tiver o profissional, digita normalmente (fallback gracioso). É controle interno do
 // painel: NÃO é exportado ao .txt / BPA Magnético.
-export function NomeProfissionalAutocomplete({ top, left, width, height, cnes, nome, onChangeNome }: Props) {
+export function NomeProfissionalAutocomplete({ top, left, width, height, cnes, nome, onChangeNome, onPick }: Props) {
   const [sugs, setSugs] = useState<ProfissionalCache[]>([]);
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -44,6 +47,7 @@ export function NomeProfissionalAutocomplete({ top, left, width, height, cnes, n
 
   const pick = (p: ProfissionalCache) => {
     onChangeNome(p.nome.toUpperCase());
+    onPick?.(p);
     setOpen(false);
     setSugs([]);
   };

@@ -9,7 +9,8 @@ import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/Estabelecimen
 import { NomeProfissionalAutocomplete } from "@/components/bpa-c-v3/NomeProfissionalAutocomplete";
 import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
-import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
+import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
+import { cells } from "@/lib/bpa-i-v3/engine";
 import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { ufSiglaDeIbge } from "@/lib/bpa-i-v2/municipios-ibge";
 import { salvarFicha, carregarFicha, competenciaPosteriorAoMovimento } from "@/lib/bpa-i-v2/fichas";
@@ -29,7 +30,7 @@ import { Snowflake, GitBranch, Undo2, Files } from "lucide-react";
 import {
   CNES_BOXES, CNES_TOP, NAME_FIELD, UF_BOXES, UF_TOP, MES_BOXES, ANO_BOXES, FOLHA_BOXES,
   NOME_PROFISSIONAL_FIELD,
-  HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS,
+  HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS, CBO_LEFTS,
   qtdBoxes, TOTAL_TOP, TOTAL_HEIGHT, RESP_CONFIRM,
   RESP_DATA_TOP, RESP_DATA_H, RESP_DATA_DIA, RESP_DATA_MES, RESP_DATA_ANO,
   emptyRow, type RowData,
@@ -357,6 +358,10 @@ function BpaCV3() {
     setOrgUf(ufSiglaDeIbge(loadConfig().municipioIbge));
     sincronizarConfigDaOrg().then((cfg) => { if (cfg) setOrgUf(ufSiglaDeIbge(cfg.municipioIbge)); });
   }, []);
+
+  // CBO do profissional: quando ele tem MAIS DE UM CBO no vínculo, guarda as opções p/ o
+  // seletor abaixo do CBO da 1ª linha. 1 CBO é preenchido direto (sem seletor). Ver onPick.
+  const [cboOpcoes, setCboOpcoes] = useState<CboVinculo[]>([]);
 
   // Auto-preenche a UF quando o campo está VAZIO (ficha nova ou após "nova ficha"). NUNCA
   // sobrescreve uma UF já preenchida (ficha salva/importada ou digitada à mão); degrada em
@@ -769,6 +774,16 @@ function BpaCV3() {
             cnes={cnesEstab}
             nome={state.profNome}
             onChangeNome={(v) => set("profNome", v)}
+            onPick={(p) => {
+              // Escolher o profissional resolve o CBO do vínculo NESTE estabelecimento
+              // (CNS + CNES) e o preenche AUTOMATICAMENTE só na 1ª sequência (linha 1).
+              setCboOpcoes([]);
+              buscarCbosVinculo(p.cns, cnesEstab).then((cbos) => {
+                if (cbos.length === 1) updateRow(0, "cbo", cells(cbos[0].codigo, 6));
+                else if (cbos.length > 1) setCboOpcoes(cbos); // mostra o seletor p/ escolher
+                // 0 -> deixa em branco p/ digitação manual
+              });
+            }}
           />
           {/* Folha: automática (sequencial por profissional/unidade + competência) e editável —
               é organizacional (não vai para o .txt); dá pra ajustar à mão se precisar. */}
@@ -784,6 +799,27 @@ function BpaCV3() {
               onUpdate={(field, vals) => updateRow(i, field, vals)}
               onValidacao={onValidacaoLinha} />
           ))}
+
+          {/* Seletor de CBO: aparece quando o profissional tem MAIS DE UM CBO no vínculo.
+              Escolher preenche o CBO da 1ª linha. Posicionado abaixo do CBO da linha 1. */}
+          {cboOpcoes.length > 1 && (
+            <div className="absolute z-[70]"
+              style={{ top: `calc(${ROW_TOPS[0] + ROW_HEIGHTS[0]}% + 2px)`, left: `${CBO_LEFTS[0]}%` }}>
+              <ul className="min-w-[320px] overflow-hidden rounded-md border border-amber-300 bg-white text-sm shadow-lg">
+                <li className="flex items-center justify-between bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+                  Este profissional tem mais de um CBO aqui — escolha:
+                  <button type="button" className="ml-2 text-amber-700 hover:underline" onMouseDown={(e) => { e.preventDefault(); setCboOpcoes([]); }}>fechar</button>
+                </li>
+                {cboOpcoes.map((c) => (
+                  <li key={c.codigo}
+                    className="cursor-pointer px-3 py-1.5 hover:bg-primary/10"
+                    onMouseDown={(e) => { e.preventDefault(); updateRow(0, "cbo", cells(c.codigo, 6)); setCboOpcoes([]); }}>
+                    <span className="font-mono">{c.codigo}</span>{c.descricao ? ` — ${c.descricao}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Total — calculado automaticamente (somente leitura) */}
           <DigitBoxes id="total" top={TOTAL_TOP} height={TOTAL_HEIGHT} boxes={qtdBoxes}
