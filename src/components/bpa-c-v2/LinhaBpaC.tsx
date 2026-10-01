@@ -21,12 +21,15 @@ interface Props {
   // Reporta ao pai os motivos de erro desta linha (crivo SIGTAP) — o pai agrega p/
   // acender o resumo e bloquear a geração enquanto houver campo em vermelho.
   onValidacao?: (i: number, motivos: string[]) => void;
+  // Aviso NÃO-bloqueante do CBO (vem do pai, que conhece o vínculo do profissional no CNES):
+  // o CBO está completo e compatível no SIGTAP, mas não consta no vínculo. Destaca em âmbar.
+  cboAviso?: string;
 }
 
 // Uma linha do BPA-C com o crivo do SIGTAP: Procedimento (existe + nome no balão),
 // Idade (faixa etária), Quantidade (máximo) e CBO (compatível com o procedimento).
 // Extraído p/ chamar o hook de validação 1x por linha.
-export function LinhaBpaC({ i, top, height, row, prevRow, competencia, duplicada, dupDeLinha, onUpdate, onValidacao }: Props) {
+export function LinhaBpaC({ i, top, height, row, prevRow, competencia, duplicada, dupDeLinha, onUpdate, onValidacao, cboAviso }: Props) {
   const v = useValidacaoLinhaBpaC(row, competencia);
   const dupTitle = duplicada ? `Mesma idade e procedimento da Linha ${dupDeLinha} — some as quantidades numa linha só.` : undefined;
   useEffect(() => {
@@ -49,7 +52,8 @@ export function LinhaBpaC({ i, top, height, row, prevRow, competencia, duplicada
       <CboField id={`c-${i}`} top={top} height={height} boxes={cboBoxes}
         values={row.cbo} onChange={(vv) => onUpdate("cbo", vv)}
         onRepeat={repetirCbo}
-        invalid={v.cboInvalido} title={v.cboMotivo} />
+        invalid={v.cboInvalido || v.cboIncompleto} title={v.cboMotivo ?? v.cboIncompletoMotivo}
+        warn={Boolean(cboAviso)} warnTitle={cboAviso} />
       <DigitBoxes id={`i-${i}`} top={top} height={height} boxes={idadeBoxes}
         values={row.idade} onChange={(vv) => onUpdate("idade", vv)}
         rightAlign

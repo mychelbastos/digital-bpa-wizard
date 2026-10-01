@@ -9,7 +9,7 @@ import { EstabelecimentoAutocomplete } from "@/components/bpa-i-v2/Estabelecimen
 import { NomeProfissionalAutocomplete } from "@/components/bpa-c-v3/NomeProfissionalAutocomplete";
 import { LinhaBpaC } from "@/components/bpa-c-v2/LinhaBpaC";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
-import { sincronizarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
+import { sincronizarProfissionais, buscarProfissionais, buscarCbosVinculo, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { cells } from "@/lib/bpa-i-v3/engine";
 import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { ufSiglaDeIbge } from "@/lib/bpa-i-v2/municipios-ibge";
@@ -33,7 +33,7 @@ import {
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS, CBO_LEFTS,
   qtdBoxes, TOTAL_TOP, TOTAL_HEIGHT, RESP_CONFIRM,
   RESP_DATA_TOP, RESP_DATA_H, RESP_DATA_DIA, RESP_DATA_MES, RESP_DATA_ANO,
-  emptyRow, ordenarRowsPorIdade, type RowData,
+  emptyRow, ordenarRowsPorIdade, cboIncompletoNaLinha, type RowData,
 } from "@/lib/bpac-v3-layout";
 
 export const Route = createFileRoute("/bpa-c-v3")({
@@ -363,6 +363,41 @@ function BpaCV3() {
   // seletor abaixo do CBO da 1ª linha. 1 CBO é preenchido direto (sem seletor). Ver onPick.
   const [cboOpcoes, setCboOpcoes] = useState<CboVinculo[]>([]);
 
+  // CBOs OFICIAIS do vínculo do profissional da folha NAQUELE CNES (p/ o AVISO não-bloqueante
+  // de "CBO não cadastrado no CNES"). null = ainda não resolvido/indisponível (crivo não roda,
+  // fail-open p/ não dar falso positivo quando o SCNES não responde). Resolve o CNS pelo nome
+  // no cache do estabelecimento (cobre nome escolhido, digitado à mão ou de ficha carregada) e
+  // busca os CBOs do vínculo (CNS+CNES). É só p/ validação — NÃO é salvo na ficha.
+  const [cbosVinculoProf, setCbosVinculoProf] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    const nome = state.profNome.trim();
+    if (!/^[0-9]{7}$/.test(cnesEstab) || nome.length < 3) { setCbosVinculoProf(null); return; }
+    let cancel = false;
+    const t = setTimeout(async () => {
+      const profs = await buscarProfissionais(cnesEstab, nome);
+      const match = profs.find((p) => p.nome.trim().toUpperCase() === nome.toUpperCase()) ?? (profs.length === 1 ? profs[0] : null);
+      if (!match) { if (!cancel) setCbosVinculoProf(null); return; }
+      const cbos = await buscarCbosVinculo(match.cns, cnesEstab);
+      if (!cancel) setCbosVinculoProf(cbos.map((c) => c.codigo.replace(/\D/g, "")));
+    }, 450);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [cnesEstab, state.profNome, hydrated]);
+
+  // Aviso (NÃO bloqueia) por linha: CBO completo (6 díg.) que não consta entre os CBOs do
+  // vínculo do profissional naquele CNES. Só roda quando temos a lista oficial não-vazia.
+  const cboVinculoSet = cbosVinculoProf && cbosVinculoProf.length ? new Set(cbosVinculoProf) : null;
+  const avisoCboLinha = (i: number): string | undefined => {
+    if (!cboVinculoSet) return undefined;
+    const cbo = (state.rows[i].cbo ?? []).join("").replace(/\D/g, "");
+    if (cbo.length !== 6 || cboVinculoSet.has(cbo)) return undefined;
+    return `CBO ${cbo} não está cadastrado para ${state.profNome.trim() || "este profissional"} neste CNES. CBOs do vínculo: ${[...cboVinculoSet].join(", ")}.`;
+  };
+  const avisosCnes = state.rows
+    .map((_, i) => ({ i, msg: avisoCboLinha(i) }))
+    .filter((x) => x.msg)
+    .map((x) => `Linha ${x.i + 1}: ${x.msg}`);
+
   // Auto-preenche a UF quando o campo está VAZIO (ficha nova ou após "nova ficha"). NUNCA
   // sobrescreve uma UF já preenchida (ficha salva/importada ou digitada à mão); degrada em
   // silêncio quando a UF da org é desconhecida (orgUf vazio).
@@ -471,8 +506,22 @@ function BpaCV3() {
     }
     return false;
   };
+  // Bloqueia salvar/gravar quando alguma sequência EM USO tem o CBO incompleto: CBO com 1–5
+  // dígitos, ou procedimento completo sem os 6 dígitos do CBO. Sem isso, a ficha ia para a
+  // nuvem (e para o arquivo) com o CBO faltando um número — o crivo SIGTAP não pegava porque
+  // só rodava com o CBO já completo.
+  const cboIncompletoBloqueia = (): boolean => {
+    const linhas = state.rows
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => cboIncompletoNaLinha(r))
+      .map(({ i }) => i + 1);
+    if (linhas.length === 0) return false;
+    const plural = linhas.length > 1;
+    toast.error(`CBO incompleto na${plural ? "s" : ""} sequência${plural ? "s" : ""} ${linhas.join(", ")} — o CBO precisa ter 6 dígitos. Complete antes de salvar.`);
+    return true;
+  };
   const gravarNaNuvem = async (titulo: string) => {
-    if (competenciaFuturaBloqueia()) return;
+    if (competenciaFuturaBloqueia() || cboIncompletoBloqueia()) return;
     const idAlvo = salvarComoNovo ? null : fichaIdRef.current;
     // Reordena as sequências por idade crescente (linha inteira junto) e reflete na tela.
     const stateOrd = { ...state, rows: ordenarRowsPorIdade(state.rows) };
@@ -486,6 +535,7 @@ function BpaCV3() {
     toast.success(idAlvo ? "Alterações salvas na nuvem." : `Ficha “${titulo}” salva na nuvem.`);
   };
   const salvarNaNuvem = async (titulo: string) => {
+    if (cboIncompletoBloqueia()) return;
     const dup = await checarDuplicidade(salvarComoNovo ? null : fichaIdRef.current);
     if (dup) {
       setSalvarOpen(false);
@@ -495,7 +545,7 @@ function BpaCV3() {
     await gravarNaNuvem(titulo);
   };
   const gravarNaFichaAtual = async () => {
-    if (competenciaFuturaBloqueia()) return;
+    if (competenciaFuturaBloqueia() || cboIncompletoBloqueia()) return;
     setSalvandoDireto(true);
     // Reordena as sequências por idade crescente (linha inteira junto) e reflete na tela.
     const stateOrd = { ...state, rows: ordenarRowsPorIdade(state.rows) };
@@ -510,12 +560,13 @@ function BpaCV3() {
   const salvarClique = async () => {
     if (congelada) { toast.error("Ficha congelada (produção fechada). Reabra a produção ou retifique para alterar."); return; }
     if (exigirConfirmacao()) return;
+    if (cboIncompletoBloqueia()) return;
     if (!fichaIdRef.current || !fichaTituloRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
     const dup = await checarDuplicidade(fichaIdRef.current);
     if (dup) { setDupModal({ dup, prosseguir: () => { setDupModal(null); void gravarNaFichaAtual(); } }); return; }
     await gravarNaFichaAtual();
   };
-  const salvarComoClique = () => { if (exigirConfirmacao()) return; setSalvarComoNovo(true); setSalvarOpen(true); setSalvarMenuOpen(false); };
+  const salvarComoClique = () => { if (exigirConfirmacao()) return; if (cboIncompletoBloqueia()) return; setSalvarComoNovo(true); setSalvarOpen(true); setSalvarMenuOpen(false); };
   // "Gerar PDF" interativo — exige a confirmação; o auto-print (?print=1) não passa por aqui.
   const gerarPdfClique = () => { if (exigirConfirmacao()) return; void exportPdf(); };
   const carregarFichaSalva = async (id: string, titulo?: string) => {
@@ -722,6 +773,18 @@ function BpaCV3() {
             </div>
           </div>
         )}
+        {avisosCnes.length > 0 && (
+          <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+            <div className="mx-auto max-w-[1100px]">
+              <p className="font-semibold">
+                ⚠ {avisosCnes.length === 1 ? "1 aviso de CBO" : `${avisosCnes.length} avisos de CBO`} — CBO fora do vínculo do profissional no CNES. Não impede salvar, mas confira:
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {avisosCnes.map((m, idx) => <li key={idx}>{m}</li>)}
+              </ul>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="mx-auto mt-4 max-w-[1100px] px-4">
@@ -803,7 +866,8 @@ function BpaCV3() {
               duplicada={duplicadaDe[i] !== undefined}
               dupDeLinha={duplicadaDe[i] !== undefined ? duplicadaDe[i] + 1 : undefined}
               onUpdate={(field, vals) => updateRow(i, field, vals)}
-              onValidacao={onValidacaoLinha} />
+              onValidacao={onValidacaoLinha}
+              cboAviso={avisoCboLinha(i)} />
           ))}
 
           {/* Seletor de CBO: aparece quando o profissional tem MAIS DE UM CBO no vínculo.

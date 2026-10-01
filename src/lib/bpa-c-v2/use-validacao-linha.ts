@@ -6,7 +6,7 @@ import {
   cboValidoParaProcedimento,
   type ProcedimentoSigtap,
 } from "@/lib/bpa-i-v2/procedimentos-sigtap";
-import type { RowData } from "@/lib/bpac-layout";
+import { cboIncompletoNaLinha, type RowData } from "@/lib/bpac-layout";
 
 export interface ValidacaoLinhaBpaC {
   proc: ProcedimentoSigtap | null;
@@ -18,6 +18,8 @@ export interface ValidacaoLinhaBpaC {
   qtdeMotivo?: string;
   cboInvalido: boolean;
   cboMotivo?: string;
+  cboIncompleto: boolean;
+  cboIncompletoMotivo?: string;
   motivos: string[];
 }
 
@@ -78,6 +80,14 @@ export function useValidacaoLinhaBpaC(row: RowData, competencia: string | null):
   }, [procCompleto, codProc, cbo, competencia]);
   const cboInvalido = cboValido === false;
 
+  // CBO incompleto: começou a digitar mas não completou os 6 dígitos, OU o procedimento
+  // está completo e o CBO não tem os 6 dígitos. Diferente de cboInvalido (6 dígitos porém
+  // incompatível com o procedimento): aqui o campo simplesmente não está completo — não pode
+  // ser salvo nem ir para o arquivo. É por isso que o crivo antigo o deixava passar: a
+  // checagem SIGTAP só rodava com cbo.length === 6.
+  const cboLen = cbo.replace(/\D/g, "").length;
+  const cboIncompleto = cboIncompletoNaLinha(row);
+
   const idadeMotivo = idadeInvalida
     ? `Idade (${idadeAnos} ${idadeAnos === 1 ? "ano" : "anos"}) fora da faixa permitida para este procedimento` +
       (proc!.idadeMinimaMeses !== 9999 || proc!.idadeMaximaMeses !== 9999
@@ -88,9 +98,14 @@ export function useValidacaoLinhaBpaC(row: RowData, competencia: string | null):
     ? `Quantidade (${qtde}) maior que o máximo permitido para este procedimento (${proc!.qtMaximaExecucao}).`
     : undefined;
   const cboMotivo = cboInvalido ? `CBO ${cbo} não é compatível com este procedimento (SIGTAP).` : undefined;
+  const cboIncompletoMotivo = cboIncompleto
+    ? (cboLen === 0
+        ? "CBO não preenchido — informe o CBO (6 dígitos) do procedimento."
+        : `CBO incompleto (${cboLen} de 6 dígitos) — complete o CBO.`)
+    : undefined;
   const naoEncontradoMotivo = naoEncontrado ? "Código não encontrado na tabela oficial do SIGTAP." : undefined;
 
-  const motivos = [naoEncontradoMotivo, idadeMotivo, qtdeMotivo, cboMotivo].filter((m): m is string => Boolean(m));
+  const motivos = [naoEncontradoMotivo, idadeMotivo, qtdeMotivo, cboMotivo, cboIncompletoMotivo].filter((m): m is string => Boolean(m));
 
   return {
     proc,
@@ -102,6 +117,8 @@ export function useValidacaoLinhaBpaC(row: RowData, competencia: string | null):
     qtdeMotivo,
     cboInvalido,
     cboMotivo,
+    cboIncompleto,
+    cboIncompletoMotivo,
     motivos,
   };
 }

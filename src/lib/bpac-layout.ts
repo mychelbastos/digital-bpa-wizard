@@ -119,3 +119,14 @@ export function ordenarRowsPorIdade(rows: RowData[]): RowData[] {
   const vazias = rows.filter((r) => !preenchida(r));
   return [...usadas, ...vazias];
 }
+
+// CBO incompleto numa sequência do BPA-C: o CBO foi começado mas não tem os 6 dígitos (1 a 5),
+// OU o procedimento está completo (10 dígitos) e o CBO não está com os 6 dígitos. Uma linha
+// totalmente vazia (sem procedimento e sem CBO) NÃO é considerada incompleta. Usado tanto pelo
+// crivo (acende o campo em vermelho) quanto pelo bloqueio de salvar — o crivo SIGTAP sozinho
+// não pega isto, porque a checagem de CBO só roda quando o CBO já tem os 6 dígitos.
+export function cboIncompletoNaLinha(r: RowData): boolean {
+  const proc = r.procedimento.join("").replace(/\D/g, "");
+  const cbo = r.cbo.join("").replace(/\D/g, "");
+  return (cbo.length >= 1 && cbo.length <= 5) || (proc.length === 10 && cbo.length !== 6);
+}

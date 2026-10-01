@@ -18,12 +18,16 @@ interface Props {
   onRepeat?: () => void;
   invalid?: boolean;
   title?: string;
+  // Aviso (não-bloqueante): destaca em âmbar, sem impedir salvar/gerar. Usado p/ o CBO que
+  // está completo e compatível no SIGTAP, mas não consta no vínculo do profissional no CNES.
+  warn?: boolean;
+  warnTitle?: string;
 }
 
 // CBO (BPA-I v3): campo de dígitos com autocomplete por histórico (igual ao
 // HistoricoField) MAIS um balão com o nome/descrição do CBO quando o código está
 // completo — mesmo padrão do Código do Procedimento. O balão some do PDF.
-export function CboField({ id, top, height, boxes, values, onChange, clearable, onRepeat, invalid, title }: Props) {
+export function CboField({ id, top, height, boxes, values, onChange, clearable, onRepeat, invalid, title, warn, warnTitle }: Props) {
   const code = values.join("");
   const completo = code.length === boxes.length;
   const [sugs, setSugs] = useState<SugestaoHistorico[]>([]);
@@ -86,7 +90,8 @@ export function CboField({ id, top, height, boxes, values, onChange, clearable, 
         clearable={clearable}
         onRepeat={onRepeat}
         invalid={invalid}
-        title={title}
+        warn={warn}
+        title={invalid ? title : warn ? warnTitle : title}
         compact
       />
       {openSugs && (
