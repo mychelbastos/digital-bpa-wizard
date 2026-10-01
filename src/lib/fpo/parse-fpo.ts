@@ -21,6 +21,7 @@ export interface FpoLinhaParsed {
   descricao: string;
   qtdOrcada: number;
   valorUnitario: number;
+  codApuracao?: string; // "21"/"24"/"34" — só vem do .IMP (financiamento+apuração); .xls não tem
 }
 
 export interface FpoArquivoParsed {

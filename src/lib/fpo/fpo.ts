@@ -28,6 +28,7 @@ export interface FpoItemResolvido {
   qtdOrcada: number;
   valorUnitario: number;
   resolvido: boolean;
+  codApuracao?: string;        // "21"/"24"/"34" — só do .IMP; usado na exportação p/ o SIA
 }
 
 // Junta o parse com a resolução dos códigos, pronto para gravar/pré-visualizar.
@@ -42,6 +43,7 @@ export async function resolverLinhasFpo(linhas: FpoLinhaParsed[]): Promise<FpoIt
       qtdOrcada: l.qtdOrcada,
       valorUnitario: l.valorUnitario,
       resolvido: Boolean(sig),
+      codApuracao: l.codApuracao,
     };
   });
 }
@@ -50,6 +52,9 @@ export async function resolverLinhasFpo(linhas: FpoLinhaParsed[]): Promise<FpoIt
 // combinação (carga do arquivo é a fonte). Retorna quantos itens foram gravados, ou null em erro.
 export async function salvarTetosFpo(cnes: string, competencia: string, itens: FpoItemResolvido[], atualizadoPor: string | null): Promise<number | null> {
   if (!supabase || itens.length === 0) return 0;
+  // Só grava cod_apuracao quando a carga traz (import de .IMP). Import de .xls NÃO traz esse
+  // campo — então o omitimos para NÃO sobrescrever (apagar) o que já está no banco.
+  const temCod = itens.some((it) => it.codApuracao);
   const rows = itens.map((it) => ({
     cnes,
     competencia,
@@ -61,6 +66,7 @@ export async function salvarTetosFpo(cnes: string, competencia: string, itens: F
     resolvido: it.resolvido,
     atualizado_por: atualizadoPor,
     atualizado_em: new Date().toISOString(),
+    ...(temCod ? { cod_apuracao: it.codApuracao ?? null } : {}),
   }));
   const { error } = await supabase.from("fpo_teto").upsert(rows, { onConflict: "cnes,procedimento,competencia" });
   return error ? null : rows.length;
@@ -74,10 +80,11 @@ export async function definirTetoVigente(
   cnes: string,
   procedimento: string,
   competencia: string,
-  vals: { qtdOrcada: number; valorUnitario: number; codigoFpo?: string | null; descricaoFpo?: string | null; resolvido?: boolean },
+  vals: { qtdOrcada: number; valorUnitario: number; codigoFpo?: string | null; descricaoFpo?: string | null; resolvido?: boolean; codApuracao?: string | null },
   atualizadoPor: string | null,
 ): Promise<boolean> {
   if (!supabase) return false;
+  const cod = vals.codApuracao && /^[0-9]{2}$/.test(vals.codApuracao) ? vals.codApuracao : null;
   const { error } = await supabase.from("fpo_teto").upsert({
     cnes, procedimento, competencia,
     qtd_orcada: vals.qtdOrcada,
@@ -85,6 +92,7 @@ export async function definirTetoVigente(
     codigo_fpo: vals.codigoFpo ?? null,
     descricao_fpo: vals.descricaoFpo ?? null,
     resolvido: vals.resolvido ?? true,
+    cod_apuracao: cod,
     atualizado_por: atualizadoPor,
     atualizado_em: new Date().toISOString(),
   }, { onConflict: "cnes,procedimento,competencia" });
@@ -108,6 +116,7 @@ export interface FpoComparacaoRow {
   herdado: boolean;                // true quando o teto vem de competência anterior à visualizada
   qtdOrcada: number;
   valorUnitario: number;
+  codApuracao: string | null; // "21"/"24"/"34" (financiamento+apuração) — p/ export do .IMP
   produzido: number;
   saldo: number;         // qtdOrcada - produzido
   tetoRS: number;
@@ -123,7 +132,7 @@ export interface FpoComparacaoRow {
 export async function carregarComparacaoFpo(cnes: string, competencia: string): Promise<FpoComparacaoRow[]> {
   if (!supabase || !cnes || !competencia) return [];
   const [{ data: tetos }, prod] = await Promise.all([
-    supabase.from("fpo_teto").select("procedimento, competencia, qtd_orcada, valor_unitario, codigo_fpo, descricao_fpo, resolvido")
+    supabase.from("fpo_teto").select("procedimento, competencia, qtd_orcada, valor_unitario, codigo_fpo, descricao_fpo, resolvido, cod_apuracao")
       .eq("cnes", cnes).lte("competencia", competencia),
     // Pagina: a produção de um mês passa de 1.000 linhas (teto do PostgREST) e é somada
     // no cliente — truncar subnotifica o "produzido" da FPO.
@@ -139,7 +148,7 @@ export async function carregarComparacaoFpo(cnes: string, competencia: string): 
   }
 
   // Teto vigente por procedimento = a linha de maior competência ≤ X.
-  type T = { procedimento: string; competencia: string; qtd_orcada: number; valor_unitario: number; codigo_fpo: string | null; descricao_fpo: string | null; resolvido: boolean };
+  type T = { procedimento: string; competencia: string; qtd_orcada: number; valor_unitario: number; codigo_fpo: string | null; descricao_fpo: string | null; resolvido: boolean; cod_apuracao: string | null };
   const tetoPor = new Map<string, T>();
   for (const t of (tetos ?? []) as T[]) {
     const cur = tetoPor.get(t.procedimento);
@@ -166,6 +175,7 @@ export async function carregarComparacaoFpo(cnes: string, competencia: string): 
       herdado: Boolean(t && t.competencia < competencia),
       qtdOrcada,
       valorUnitario,
+      codApuracao: t?.cod_apuracao ?? null,
       produzido,
       saldo,
       tetoRS: qtdOrcada * valorUnitario,
@@ -183,6 +193,41 @@ export async function carregarComparacaoFpo(cnes: string, competencia: string): 
 // CNES em que o usuário pode EDITAR a FPO (permissão editar_fpo).
 export async function cnesEditaveisFpo(): Promise<string[]> {
   return cnesComPermissao("editar_fpo");
+}
+
+export interface FpoExportItem {
+  cnes: string;
+  codigoFpo: string;     // 9 díg. (p/ o .IMP)
+  qtdOrcada: number;
+  valorUnitario: number;
+  codApuracao: string | null;
+}
+
+// Carrega o FPO VIGENTE de uma competência (teto = última competência ≤ X por cnes+proc),
+// pronto para exportar o .IMP do SIA. Restringe aos CNES que o usuário pode editar (ou à
+// lista passada). Reporta quantos itens estão SEM nível de apuração (sairão com o padrão).
+export async function carregarFpoParaExport(competencia: string, cnesList?: string[]): Promise<{ itens: FpoExportItem[]; semApuracao: number }> {
+  if (!supabase || !competencia) return { itens: [], semApuracao: 0 };
+  const cnes = cnesList && cnesList.length ? [...new Set(cnesList.filter(Boolean))] : await cnesEditaveisFpo();
+  if (cnes.length === 0) return { itens: [], semApuracao: 0 };
+  const { data } = await supabase.from("fpo_teto")
+    .select("cnes, procedimento, competencia, qtd_orcada, valor_unitario, codigo_fpo, cod_apuracao")
+    .in("cnes", cnes).lte("competencia", competencia);
+  type T = { cnes: string; procedimento: string; competencia: string; qtd_orcada: number; valor_unitario: number; codigo_fpo: string | null; cod_apuracao: string | null };
+  const vig = new Map<string, T>();
+  for (const t of (data ?? []) as T[]) {
+    const k = `${t.cnes}|${t.procedimento}`;
+    const cur = vig.get(k);
+    if (!cur || t.competencia > cur.competencia) vig.set(k, t);
+  }
+  const itens: FpoExportItem[] = [];
+  let semApuracao = 0;
+  for (const t of vig.values()) {
+    if (!t.codigo_fpo || !/^[0-9]{9}$/.test(t.codigo_fpo) || (t.qtd_orcada ?? 0) <= 0) continue;
+    if (!t.cod_apuracao) semApuracao++;
+    itens.push({ cnes: t.cnes, codigoFpo: t.codigo_fpo, qtdOrcada: t.qtd_orcada, valorUnitario: Number(t.valor_unitario), codApuracao: t.cod_apuracao });
+  }
+  return { itens, semApuracao };
 }
 
 export interface FpoResumoUnidade {

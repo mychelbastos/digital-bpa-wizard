@@ -70,6 +70,7 @@ export function parseFpoMagnetico(texto: string): FpoMagParsed {
     const comp = d.slice(0, 6);
     const cnes = d.slice(6, 13);
     const codigoFpo = d.slice(13, 22);           // 9 díg. sem DV
+    const codApuracao = d.slice(22, 24);         // financiamento+apuração ("21"/"24"/"34")
     const qtdOrcada = parseInt(d.slice(24, 32), 10) || 0;
     const valorUnitario = (parseInt(d.slice(32, 47), 10) || 0) / 100; // centavos → reais
     const total = (parseInt(d.slice(47, 62), 10) || 0) / 100;
@@ -81,7 +82,7 @@ export function parseFpoMagnetico(texto: string): FpoMagParsed {
 
     if (!competencia) competencia = comp;
     if (!porCnes.has(cnes)) porCnes.set(cnes, []);
-    porCnes.get(cnes)!.push({ codigoFpo, descricao: "", qtdOrcada, valorUnitario });
+    porCnes.get(cnes)!.push({ codigoFpo, descricao: "", qtdOrcada, valorUnitario, codApuracao });
   }
 
   const grupos: FpoMagGrupo[] = [...porCnes.entries()].map(([cnes, linhas]) => ({

@@ -36,7 +36,7 @@ describe("parseFpoMagnetico", () => {
 
     const g1 = r.grupos.find((g) => g.cnes === "2510332")!;
     expect(g1.linhas).toHaveLength(2);
-    expect(g1.linhas[0]).toEqual({ codigoFpo: "020501001", descricao: "", qtdOrcada: 100, valorUnitario: 165 });
+    expect(g1.linhas[0]).toEqual({ codigoFpo: "020501001", descricao: "", qtdOrcada: 100, valorUnitario: 165, codApuracao: "21" });
     expect(g1.linhas[1].valorUnitario).toBeCloseTo(39.6, 2);
 
     const g2 = r.grupos.find((g) => g.cnes === "3080560")!;

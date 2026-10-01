@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2, Pencil, Plus, Search } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Save, FileDown, Trash2, Pencil, Plus, Search, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
@@ -11,8 +11,9 @@ import { parseFpoHtml, type FpoArquivoParsed } from "@/lib/fpo/parse-fpo";
 import { ehFpoMagnetico, parseFpoMagnetico } from "@/lib/fpo/parse-fpo-magnetico";
 import {
   carregarComparacaoFpo, resolverLinhasFpo, salvarTetosFpo, definirTetoVigente, excluirTetoFpo,
-  cnesEditaveisFpo, type FpoComparacaoRow, type FpoItemResolvido,
+  cnesEditaveisFpo, carregarFpoParaExport, type FpoComparacaoRow, type FpoItemResolvido,
 } from "@/lib/fpo/fpo";
+import { gerarFpoMagnetico, baixarFpoMagnetico } from "@/lib/fpo/gerar-fpo-magnetico";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { construirPdfFpo } from "@/lib/fpo/relatorio-fpo";
 import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
@@ -50,7 +51,7 @@ function FpoPage() {
   // Edição por linha: guarda o procedimento em edição e um rascunho local (texto) dos campos.
   // Nada é salvo até clicar em "Salvar" — evita gravar sem querer só por clicar/sair do campo.
   const [editando, setEditando] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ qtd: string; valor: string }>({ qtd: "", valor: "" });
+  const [draft, setDraft] = useState<{ qtd: string; valor: string; apuracao: string }>({ qtd: "", valor: "", apuracao: "" });
   const [salvando, setSalvando] = useState(false);
   const podeEditar = cnes ? editaveis.has(cnes) : false;
 
@@ -94,7 +95,7 @@ function FpoPage() {
   const abrirEdicao = (r: FpoComparacaoRow) => {
     if (!podeEditar) return;
     setEditando(r.procedimento);
-    setDraft({ qtd: String(r.qtdOrcada), valor: String(r.valorUnitario) });
+    setDraft({ qtd: String(r.qtdOrcada), valor: String(r.valorUnitario), apuracao: r.codApuracao ?? "" });
   };
   const cancelarEdicao = () => { setEditando(null); setSalvando(false); };
   // Salva o teto (qtd + valor de uma vez) criando/atualizando a VIGÊNCIA na competência
@@ -104,8 +105,10 @@ function FpoPage() {
     const qtd = Math.max(0, Math.round(Number(draft.qtd.replace(",", ".")) || 0));
     const valor = Math.max(0, Number(draft.valor.replace(",", ".")) || 0);
     setSalvando(true);
+    // Apuração: usa o que foi digitado (2 díg.) ou preserva o que já existia (não apagar sem querer).
+    const apur = draft.apuracao.trim() || r.codApuracao || "";
     const ok = await definirTetoVigente(cnes, r.procedimento, competencia, {
-      qtdOrcada: qtd, valorUnitario: valor, codigoFpo: r.codigoFpo, descricaoFpo: r.descricao, resolvido: r.resolvido,
+      qtdOrcada: qtd, valorUnitario: valor, codigoFpo: r.codigoFpo, descricaoFpo: r.descricao, resolvido: r.resolvido, codApuracao: apur,
     }, user?.id ?? null);
     setSalvando(false);
     if (!ok) { toast.error("Não foi possível salvar. Verifique sua permissão de edição nesta unidade."); return; }
@@ -136,6 +139,29 @@ function FpoPage() {
 
   const nomeUnidade = cnesOpcoes.find((o) => o.cnes === cnes)?.nome ?? cnes;
 
+  // Exporta o FPO do MUNICÍPIO INTEIRO (todas as unidades que o usuário edita) para o SIA:
+  // gera o .IMP do FPO Magnético (MACIO<MM>.IMP) a partir dos tetos vigentes da competência.
+  const [exportando, setExportando] = useState(false);
+  const exportarSia = async () => {
+    if (exportando) return;
+    setExportando(true);
+    try {
+      const { itens, semApuracao } = await carregarFpoParaExport(competencia);
+      if (itens.length === 0) { toast.error("Nenhum teto de FPO para exportar nesta competência."); return; }
+      const arq = gerarFpoMagnetico(competencia, itens.map((i) => ({
+        cnes: i.cnes, codigoFpo: i.codigoFpo, qtdOrcada: i.qtdOrcada, valorUnitario: i.valorUnitario, codApuracao: i.codApuracao ?? "",
+      })));
+      baixarFpoMagnetico(arq.nome, arq.conteudo);
+      if (semApuracao > 0) toast.warning(`${arq.nome}: ${arq.linhas} itens em ${arq.unidades} unidade(s). ${semApuracao} sem nível de apuração saíram com o padrão (24) — confira.`);
+      else toast.success(`${arq.nome} gerado: ${arq.linhas} itens, ${arq.unidades} unidade(s).`);
+    } catch (e) {
+      console.error("export FPO .IMP falhou", e);
+      toast.error("Falha ao gerar o arquivo do SIA. Veja o console.");
+    } finally {
+      setExportando(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
       <main className="mx-auto mt-5 max-w-[1200px] px-4">
@@ -152,6 +178,13 @@ function FpoPage() {
                 <button onClick={() => setAddOpen(true)} disabled={!cnes}
                   className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
                   <Plus className="size-4" /> Adicionar procedimento
+                </button>
+              )}
+              {editaveis.size > 0 && (
+                <button onClick={exportarSia} disabled={exportando}
+                  title="Gera o arquivo do FPO Magnético (MACIO<MM>.IMP) do município inteiro para importar no SIA/SUS"
+                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3.5 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">
+                  {exportando ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Exportar FPO para o SIA
                 </button>
               )}
               {podeEditar && (
@@ -251,6 +284,12 @@ function FpoPage() {
                           )}
                           {emEdicao && (
                             <>
+                              <label className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" title="Nível de apuração (2 díg.): 21=MAC/Grupo · 24=MAC/Proc · 34=FAEC/Proc">
+                                Apur.
+                                <input value={draft.apuracao} onChange={(e) => setDraft((d) => ({ ...d, apuracao: e.target.value.replace(/\D/g, "").slice(0, 2) }))}
+                                  onKeyDown={teclaEdicao(r)} maxLength={2} inputMode="numeric" placeholder="24"
+                                  className="w-9 rounded border border-border px-1 py-0.5 text-center text-[10px] tabular-nums" />
+                              </label>
                               <button
                                 type="button"
                                 onClick={() => salvarEdicao(r)}
@@ -329,7 +368,13 @@ function FpoPage() {
                       corReais={r.saldoRS < 0 ? "text-rose-600" : "text-muted-foreground"} />
                   </div>
                   {emEdicao && (
-                    <div className="mt-2 flex justify-end gap-2">
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      <label className="mr-auto flex items-center gap-1 text-[11px] text-muted-foreground" title="Nível de apuração (2 díg.): 21=MAC/Grupo · 24=MAC/Proc · 34=FAEC/Proc">
+                        Apuração
+                        <input value={draft.apuracao} onChange={(e) => setDraft((d) => ({ ...d, apuracao: e.target.value.replace(/\D/g, "").slice(0, 2) }))}
+                          onKeyDown={teclaEdicao(r)} maxLength={2} inputMode="numeric" placeholder="24"
+                          className="w-10 rounded border border-border px-1 py-0.5 text-center tabular-nums" />
+                      </label>
                       <button type="button" onClick={cancelarEdicao} className="rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Cancelar</button>
                       <button type="button" onClick={() => salvarEdicao(r)} disabled={salvando}
                         className="inline-flex items-center gap-1 rounded bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
