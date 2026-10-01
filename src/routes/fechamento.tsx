@@ -36,7 +36,9 @@ function Fechamento() {
   const [reabrindoBusy, setReabrindoBusy] = useState(false);
   // Re-baixar o arquivo de uma produção já fechada (id em download).
   const [baixandoProd, setBaixandoProd] = useState<string | null>(null);
-  // "Baixar para o SIA" (PA + RELEXP.PRN) — só a conta DONA (super-admin) vê. Experimental.
+  // "Baixar para o SIA" (PA + RELEXP.PRN) — aparece p/ a conta DONA (super-admin) OU p/ quem
+  // pode gerar a produção/remessa (permissão gerar_producao, que o cargo "operador de remessa"
+  // tem). Ver o gate `ehDona || podeGerar` nos botões.
   const [ehDona, setEhDona] = useState(false);
   // Cabeçalho que sairá no arquivo (versão/destino) — muda quase todo mês; mostramos para o
   // operador conferir antes de fechar.
@@ -331,10 +333,10 @@ function Fechamento() {
                   >
                     <Download className="size-4" /> Baixar prévia ({res.arquivo.nome})
                   </button>
-                  {ehDona && (
+                  {(ehDona || podeGerar) && (
                     <button
                       onClick={() => baixarParaSia(res.arquivo!, comp)}
-                      title="Baixa o arquivo PA + o RELEXP.PRN para importar direto no SIA/SUS (experimental — só a conta dona)"
+                      title="Baixa o arquivo PA + o RELEXP.PRN para importar direto no SIA/SUS (quem gera a produção/remessa)"
                       className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
                     >
                       <Download className="size-4" /> Baixar para o SIA (PA + RELEXP)
@@ -464,11 +466,11 @@ function Fechamento() {
                       {baixandoProd === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />} Baixar
                     </button>
                   )}
-                  {ehDona && (p.status === "exportada" || p.status === "transmitida") && (
+                  {(ehDona || podeGerar) && (p.status === "exportada" || p.status === "transmitida") && (
                     <button
                       onClick={() => baixarProducaoFechada(p, true)}
                       disabled={baixandoProd === p.id}
-                      title="Baixar PA + RELEXP.PRN para importar direto no SIA/SUS (experimental — só a conta dona)"
+                      title="Baixar PA + RELEXP.PRN para importar direto no SIA/SUS (quem gera a produção/remessa)"
                       className="inline-flex items-center gap-1 rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
                     >
                       <Download className="size-3.5" /> SIA
