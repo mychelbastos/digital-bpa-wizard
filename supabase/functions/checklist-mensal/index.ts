@@ -66,23 +66,26 @@ const PROGRAMAS = [
   { item: "APAC Magnético", nosso: "04.02", prefixo: "apac", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_apac.php" },
 ];
 
-// Lê as releases do catálogo comunitário (GitHub). Retorna um mapa prefixo -> "NN.NN" (maior).
-async function versoesDoCatalogo(): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
+// Lê as releases do catálogo comunitário (GitHub). Retorna prefixo -> { v:"NN.NN", data }.
+// NÃO é fonte oficial — é só uma DICA (o DATASUS bloqueia acesso de servidor). O checklist
+// trata isso como indicativo + data, nunca como um "em dia" definitivo.
+async function versoesDoCatalogo(): Promise<Record<string, { v: string; data: string }>> {
+  const out: Record<string, { v: string; data: string }> = {};
   try {
     const r = await withTimeout(fetch("https://api.github.com/repos/BRConnect/datasus-releases/releases?per_page=100",
       { headers: { "User-Agent": "spa-digital-checklist", "Accept": "application/vnd.github+json" } }), 12000);
     if (!r.ok) return out;
-    const rel = await r.json() as { tag_name: string }[];
+    const rel = await r.json() as { tag_name: string; published_at: string }[];
     for (const x of rel) {
       const m = x.tag_name?.match(/^([a-z]+)-v(\d{2})-(\d{2})/i);
       if (!m) continue;
       const pref = m[1].toLowerCase(); const v = `${m[2]}.${m[3]}`;
-      if (!out[pref] || v > out[pref]) out[pref] = v;
+      if (!out[pref] || v > out[pref].v) out[pref] = { v, data: (x.published_at || "").slice(0, 10) };
     }
   } catch { /* catálogo indisponível -> tudo manual */ }
   return out;
 }
+const brData = (s: string) => (s ? s.split("-").reverse().join("/") : "?");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -115,16 +118,19 @@ Deno.serve(async (req) => {
     itens.push({ item: "SIGTAP (competência)", status: "nao_verificado", atual: null, nosso: null, detalhe: "Não consegui ler o FTP do SIGTAP agora." });
   }
 
-  // 2) Programas — automático via catálogo comunitário onde houver; manual (link) no resto.
+  // 2) Programas. O DATASUS bloqueia acesso de servidor, então NÃO há fonte oficial automática.
+  // O catálogo comunitário (GitHub) é só uma DICA DATADA; o link oficial é a palavra final.
+  //   - catálogo À FRENTE da nossa versão  -> ⚠️ atenção (sinal forte para agir).
+  //   - catálogo igual, ou sem catálogo    -> 🔗 conferir no link (nunca "em dia" definitivo).
   const catalogo = await versoesDoCatalogo();
   for (const p of PROGRAMAS) {
-    const atual = catalogo[p.prefixo];
-    if (atual) {
-      const status = atual > p.nosso ? "atencao" : "ok";
-      itens.push({ item: p.item, status, atual, nosso: p.nosso, pagina: p.pagina,
-        detalhe: status === "atencao"
-          ? `O catálogo indica ${atual}; nosso sistema mira ${p.nosso}. Confirme no link oficial e me avise para revisar o gerador/arquivo exportado.`
-          : `Em dia (${atual}, via catálogo comunitário — na dúvida, confira no link oficial).` });
+    const c = catalogo[p.prefixo];
+    if (c && c.v > p.nosso) {
+      itens.push({ item: p.item, status: "atencao", atual: c.v, nosso: p.nosso, pagina: p.pagina,
+        detalhe: `O catálogo comunitário indica ${c.v} (publicado ${brData(c.data)}), À FRENTE da nossa ${p.nosso}. Confirme no link oficial e me avise para revisar o gerador/arquivo exportado.` });
+    } else if (c) {
+      itens.push({ item: p.item, status: "manual", atual: `catálogo: ${c.v} (${brData(c.data)})`, nosso: p.nosso, pagina: p.pagina,
+        detalhe: `Catálogo comunitário (NÃO oficial) indica ${c.v}, igual à nossa. É só uma dica — não garanto que esteja sempre em dia. Para ter certeza, confira no DATASUS pelo link.` });
     } else {
       itens.push({ item: p.item, status: "manual", atual: null, nosso: p.nosso, pagina: p.pagina,
         detalhe: `Sem fonte automática (DATASUS bloqueia acesso de servidor). Abra o link e confira se a versão passou da ${p.nosso}.` });
