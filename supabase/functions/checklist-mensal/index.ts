@@ -154,12 +154,10 @@ Deno.serve(async (req) => {
         } catch { falhou++; }
       }
     }
-    const agora = new Date();
-    const compAtual = `${String(agora.getMonth() + 1).padStart(2, "0")}/${agora.getFullYear()}`; // MM/AAAA
-    const dataBR = agora.toLocaleDateString("pt-BR");
+    const dataBR = new Date().toLocaleDateString("pt-BR");
     itens.push({ item: "SCNES (profissionais)", status: falhou === 0 && ok > 0 ? "ok" : ok > 0 ? "atencao" : "nao_verificado",
-      atual: `competência ${compAtual}`, nosso: `${ok}/${cnesSet.length} unidades`,
-      detalhe: !sc ? "SCNES_SYNC_SECRET não configurado." : `Retrato atualizado em ${dataBR} (homologação) — ${ok} de ${cnesSet.length} unidades${falhou ? `, ${falhou} falharam (SCNES homolog instável)` : ""}.` });
+      atual: `buscado em ${dataBR}`, nosso: `${ok}/${cnesSet.length} unidades`,
+      detalhe: !sc ? "SCNES_SYNC_SECRET não configurado." : `Retrato AO VIVO do SCNES (homologação), buscado agora — ${ok} de ${cnesSet.length} unidades${falhou ? `, ${falhou} falharam (SCNES homolog instável)` : ""}. Não é versionado por competência: traz o que o SCNES retorna no momento (não é um "mês" como o SIGTAP).` });
   } catch (_e) {
     itens.push({ item: "SCNES (profissionais)", status: "nao_verificado", atual: null, nosso: null, detalhe: "Falha ao atualizar o SCNES." });
   }
