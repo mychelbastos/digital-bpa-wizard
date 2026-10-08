@@ -55,15 +55,34 @@ async function ftpList(host: string, dir: string, ms = 15000): Promise<string> {
   })(), ms);
 }
 
-// Versões que o NOSSO sistema mira hoje (confirmadas na pesquisa de out/2026). O FTP dos
-// programas (arpoador) é inalcançável de fora (NAT no canal de dados), então a verificação é
-// MANUAL: o checklist mostra a nossa versão-alvo + o link oficial p/ o master comparar.
+// Versões que o NOSSO sistema mira hoje. O DATASUS (web e FTP dos programas) bloqueia IPs de
+// datacenter — inalcançável do edge. A via automática possível é um CATÁLOGO COMUNITÁRIO no
+// GitHub (reachable), que hoje cobre o BPA; onde o catálogo não tem (FPO/RAAS/APAC), cai para
+// conferência MANUAL via link oficial. `prefixo` = prefixo da tag no catálogo (ex.: "bpa-v05-00").
 const PROGRAMAS = [
-  { item: "BPA Magnético", nosso: "05.00", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_bpa.php" },
-  { item: "FPO Magnético", nosso: "03.03", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_fpo.php" },
-  { item: "RAAS", nosso: "02.35", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_raas.php" },
-  { item: "APAC Magnético", nosso: "04.02", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_apac.php" },
+  { item: "BPA Magnético", nosso: "05.00", prefixo: "bpa", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_bpa.php" },
+  { item: "FPO Magnético", nosso: "03.03", prefixo: "fpo", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_fpo.php" },
+  { item: "RAAS", nosso: "02.35", prefixo: "raas", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_raas.php" },
+  { item: "APAC Magnético", nosso: "04.02", prefixo: "apac", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_apac.php" },
 ];
+
+// Lê as releases do catálogo comunitário (GitHub). Retorna um mapa prefixo -> "NN.NN" (maior).
+async function versoesDoCatalogo(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  try {
+    const r = await withTimeout(fetch("https://api.github.com/repos/BRConnect/datasus-releases/releases?per_page=100",
+      { headers: { "User-Agent": "spa-digital-checklist", "Accept": "application/vnd.github+json" } }), 12000);
+    if (!r.ok) return out;
+    const rel = await r.json() as { tag_name: string }[];
+    for (const x of rel) {
+      const m = x.tag_name?.match(/^([a-z]+)-v(\d{2})-(\d{2})/i);
+      if (!m) continue;
+      const pref = m[1].toLowerCase(); const v = `${m[2]}.${m[3]}`;
+      if (!out[pref] || v > out[pref]) out[pref] = v;
+    }
+  } catch { /* catálogo indisponível -> tudo manual */ }
+  return out;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -96,10 +115,20 @@ Deno.serve(async (req) => {
     itens.push({ item: "SIGTAP (competência)", status: "nao_verificado", atual: null, nosso: null, detalhe: "Não consegui ler o FTP do SIGTAP agora." });
   }
 
-  // 2) Programas (versão do layout/aplicativo) — conferência MANUAL via link.
+  // 2) Programas — automático via catálogo comunitário onde houver; manual (link) no resto.
+  const catalogo = await versoesDoCatalogo();
   for (const p of PROGRAMAS) {
-    itens.push({ item: p.item, status: "manual", atual: null, nosso: p.nosso, pagina: p.pagina,
-      detalhe: `Abra o link e confira se a versão passou da ${p.nosso}. Se mudou, me avise para revisar o gerador/arquivo exportado.` });
+    const atual = catalogo[p.prefixo];
+    if (atual) {
+      const status = atual > p.nosso ? "atencao" : "ok";
+      itens.push({ item: p.item, status, atual, nosso: p.nosso, pagina: p.pagina,
+        detalhe: status === "atencao"
+          ? `O catálogo indica ${atual}; nosso sistema mira ${p.nosso}. Confirme no link oficial e me avise para revisar o gerador/arquivo exportado.`
+          : `Em dia (${atual}, via catálogo comunitário — na dúvida, confira no link oficial).` });
+    } else {
+      itens.push({ item: p.item, status: "manual", atual: null, nosso: p.nosso, pagina: p.pagina,
+        detalhe: `Sem fonte automática (DATASUS bloqueia acesso de servidor). Abra o link e confira se a versão passou da ${p.nosso}.` });
+    }
   }
 
   // 3) SCNES — refresh da lista de profissionais dos CNES em uso (homologação)
@@ -119,8 +148,12 @@ Deno.serve(async (req) => {
         } catch { falhou++; }
       }
     }
-    itens.push({ item: "SCNES (profissionais)", status: falhou === 0 && ok > 0 ? "ok" : ok > 0 ? "atencao" : "nao_verificado", atual: `${ok}/${cnesSet.length} unidades`, nosso: null,
-      detalhe: !sc ? "SCNES_SYNC_SECRET não configurado." : `Atualizadas ${ok} de ${cnesSet.length} unidades${falhou ? `, ${falhou} falharam (SCNES homolog instável)` : ""}.` });
+    const agora = new Date();
+    const compAtual = `${String(agora.getMonth() + 1).padStart(2, "0")}/${agora.getFullYear()}`; // MM/AAAA
+    const dataBR = agora.toLocaleDateString("pt-BR");
+    itens.push({ item: "SCNES (profissionais)", status: falhou === 0 && ok > 0 ? "ok" : ok > 0 ? "atencao" : "nao_verificado",
+      atual: `competência ${compAtual}`, nosso: `${ok}/${cnesSet.length} unidades`,
+      detalhe: !sc ? "SCNES_SYNC_SECRET não configurado." : `Retrato atualizado em ${dataBR} (homologação) — ${ok} de ${cnesSet.length} unidades${falhou ? `, ${falhou} falharam (SCNES homolog instável)` : ""}.` });
   } catch (_e) {
     itens.push({ item: "SCNES (profissionais)", status: "nao_verificado", atual: null, nosso: null, detalhe: "Falha ao atualizar o SCNES." });
   }
