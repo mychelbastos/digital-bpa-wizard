@@ -3,11 +3,11 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Home, FileText, FolderOpen, CalendarCheck, FileSpreadsheet, Database, UserCog, LogOut,
-  ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X, PanelLeftClose, PanelLeftOpen, Lock,
+  ChevronDown, Files, ShieldCheck, Ambulance, FileBarChart, Menu, X, PanelLeftClose, PanelLeftOpen, Lock, ClipboardCheck,
 } from "lucide-react";
 import { signOut, useAuthUser } from "@/lib/bpa-i-v2/auth";
 import spaEmblem from "@/assets/spa-emblem.png";
-import { souAdmin, usePermissoes } from "@/lib/permissoes";
+import { souAdmin, souSuperAdmin, usePermissoes } from "@/lib/permissoes";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { CNES_TFD } from "@/lib/tfd/tfd";
 import { useMovimentoFaturamento, opcoesMovimento, rotuloMovimento } from "@/lib/faturamento";
@@ -108,12 +108,14 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
   const { pode } = usePermissoes();
   const [formOpen, setFormOpen] = useState(true);
   const [podeAdmin, setPodeAdmin] = useState(false);
+  const [podeMaster, setPodeMaster] = useState(false);
   const [podeTfd, setPodeTfd] = useState(false);
   const formActive = formularios.some((f) => pathname.startsWith(f.to));
 
   useEffect(() => {
     let vivo = true;
     souAdmin().then((ok) => vivo && setPodeAdmin(ok));
+    souSuperAdmin().then((ok) => vivo && setPodeMaster(ok));
     carregarVinculosUsuario().then((vincs) => { if (vivo) setPodeTfd(vincs.some((v) => CNES_TFD.includes(v.cnes))); });
     return () => { vivo = false; };
   }, []);
@@ -200,6 +202,7 @@ function NavConteudo({ onNavegar, onColapsar }: { onNavegar?: () => void; onCola
           <Entrada to="/fechamento" perm="ver_exportar" icon={<CalendarCheck className="size-4 shrink-0" />} label="Exportar produção" />
           <Entrada to="/importar" perm="ver_importar" icon={<Database className="size-4 shrink-0" />} label="Importar produção" />
           {podeAdmin && <Link to="/admin" onClick={onNavegar} className={item(pathname.startsWith("/admin"))} style={styleAtivo(pathname.startsWith("/admin"))}><ShieldCheck className="size-4 shrink-0" /> Administração</Link>}
+          {podeMaster && <Link to="/checklist" onClick={onNavegar} className={item(pathname.startsWith("/checklist"))} style={styleAtivo(pathname.startsWith("/checklist"))}><ClipboardCheck className="size-4 shrink-0" /> Checklist mensal</Link>}
         </div>
         <div className={tituloSecao + " sr-only"}>fim</div>
       </nav>

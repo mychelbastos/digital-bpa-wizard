@@ -20,6 +20,7 @@ import { Route as ImprimirRouteImport } from './routes/imprimir'
 import { Route as ImportarRouteImport } from './routes/importar'
 import { Route as FpoRouteImport } from './routes/fpo'
 import { Route as FechamentoRouteImport } from './routes/fechamento'
+import { Route as ChecklistRouteImport } from './routes/checklist'
 import { Route as BpaIV4RouteImport } from './routes/bpa-i-v4'
 import { Route as BpaIV3RouteImport } from './routes/bpa-i-v3'
 import { Route as BpaIV2RouteImport } from './routes/bpa-i-v2'
@@ -92,6 +93,11 @@ const FpoRoute = FpoRouteImport.update({
 const FechamentoRoute = FechamentoRouteImport.update({
   id: '/fechamento',
   path: '/fechamento',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChecklistRoute = ChecklistRouteImport.update({
+  id: '/checklist',
+  path: '/checklist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BpaIV4Route = BpaIV4RouteImport.update({
@@ -195,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/bpa-i-v2': typeof BpaIV2Route
   '/bpa-i-v3': typeof BpaIV3Route
   '/bpa-i-v4': typeof BpaIV4Route
+  '/checklist': typeof ChecklistRoute
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
   '/importar': typeof ImportarRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/bpa-i-v2': typeof BpaIV2Route
   '/bpa-i-v3': typeof BpaIV3Route
   '/bpa-i-v4': typeof BpaIV4Route
+  '/checklist': typeof ChecklistRoute
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
   '/importar': typeof ImportarRoute
@@ -257,6 +265,7 @@ export interface FileRoutesById {
   '/bpa-i-v2': typeof BpaIV2Route
   '/bpa-i-v3': typeof BpaIV3Route
   '/bpa-i-v4': typeof BpaIV4Route
+  '/checklist': typeof ChecklistRoute
   '/fechamento': typeof FechamentoRoute
   '/fpo': typeof FpoRoute
   '/importar': typeof ImportarRoute
@@ -290,6 +299,7 @@ export interface FileRouteTypes {
     | '/bpa-i-v2'
     | '/bpa-i-v3'
     | '/bpa-i-v4'
+    | '/checklist'
     | '/fechamento'
     | '/fpo'
     | '/importar'
@@ -321,6 +331,7 @@ export interface FileRouteTypes {
     | '/bpa-i-v2'
     | '/bpa-i-v3'
     | '/bpa-i-v4'
+    | '/checklist'
     | '/fechamento'
     | '/fpo'
     | '/importar'
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | '/bpa-i-v2'
     | '/bpa-i-v3'
     | '/bpa-i-v4'
+    | '/checklist'
     | '/fechamento'
     | '/fpo'
     | '/importar'
@@ -383,6 +395,7 @@ export interface RootRouteChildren {
   BpaIV2Route: typeof BpaIV2Route
   BpaIV3Route: typeof BpaIV3Route
   BpaIV4Route: typeof BpaIV4Route
+  ChecklistRoute: typeof ChecklistRoute
   FechamentoRoute: typeof FechamentoRoute
   FpoRoute: typeof FpoRoute
   ImportarRoute: typeof ImportarRoute
@@ -473,6 +486,13 @@ declare module '@tanstack/react-router' {
       path: '/fechamento'
       fullPath: '/fechamento'
       preLoaderRoute: typeof FechamentoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checklist': {
+      id: '/checklist'
+      path: '/checklist'
+      fullPath: '/checklist'
+      preLoaderRoute: typeof ChecklistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bpa-i-v4': {
@@ -642,6 +662,7 @@ const rootRouteChildren: RootRouteChildren = {
   BpaIV2Route: BpaIV2Route,
   BpaIV3Route: BpaIV3Route,
   BpaIV4Route: BpaIV4Route,
+  ChecklistRoute: ChecklistRoute,
   FechamentoRoute: FechamentoRoute,
   FpoRoute: FpoRoute,
   ImportarRoute: ImportarRoute,

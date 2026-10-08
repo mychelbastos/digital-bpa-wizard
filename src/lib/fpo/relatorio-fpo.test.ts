@@ -7,7 +7,7 @@ const mkRows = (n: number): FpoComparacaoRow[] =>
     procedimento: `03010100${String(i).padStart(2, "0")}`, codigoFpo: null,
     descricao: `Procedimento ${i} com descrição bem longa para forçar truncamento na coluna do relatório`,
     resolvido: i % 10 !== 0, temTeto: i % 7 !== 0, tetoCompetencia: "202604", herdado: i % 5 === 0,
-    qtdOrcada: 100 + i, valorUnitario: 4.67, produzido: i * 3, saldo: 100 + i - i * 3,
+    qtdOrcada: 100 + i, valorUnitario: 4.67, codApuracao: null, produzido: i * 3, saldo: 100 + i - i * 3,
     tetoRS: (100 + i) * 4.67, produzidoRS: i * 3 * 4.67, saldoRS: (100 + i - i * 3) * 4.67,
   }));
 
