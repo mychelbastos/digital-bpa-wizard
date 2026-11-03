@@ -8,6 +8,7 @@ import { gerarArquivoMes, type FechamentoMes } from "@/lib/fechamento-mes";
 import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { baixarTxt } from "@/lib/export-txt";
 import { gerarAas, baixarAas, type ArquivoAas } from "@/lib/raas/gerar-aas";
+import { listarProducoesRaas, registrarProducaoRaas, type ProducaoRaas } from "@/lib/raas/producoes-raas";
 import type { RaasState } from "@/lib/raas/raas-layout";
 import { cnesComPermissao, souSuperAdmin } from "@/lib/permissoes";
 import { exportarProducao, reabrirProducao, listarProducoes, type Producao } from "@/lib/producoes";
@@ -46,9 +47,13 @@ function Fechamento() {
   // RAAS: arquivo(s) .AAS gerado(s) — separado do .txt do BPA (vai para outro programa).
   const [resAas, setResAas] = useState<ArquivoAas[] | null>(null);
   const [loadingAas, setLoadingAas] = useState(false);
+  // RAAS: histórico de produções .AAS (registro-only, não congela) + id em re-download.
+  const [producoesRaas, setProducoesRaas] = useState<ProducaoRaas[]>([]);
+  const [baixandoRaas, setBaixandoRaas] = useState<string | null>(null);
 
   const recarregarProducoes = useCallback(() => {
     listarProducoes().then(setProducoes);
+    listarProducoesRaas().then(setProducoesRaas);
   }, []);
   useEffect(() => {
     cnesComPermissao("gerar_producao").then(setCnesPermitidos);
@@ -157,12 +162,61 @@ function Fechamento() {
         hojeStr,
       );
       setResAas(arqs);
-      if (arqs.length === 0) toast.warning("Nenhuma ação RAAS válida (procedimento/quantidade) neste mês.");
+      if (arqs.length === 0) {
+        toast.warning("Nenhuma ação RAAS válida (procedimento/quantidade) neste mês.");
+        return;
+      }
+      // Registra a produção RAAS do mês (histórico). Best-effort: se falhar (ex.: sem
+      // permissão gerar_producao), NÃO impede o download — só não entra na lista.
+      try {
+        await registrarProducaoRaas(comp, {
+          unidades: arqs.length,
+          fichas: arqs.reduce((s, a) => s + a.fichas, 0),
+          acoes: arqs.reduce((s, a) => s + a.acoes, 0),
+        });
+        recarregarProducoes();
+      } catch (e) {
+        console.error("Não foi possível registrar a produção RAAS:", e);
+      }
     } catch (err) {
       console.error(err);
       toast.error("Falha ao gerar o arquivo .AAS. Veja o console.");
     } finally {
       setLoadingAas(false);
+    }
+  };
+
+  // Re-baixa o(s) .AAS de uma produção RAAS já registrada: regenera a partir das fichas RAAS
+  // do mês (com a config atual) e baixa um arquivo por unidade (CNES).
+  const baixarRaasProducao = async (p: ProducaoRaas) => {
+    if (!/^\d{6}$/.test(p.mes_producao)) return;
+    setBaixandoRaas(p.id);
+    try {
+      const fichas = await fichasDoMes(p.mes_producao);
+      const raas = fichas.filter((f) => f.tipo === "RAAS").map((f) => f.dados as RaasState);
+      if (raas.length === 0) {
+        toast.warning("Nenhuma ficha RAAS neste mês de produção.");
+        return;
+      }
+      const hoje = new Date();
+      const hojeStr = `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, "0")}${String(hoje.getDate()).padStart(2, "0")}`;
+      const arqs = gerarAas(
+        raas,
+        p.mes_producao,
+        { sigla: cfgCab.sigla, cnpj: cfgCab.cgcCpf, gestorNome: cfgCab.orgaoDestinoNome, destinoTipo: cfgCab.destinoTipo },
+        hojeStr,
+      );
+      if (arqs.length === 0) {
+        toast.warning("Nenhuma ação RAAS válida (procedimento/quantidade) neste mês.");
+        return;
+      }
+      for (const a of arqs) baixarAas(a.nome, a.conteudo);
+      toast.success(`Baixado(s) ${arqs.length} arquivo(s) .AAS.`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Falha ao baixar o(s) .AAS. Veja o console.");
+    } finally {
+      setBaixandoRaas(null);
     }
   };
 
@@ -438,6 +492,49 @@ function Fechamento() {
             </>
           )}
         </div>
+
+        {producoesRaas.length > 0 && (
+          <div className="mt-5 rounded-2xl border border-violet-200 bg-card p-5 shadow-sm">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <HeartPulse className="size-4 text-violet-600" /> Produções RAAS (.AAS)
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Histórico das gerações do .AAS por mês. O .AAS <strong>não congela</strong> as fichas —
+              “Baixar” <strong>regenera</strong> os arquivos do mês (um por unidade) com os dados atuais.
+            </p>
+            <ul className="mt-3 divide-y divide-violet-100">
+              {producoesRaas.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono font-semibold">{p.mes_producao}</span>
+                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                      gerada
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {p.qtd_unidades} unidade(s) · {p.qtd_fichas} ficha(s) · {p.qtd_acoes} ação(ões)
+                      {p.gerado_em ? ` · ${new Date(p.gerado_em).toLocaleDateString("pt-BR")}` : ""}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => baixarRaasProducao(p)}
+                    disabled={baixandoRaas === p.id}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-violet-300 bg-background px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+                  >
+                    {baixandoRaas === p.id ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Download className="size-4" />
+                    )}{" "}
+                    Baixar .AAS
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {producoes.length > 0 && (
           <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
