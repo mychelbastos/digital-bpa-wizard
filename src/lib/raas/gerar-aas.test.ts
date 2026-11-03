@@ -84,6 +84,49 @@ describe("gerarAas", () => {
     expect(f.acoes[0].procedimento).toBe("0301080208");
     expect(f.acoes[0].quantidade).toBe("000001");
     expect(f.acoes[1].procedimento).toBe("0301080100");
+    // campos que estavam deslocados/trocados antes da correção de nov/2026
+    expect(f.origemPaciente).toBe("01");
+    expect(f.destinoPaciente).toBe("02");
+    expect(f.carater).toBe("01");
+  });
+
+  // Posições do registro 15 travadas contra o layout oficial (Layout_Exportacao_RAAS.pdf) e o
+  // .AGO gerado pelo RAAS-PAD — o bug real: origem saía "00" na posição errada e o SIA recusava
+  // TODAS as folhas com "ORIGEM DO USUARIO INVALIDO".
+  it("registro 15 segue as posições do layout oficial", () => {
+    const f = {
+      ...fichaExemplo(),
+      origemPaciente: "02", destinoPaciente: "", carater: "",
+      nacionalidade: "", cpfPaciente: "12345678901", nomeResponsavel: "",
+      logradouro: "RUA A", bairro: "CENTRO", telefone: "", celular: "75999990000",
+    };
+    const [a] = gerarAas([f], "202603", cfg, "20260410");
+    const r = a.conteudo.split("\r\n").find((l) => l.startsWith("15"))!;
+    expect(r.slice(278, 280)).toBe("01"); // caráter (RAAS-PAD grava 01)
+    expect(r.slice(280, 282)).toBe("02"); // origem do paciente
+    expect(r.slice(290, 295)).toBe("00002"); // total de ações = 2 registros 16
+    expect(r.slice(295, 297)).toBe("00"); // destino vazio = 00 Permanência
+    expect(r.slice(118, 148).trim()).toBe("RUA A"); // logradouro
+    expect(r.slice(318, 348).trim()).toBe("CENTRO"); // bairro
+    expect(r.slice(219, 222)).toBe("010"); // nacionalidade vazia → Brasil
+    expect(r.slice(391, 402)).toBe("00000000000"); // tem CNS → CPF zerado
+    expect(r.slice(189, 219).trim()).toBe("FULANO DE TAL"); // adulto sem responsável → o próprio
+    expect(r.slice(226, 237).trim()).toBe("75999990000"); // sem fixo → celular no telefone
+    const r16 = a.conteudo.split("\r\n").find((l) => l.startsWith("16"))!;
+    expect(r16.slice(95, 106)).toBe("00000000000");
+  });
+
+  it("menor de idade sem responsável → nome da mãe; sem CNS → CPF vai no arquivo", () => {
+    const f = {
+      ...fichaExemplo(),
+      dataNascimento: "2015-01-01", nomeMae: "MARIA DE TAL", nomeResponsavel: "",
+      cnsPaciente: "", cpfPaciente: "12345678901",
+    };
+    const [a] = gerarAas([f], "202603", cfg, "20260410");
+    const r = a.conteudo.split("\r\n").find((l) => l.startsWith("15"))!;
+    expect(r.slice(189, 219).trim()).toBe("MARIA DE TAL");
+    expect(r.slice(17, 32)).toBe("0".repeat(15));
+    expect(r.slice(391, 402)).toBe("12345678901");
   });
 
   it("ignora ações sem procedimento ou quantidade zero", () => {

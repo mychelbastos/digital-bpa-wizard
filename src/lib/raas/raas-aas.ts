@@ -16,15 +16,20 @@ import { emptyRaasState, emptyAcao, type RaasState, type RaasAcao } from "@/lib/
 const L15 = {
   coduf: [2, 4], cmp: [4, 10], cnes: [10, 17], cnsPac: [17, 32],
   dtIniVal: [32, 40], dtFimVal: [40, 48], nomePac: [48, 78], prontuario: [78, 88],
-  nomeMae: [88, 118], bairro: [118, 148], numero: [148, 153], complemento: [153, 163],
+  // Posições conferidas contra o layout oficial (abr/2025) e o .AGO do RAAS-PAD (nov/2026):
+  // logradouro em 119-148 e bairro em 319-348 (antes estavam trocados).
+  nomeMae: [88, 118], logradouro: [118, 148], numero: [148, 153], complemento: [153, 163],
   cep: [163, 171], municipio: [171, 178], dtNasc: [178, 186], sexo: [186, 187],
   raca: [187, 189], nomeResp: [189, 219], nacionalidade: [219, 222], etnia: [222, 226],
   telefone: [226, 237], celular: [237, 248], /* [248,258] fixo "21" — ignorado */
   cidPrincipal: [258, 262], cidSec1: [262, 266], cidSec2: [266, 270], cidSec3: [270, 274],
-  cidCausas: [274, 278], origemPaciente: [278, 280], destinoPaciente: [280, 282],
-  coberturaEsf: [282, 283], cnesEsf: [283, 290], /* [290,297] código de equipe ESF — ignorado */
+  // 279-280 caráter, 281-282 origem, 291-295 total de ações (derivado), 296-297 destino.
+  // (Antes: origem lida do caráter e destino lido da origem — "[290,297] equipe ESF" era engano.)
+  cidCausas: [274, 278], carater: [278, 280], origemPaciente: [280, 282],
+  coberturaEsf: [282, 283], cnesEsf: [283, 290], /* [290,295] total de ações — derivado */
+  destinoPaciente: [295, 297],
   org: [297, 300], situacaoRua: [300, 301], usuarioDroga: [301, 302], tipoDroga: [302, 305],
-  autorizacao: [305, 318], logradouro: [318, 348], codLogradouro: [348, 351],
+  autorizacao: [305, 318], bairro: [318, 348], codLogradouro: [348, 351],
   email: [351, 391], cpf: [391, 402], /* [402,406] dígito de controle */
 } as const;
 
@@ -108,6 +113,7 @@ function folhaDeLinha15(s: string, acoes: RaasAcao[]): RaasState {
     cidSec2: T(s, L15.cidSec2).toUpperCase(),
     cidSec3: T(s, L15.cidSec3).toUpperCase(),
     cidCausas: T(s, L15.cidCausas).toUpperCase(),
+    carater: T(s, L15.carater),
     origemPaciente: T(s, L15.origemPaciente),
     destinoPaciente: T(s, L15.destinoPaciente),
     coberturaEsf: cobertura === "S" || cobertura === "N" ? cobertura : "N",

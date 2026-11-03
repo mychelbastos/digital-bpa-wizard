@@ -15,6 +15,7 @@
 // derivam do conteúdo — ficam best-effort. Por isso o arquivo deve ser VALIDADO uma vez
 // importando no programa destino antes de transmitir.
 import type { RaasState, RaasAcao } from "@/lib/raas/raas-layout";
+import { nacionalidadeBpa } from "@/lib/bpa-i-v2/nacionalidades";
 
 const BASE = [41, 39, 54, 45];
 
@@ -51,8 +52,29 @@ function put(buf: string[], a: number, txt: string) {
   for (let i = 0; i < txt.length; i++) buf[a + i] = txt[i];
 }
 
+// ---- regras de preenchimento do layout oficial (Layout_Exportacao_RAAS.pdf, abr/2025) ----
+// Nacionalidade (tabela PT/SAS 205/96): Brasil = 010. Vazio/zeros NÃO existem → 010.
+const nacRaas = (v: string | undefined) => (/^0*$/.test(digitos(v)) ? "010" : nacionalidadeBpa(v));
+// CNS × CPF são exclusivos: "caso [o CPF esteja] preenchido, colocar zeros na coluna CNS". Com
+// CNS válido o CPF vai zerado (é o que o RAAS oficial grava em 100% dos registros do .AGO).
+const temCns = (f: RaasState) => /[1-9]/.test(digitos(f.cnsPaciente));
+const cpfArquivo = (f: RaasState) => (temCns(f) ? "0".repeat(11) : NR(f.cpfPaciente, 11));
+// Responsável (obrigatório): "se o paciente for maior de idade, pode conter o nome do paciente;
+// se for menor, pode conter o nome da mãe". Só aplica quando o campo veio vazio.
+function responsavel(f: RaasState): string {
+  if ((f.nomeResponsavel || "").trim()) return f.nomeResponsavel;
+  const n = digitos(f.dataNascimento), c = digitos(f.competencia);
+  const menor = n.length === 8 && c.length === 6 &&
+    Number(c.slice(0, 4)) - Number(n.slice(0, 4)) - (Number(c.slice(4, 6)) < Number(n.slice(4, 6)) ? 1 : 0) < 18;
+  return menor && (f.nomeMae || "").trim() ? f.nomeMae : f.nomePaciente;
+}
+
 // Registro 15 (folha do paciente) — 402 chars de corpo + 4 de controle = 406.
-function linha15(f: RaasState): string {
+// Posições conferidas contra o layout oficial E byte a byte contra o .AGO gerado pelo RAAS-PAD
+// (mesmo paciente nos dois arquivos). Antes desta correção, caráter/origem/destino estavam
+// deslocados (origem saía "00" → "ORIGEM DO USUARIO INVALIDO"), o total de ações ia zerado e
+// logradouro/bairro estavam trocados.
+function linha15(f: RaasState, totalAcoes: number): string {
   const b = new Array(402).fill(" ");
   put(b, 0, "15");
   put(b, 2, NR(f.coduf, 2));
@@ -64,7 +86,7 @@ function linha15(f: RaasState): string {
   put(b, 48, T(f.nomePaciente, 30));
   put(b, 78, NL(f.prontuario, 10));
   put(b, 88, T(f.nomeMae, 30));
-  put(b, 118, T(f.bairro, 30));
+  put(b, 118, T(f.logradouro, 30)); // ras_logpcnte (119-148)
   put(b, 148, T(f.numero, 5));
   put(b, 153, T(f.complemento, 10));
   put(b, 163, NR(f.cep, 8));
@@ -72,31 +94,33 @@ function linha15(f: RaasState): string {
   put(b, 178, D8(f.dataNascimento));
   put(b, 186, T(f.sexo, 1));
   put(b, 187, NR(f.raca, 2));
-  put(b, 189, T(f.nomeResponsavel, 30));
-  put(b, 219, NR(f.nacionalidade, 3));
+  put(b, 189, T(responsavel(f), 30)); // ras_nomeresp (190-219) — obrigatório
+  put(b, 219, nacRaas(f.nacionalidade)); // ras_nascpcnte (220-222)
   put(b, 222, NR(f.etnia, 4, " "));
-  put(b, 226, NL(f.telefone, 11));
-  put(b, 237, NL(f.celular, 11));
-  put(b, 248, "21".padEnd(10, " "));
+  // ras_telefone (227-237, obrigatório): sem fixo, usa o celular do próprio paciente.
+  put(b, 226, NL(digitos(f.telefone) ? f.telefone : f.celular, 11));
+  put(b, 237, NL(f.celular, 11)); // ras_celular (238-248)
+  put(b, 248, "21".padEnd(10, " ")); // motsaida (249-250) + dt óbito/alta (251-258)
   put(b, 258, T(f.cidPrincipal, 4));
   put(b, 262, T(f.cidSec1, 4));
   put(b, 266, T(f.cidSec2, 4));
   put(b, 270, T(f.cidSec3, 4));
   put(b, 274, T(f.cidCausas, 4));
-  put(b, 278, NR(f.origemPaciente, 2));
-  put(b, 280, NR(f.destinoPaciente, 2));
-  put(b, 282, T(f.coberturaEsf || "N", 1));
-  put(b, 283, NR(f.cnesEsf, 7, " "));
-  put(b, 290, "0000000"); // código de equipe ESF — não capturado no cadastro
+  put(b, 278, digitos(f.carater) ? NR(f.carater, 2) : "01"); // ras_CARATE (279-280); RAAS-PAD grava 01
+  put(b, 280, NR(f.origemPaciente, 2)); // ras_origempcn (281-282)
+  put(b, 282, T(f.coberturaEsf || "N", 1)); // ras_cobertura_ESF (283)
+  put(b, 283, NR(f.cnesEsf, 7, " ")); // ras_cnes_esd (284-290)
+  put(b, 290, String(totalAcoes).padStart(5, "0").slice(-5)); // ras_total_acoes (291-295)
+  put(b, 295, NR(f.destinoPaciente, 2)); // ras_dest_paciente (296-297); vazio = 00 Permanência
   put(b, 297, T(f.origemInfo || "RAS", 3));
   put(b, 300, T(f.situacaoRua || "N", 1));
   put(b, 301, T(f.usuarioDroga || "N", 1));
   put(b, 302, T(["A", "C", "O"].filter((l) => f.tiposDroga.includes(l)).join(""), 3));
   put(b, 305, NR(f.autorizacao, 13, " "));
-  put(b, 318, T(f.logradouro, 30));
+  put(b, 318, T(f.bairro, 30)); // ras_bairro (319-348)
   put(b, 348, NR(f.codLogradouro, 3));
   put(b, 351, T(f.email, 40));
-  put(b, 391, NR(f.cpfPaciente, 11));
+  put(b, 391, cpfArquivo(f));
   const corpo = b.join("");
   return corpo + controle4(corpo);
 }
@@ -119,7 +143,7 @@ function linha16(f: RaasState, ac: RaasAcao): string {
   put(b, 85, NR(ac.quantidade, 6));
   put(b, 91, "   ");
   put(b, 94, T(ac.localRealizacao || "C", 1));
-  put(b, 95, "00000000000");
+  put(b, 95, cpfArquivo(f)); // ras_cpfpct (96-106): mesma regra CNS × CPF da folha
   const corpo = b.join("");
   return corpo + controle4(corpo);
 }
@@ -184,7 +208,7 @@ export function gerarAas(fichas: RaasState[], competencia: string, cfg: GerarAas
     for (const f of grupo) {
       const acoes = f.acoes.filter((a) => digitos(a.procedimento).length > 0 && Number(digitos(a.quantidade)) > 0);
       if (acoes.length === 0) continue;
-      linhas.push(linha15(f));
+      linhas.push(linha15(f, acoes.length)); // total de ações = nº de registros 16 desta folha
       nFichas++;
       for (const ac of acoes) {
         linhas.push(linha16(f, ac));
