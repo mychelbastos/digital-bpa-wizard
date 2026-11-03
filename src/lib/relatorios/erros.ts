@@ -12,14 +12,18 @@ import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { atendimentoForaDaCompetencia } from "@/lib/bpa-i-v2/validacao";
 import { assinaturaBpaI, assinaturaBpaC } from "@/lib/bpa-i-v2/folha-duplicidade";
 import type { SeqData } from "@/lib/bpai-v2-layout";
+import { loadConfig } from "@/lib/bpa-i-v2/config";
+import { ufDeMunicipio } from "@/lib/raas/raas-layout";
+import { problemaMunicipioUf } from "@/lib/geo-uf";
 
-export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade" | "tfd-sem-profissional";
+export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade" | "tfd-sem-profissional" | "municipio-uf";
 export const ROTULO_CATEGORIA: Record<CategoriaErro, string> = {
   "producao-sigtap": "Produção × SIGTAP",
   "ficha-incompleta": "Ficha incompleta",
   "paciente-revisao": "Cadastro de paciente",
   "duplicidade": "Duplicidade de fichas",
   "tfd-sem-profissional": "TFD sem profissional",
+  "municipio-uf": "Município/UF do paciente",
 };
 
 export interface ErroItem {
@@ -252,6 +256,31 @@ async function errosTfdSemProfissional(cnesFiltro: Set<string> | null): Promise<
   } catch { return []; }
 }
 
+// ---- F) Município/UF do paciente inválido. O SIA RECUSA O LOTE INTEIRO se achar uma UF que
+//         não exista (ex.: "46") ou de outro estado. Cobre RAAS (.AAS), que carrega o município
+//         e a UF do paciente — foi o caso que derrubou a importação sem aparecer em nenhuma
+//         outra categoria (que olham procedimento/identidade, nunca o código geográfico). ----
+function errosMunicipioUf(fichas: FichaCompleta[], ufEsperada: string): ErroItem[] {
+  const out: ErroItem[] = [];
+  for (const f of fichas) {
+    if (f.tipo !== "RAAS") continue;
+    try {
+      const d = f.dados as { municipioIbge?: string; coduf?: string; nomePaciente?: string; cnes?: string; competencia?: string };
+      const prob = problemaMunicipioUf(d.municipioIbge, d.coduf, ufEsperada);
+      if (!prob) continue;
+      const nome = (d.nomePaciente ?? "").trim();
+      out.push({
+        categoria: "municipio-uf", gravidade: "erro", fichaId: f.id, tipo: "RAAS",
+        competencia: (d.competencia ?? "").replace(/\D/g, "").slice(0, 6),
+        cnes: (d.cnes ?? "").replace(/\D/g, ""),
+        profissional: nome || "—", procedimento: "",
+        descricao: `Paciente "${nome || "(sem nome)"}": ${prob}`,
+      });
+    } catch { /* shape inesperado — ignora */ }
+  }
+  return out;
+}
+
 export interface OpcoesErros { de: string; ate: string; categorias: Set<CategoriaErro>; cnes?: string[] }
 
 // Meses AAAAMM no intervalo [de, ate] (inclusive). Ex.: 202607..202608 -> ["202607","202608"].
@@ -278,19 +307,22 @@ export async function coletarErros({ de, ate, categorias, cnes }: OpcoesErros): 
   // (todos os meses do período).
   const [rowsRaw, fichasRaw] = await Promise.all([
     categorias.has("producao-sigtap") ? carregarProducaoDashboardPeriodo(de, ate) : Promise.resolve([] as ProducaoBpaRow[]),
-    (categorias.has("ficha-incompleta") || categorias.has("duplicidade"))
+    (categorias.has("ficha-incompleta") || categorias.has("duplicidade") || categorias.has("municipio-uf"))
       ? Promise.all(meses.map((m) => fichasDoMes(m))).then((a) => a.flat())
       : Promise.resolve([] as FichaCompleta[]),
   ]);
   // Aplica o filtro de unidade (quando houver).
   const rows = cnesSet ? rowsRaw.filter((r) => cnesSet.has(r.cnes ?? "")) : rowsRaw;
   const fichas = cnesSet ? fichasRaw.filter((f) => cnesSet.has(jc((f.dados as { cnes?: unknown }).cnes))) : fichasRaw;
+  // UF do órgão (2 díg.) p/ a checagem de município: o SIA recusa UF de outro estado.
+  const ufEsperada = ufDeMunicipio(loadConfig().municipioIbge);
   const tarefas: Promise<ErroItem[]>[] = [];
   if (categorias.has("producao-sigtap")) tarefas.push(errosProducaoSigtap(rows));
   if (categorias.has("ficha-incompleta")) tarefas.push(errosFichasIncompletas(fichas));
   if (categorias.has("paciente-revisao")) tarefas.push(errosPacientesRevisao());
   if (categorias.has("duplicidade")) tarefas.push(Promise.resolve(errosDuplicidade(fichas)));
   if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional(cnesSet));
+  if (categorias.has("municipio-uf")) tarefas.push(Promise.resolve(errosMunicipioUf(fichas, ufEsperada)));
   for (const bloco of await Promise.all(tarefas)) res.push(...bloco);
   return res;
 }

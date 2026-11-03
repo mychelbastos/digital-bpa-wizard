@@ -9,7 +9,8 @@ import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { baixarTxt } from "@/lib/export-txt";
 import { gerarAas, baixarAas, type ArquivoAas } from "@/lib/raas/gerar-aas";
 import { listarProducoesRaas, registrarProducaoRaas, type ProducaoRaas } from "@/lib/raas/producoes-raas";
-import type { RaasState } from "@/lib/raas/raas-layout";
+import { ufDeMunicipio, type RaasState } from "@/lib/raas/raas-layout";
+import { problemaMunicipioUf } from "@/lib/geo-uf";
 import { cnesComPermissao, souSuperAdmin } from "@/lib/permissoes";
 import { exportarProducao, reabrirProducao, listarProducoes, type Producao } from "@/lib/producoes";
 import { movimentoFaturamento, rotuloMovimento } from "@/lib/faturamento";
@@ -136,6 +137,26 @@ function Fechamento() {
     }
   };
 
+  // Pré-checagem de município/UF antes de gerar o .AAS. O SIA RECUSA O LOTE INTEIRO se achar
+  // uma UF inexistente (ex.: "46") ou de outro estado — mesmo que seja uma só ficha. Então, se
+  // houver qualquer problema, avisamos nomeando o paciente e NÃO geramos (um arquivo com UF
+  // errada é inútil: o SIA rejeita tudo). Retorna true quando bloqueou.
+  const bloquearPorMunicipioUf = (raas: RaasState[]): boolean => {
+    const ufEsperada = ufDeMunicipio(cfgCab.municipioIbge);
+    const probs = raas
+      .map((f) => ({ nome: (f.nomePaciente || "").trim(), prob: problemaMunicipioUf(f.municipioIbge, f.coduf, ufEsperada) }))
+      .filter((x) => x.prob);
+    if (probs.length === 0) return false;
+    const ex = probs[0];
+    toast.error(
+      `Município/UF inválido em ${probs.length} ficha(s) — o SIA recusaria o lote inteiro. ` +
+        `Ex.: ${ex.nome || "(sem nome)"} — ${ex.prob} ` +
+        `Corrija a ficha (ou rode o relatório de consistência → "Município/UF do paciente") antes de gerar.`,
+      { duration: 12000 },
+    );
+    return true;
+  };
+
   // Gera o(s) arquivo(s) .AAS do RAAS do mês (um por CNES). Arquivo SEPARADO do .txt — vai
   // para outro programa (RAAS-PAD/SIA). Não congela nada; é só a geração.
   const gerarAasHandler = async () => {
@@ -153,6 +174,7 @@ function Fechamento() {
         setResAas([]);
         return;
       }
+      if (bloquearPorMunicipioUf(raas)) { setResAas([]); return; }
       const hoje = new Date();
       const hojeStr = `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, "0")}${String(hoje.getDate()).padStart(2, "0")}`;
       const arqs = gerarAas(
@@ -198,6 +220,7 @@ function Fechamento() {
         toast.warning("Nenhuma ficha RAAS neste mês de produção.");
         return;
       }
+      if (bloquearPorMunicipioUf(raas)) return;
       const hoje = new Date();
       const hojeStr = `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, "0")}${String(hoje.getDate()).padStart(2, "0")}`;
       const arqs = gerarAas(
