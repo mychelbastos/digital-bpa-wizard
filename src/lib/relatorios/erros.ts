@@ -7,6 +7,7 @@ import { fichasDoMes, type FichaCompleta } from "@/lib/bpa-i-v2/fichas";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { procedimentoExigeServico, procedimentoExigeCid } from "@/lib/bpa-i-v3/exigencias-sigtap";
 import { motivosObrigatoriosSeq } from "@/lib/bpa-i-v3/obrigatorios";
+import { buscarNomesPorCns } from "@/lib/bpa-i-v2/profissionais";
 import { seqPreenchida } from "@/lib/bpa-i-v2/bpa-magnetico";
 import { atendimentoForaDaCompetencia } from "@/lib/bpa-i-v2/validacao";
 import { assinaturaBpaI, assinaturaBpaC } from "@/lib/bpa-i-v2/folha-duplicidade";
@@ -86,14 +87,35 @@ async function errosProducaoSigtap(rows: ProducaoBpaRow[]): Promise<ErroItem[]> 
 }
 
 // ---- B) Fichas incompletas (BPA-I: identidade/endereço/data/quantidade por sequência) ----
-function errosFichasIncompletas(fichas: FichaCompleta[]): ErroItem[] {
+async function errosFichasIncompletas(fichas: FichaCompleta[]): Promise<ErroItem[]> {
   const out: ErroItem[] = [];
+  // Resolve CNS -> nome do profissional ANTES de criticar. Fichas IMPORTADAS guardam só o CNS
+  // (o BPA Magnético não carrega o nome): o nome aparece ao ABRIR a ficha, resolvido do SCNES
+  // (engine.ts) — e em "Minhas fichas". O crivo faz a MESMA resolução para não acusar "nome
+  // ausente" num profissional que o CNS já identifica. Lote único, igual ao MinhasFichas.
+  const pares: { cnes: string; cns: string }[] = [];
+  for (const f of fichas) {
+    if (f.tipo !== "BPA-I") continue;
+    try {
+      const d = f.dados as { profNome?: string; profCns?: unknown; cnes?: unknown };
+      const nome = ((d.profNome as string) ?? "").trim();
+      const cns = jc(d.profCns).replace(/\D/g, "");
+      const cnes = jc(d.cnes).replace(/\D/g, "");
+      if (!nome && /^[0-9]{15}$/.test(cns) && /^[0-9]{7}$/.test(cnes)) pares.push({ cnes, cns });
+    } catch { /* ignora */ }
+  }
+  const nomesPorCns = pares.length ? await buscarNomesPorCns(pares) : new Map<string, string>();
+  const resolverNome = (cnesDig: string, cnsDig: string): string => nomesPorCns.get(`${cnesDig}|${cnsDig}`) ?? nomesPorCns.get(cnsDig) ?? "";
+
   for (const f of fichas) {
     if (f.tipo !== "BPA-I") continue;
     try {
       const d = f.dados as { seqs?: SeqData[]; profNome?: string; profCns?: unknown; cnes?: unknown; profMes?: unknown; profAno?: unknown };
       const cnes = jc(d.cnes);
-      const prof = (d.profNome as string) || jc(d.profCns) || "—";
+      // Nome "efetivo": o digitado OU o resolvido pelo CNS (igual à ficha aberta). Vale tanto
+      // para o rótulo do relatório quanto para decidir se o nome está mesmo ausente.
+      const nomeResolvido = ((d.profNome as string) ?? "").trim() || resolverNome(jc(d.cnes).replace(/\D/g, ""), jc(d.profCns).replace(/\D/g, ""));
+      const prof = nomeResolvido || jc(d.profCns) || "—";
       const seqs = Array.isArray(d.seqs) ? d.seqs : [];
       const profMesArr = Array.isArray(d.profMes) ? (d.profMes as string[]) : [];
       const profAnoArr = Array.isArray(d.profAno) ? (d.profAno as string[]) : [];
@@ -106,7 +128,9 @@ function errosFichasIncompletas(fichas: FichaCompleta[]): ErroItem[] {
             competencia: "", cnes, profissional: prof, procedimento: "",
             descricao: profCnsDig ? `CNS do profissional incompleto (${profCnsDig.length}/15 dígitos).` : "CNS do profissional ausente." });
         }
-        if (!((d.profNome as string) ?? "").trim()) {
+        // Nome ausente SÓ quando não há nome digitado NEM resolvível pelo CNS (SCNES). Fichas
+        // importadas com CNS válido deixam de ser falso-positivo — o nome não vai no .MAR mesmo.
+        if (!nomeResolvido) {
           out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
             competencia: "", cnes, profissional: prof, procedimento: "", descricao: "Nome do profissional ausente." });
         }
@@ -263,7 +287,7 @@ export async function coletarErros({ de, ate, categorias, cnes }: OpcoesErros): 
   const fichas = cnesSet ? fichasRaw.filter((f) => cnesSet.has(jc((f.dados as { cnes?: unknown }).cnes))) : fichasRaw;
   const tarefas: Promise<ErroItem[]>[] = [];
   if (categorias.has("producao-sigtap")) tarefas.push(errosProducaoSigtap(rows));
-  if (categorias.has("ficha-incompleta")) tarefas.push(Promise.resolve(errosFichasIncompletas(fichas)));
+  if (categorias.has("ficha-incompleta")) tarefas.push(errosFichasIncompletas(fichas));
   if (categorias.has("paciente-revisao")) tarefas.push(errosPacientesRevisao());
   if (categorias.has("duplicidade")) tarefas.push(Promise.resolve(errosDuplicidade(fichas)));
   if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional(cnesSet));
