@@ -33,8 +33,9 @@ import {
   HEADER_HEIGHT_DIGIT, UF_HEIGHT, ROW_TOPS, ROW_HEIGHTS, CBO_LEFTS,
   qtdBoxes, TOTAL_TOP, TOTAL_HEIGHT, RESP_CONFIRM,
   RESP_DATA_TOP, RESP_DATA_H, RESP_DATA_DIA, RESP_DATA_MES, RESP_DATA_ANO,
-  emptyRow, ordenarRowsPorIdade, cboIncompletoNaLinha, type RowData,
+  emptyRow, ordenarRowsPorIdade, cboParcialNaLinha, cboFaltandoNaLinha, type RowData,
 } from "@/lib/bpac-v3-layout";
+import { procedimentoExigeCbo } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 
 export const Route = createFileRoute("/bpa-c-v3")({
   head: () => ({
@@ -444,6 +445,24 @@ function BpaCV3() {
     return `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, "0")}`;
   };
 
+  // Procedimentos (entre os das linhas) que NÃO exigem CBO no SIA: os que o SIGTAP não associa a
+  // nenhuma ocupação — caso de TODA a Vigilância Sanitária (subgrupo 0102.01). Para eles o SIA
+  // confere só procedimento × quantidade, então CBO em branco não deve bloquear. Resolvido por
+  // consulta ao SIGTAP; o indeterminado NÃO entra no conjunto, mantendo o bloqueio conservador.
+  const [procsSemCbo, setProcsSemCbo] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const comp = competencia();
+    const procs = [...new Set(state.rows.map((r) => soDig(r.procedimento)).filter((p) => p.length === 10))];
+    if (procs.length === 0) { setProcsSemCbo(new Set()); return; }
+    let cancel = false;
+    Promise.all(procs.map(async (p) => [p, await procedimentoExigeCbo(p, comp)] as const)).then((pares) => {
+      if (cancel) return;
+      setProcsSemCbo(new Set(pares.filter(([, exige]) => exige === false).map(([p]) => p)));
+    });
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.rows, state.mes.join(""), state.ano.join("")]);
+
   // ----- Persistência de ficha (refs + localStorage) -----
   const persistFicha = (id: string, titulo: string) => {
     fichaIdRef.current = id;
@@ -506,14 +525,15 @@ function BpaCV3() {
     }
     return false;
   };
-  // Bloqueia salvar/gravar quando alguma sequência EM USO tem o CBO incompleto: CBO com 1–5
-  // dígitos, ou procedimento completo sem os 6 dígitos do CBO. Sem isso, a ficha ia para a
-  // nuvem (e para o arquivo) com o CBO faltando um número — o crivo SIGTAP não pegava porque
-  // só rodava com o CBO já completo.
+  // Bloqueia salvar/gravar quando alguma sequência EM USO tem o CBO incompleto. Duas situações:
+  // (1) CBO PARCIAL (1–5 dígitos) — sempre barra, ninguém lança meio CBO; (2) CBO FALTANDO
+  // (procedimento completo, CBO vazio) — barra só quando o procedimento EXIGE CBO, ou seja, NÃO
+  // está em procsSemCbo (vigilância sanitária fica liberada; o SIA confere só proc × quantidade).
+  // O indeterminado (consulta ainda não resolvida) não entra em procsSemCbo → barra por garantia.
   const cboIncompletoBloqueia = (): boolean => {
     const linhas = state.rows
       .map((r, i) => ({ r, i }))
-      .filter(({ r }) => cboIncompletoNaLinha(r))
+      .filter(({ r }) => cboParcialNaLinha(r) || (cboFaltandoNaLinha(r) && !procsSemCbo.has(soDig(r.procedimento))))
       .map(({ i }) => i + 1);
     if (linhas.length === 0) return false;
     const plural = linhas.length > 1;
@@ -568,7 +588,7 @@ function BpaCV3() {
   };
   const salvarComoClique = () => { if (exigirConfirmacao()) return; if (cboIncompletoBloqueia()) return; setSalvarComoNovo(true); setSalvarOpen(true); setSalvarMenuOpen(false); };
   // "Gerar PDF" interativo — exige a confirmação; o auto-print (?print=1) não passa por aqui.
-  const gerarPdfClique = () => { if (exigirConfirmacao()) return; void exportPdf(); };
+  const gerarPdfClique = () => { if (exigirConfirmacao()) return; if (cboIncompletoBloqueia()) return; void exportPdf(); };
   const carregarFichaSalva = async (id: string, titulo?: string) => {
     const ficha = await carregarFicha(id);
     if (!ficha) return;

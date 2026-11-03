@@ -4,9 +4,10 @@ import {
   quantidadeExcedida,
   idadeForaDaFaixa,
   cboValidoParaProcedimento,
+  procedimentoExigeCbo,
   type ProcedimentoSigtap,
 } from "@/lib/bpa-i-v2/procedimentos-sigtap";
-import { cboIncompletoNaLinha, type RowData } from "@/lib/bpac-layout";
+import { cboParcialNaLinha, cboFaltandoNaLinha, type RowData } from "@/lib/bpac-layout";
 
 export interface ValidacaoLinhaBpaC {
   proc: ProcedimentoSigtap | null;
@@ -80,13 +81,26 @@ export function useValidacaoLinhaBpaC(row: RowData, competencia: string | null):
   }, [procCompleto, codProc, cbo, competencia]);
   const cboInvalido = cboValido === false;
 
-  // CBO incompleto: começou a digitar mas não completou os 6 dígitos, OU o procedimento
-  // está completo e o CBO não tem os 6 dígitos. Diferente de cboInvalido (6 dígitos porém
-  // incompatível com o procedimento): aqui o campo simplesmente não está completo — não pode
-  // ser salvo nem ir para o arquivo. É por isso que o crivo antigo o deixava passar: a
-  // checagem SIGTAP só rodava com cbo.length === 6.
+  // Este procedimento EXIGE CBO? (SIGTAP associa alguma ocupação a ele?) Para procedimentos sem
+  // ocupação — toda a Vigilância Sanitária — o SIA confere só procedimento × quantidade, então
+  // CBO em branco é OK. null = ainda resolvendo / indeterminado.
+  const [exigeCbo, setExigeCbo] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!procCompleto) { setExigeCbo(null); return; }
+    let cancel = false;
+    procedimentoExigeCbo(codProc, competencia).then((v) => { if (!cancel) setExigeCbo(v); });
+    return () => { cancel = true; };
+  }, [procCompleto, codProc, competencia]);
+
+  // CBO incompleto: PARCIAL (1–5 díg.) é sempre erro — ninguém lança meio CBO. FALTANDO (proc
+  // completo, CBO vazio) só acende quando o procedimento COMPROVADAMENTE exige CBO (exigeCbo ===
+  // true). Enquanto a consulta não resolve (null), não acende — evita o "pisca-vermelho" ao abrir
+  // uma folha de vigilância (que não exige CBO). O bloqueio de salvar/gerar no pai é conservador
+  // (trata o indeterminado como exige), então um CBO faltando num procedimento assistencial ainda
+  // é barrado mesmo nesse intervalo.
   const cboLen = cbo.replace(/\D/g, "").length;
-  const cboIncompleto = cboIncompletoNaLinha(row);
+  const cboFaltandoExigido = cboFaltandoNaLinha(row) && exigeCbo === true;
+  const cboIncompleto = cboParcialNaLinha(row) || cboFaltandoExigido;
 
   const idadeMotivo = idadeInvalida
     ? `Idade (${idadeAnos} ${idadeAnos === 1 ? "ano" : "anos"}) fora da faixa permitida para este procedimento` +

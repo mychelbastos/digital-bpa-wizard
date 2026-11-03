@@ -155,6 +155,28 @@ export async function cboValidoParaProcedimento(procedimento: string, cbo: strin
   }
 }
 
+// O procedimento EXIGE que se informe o CBO? Regra do SIA: só exige quando o SIGTAP associa
+// pelo menos uma ocupação (CBO) ao procedimento. Procedimentos sem nenhuma ocupação cadastrada
+// — toda a Vigilância Sanitária (subgrupo 0102.01), p.ex. — NÃO exigem CBO: o SIA confere só
+// procedimento × quantidade. true = exige; false = não exige; null = indeterminado (sem conexão
+// / erro / código incompleto). O chamador trata null de forma conservadora (continua exigindo).
+export async function procedimentoExigeCbo(procedimento: string, competencia?: string | null): Promise<boolean | null> {
+  if (!supabase || procedimento.length !== 10) return null;
+  try {
+    const comp = await resolverCompetencia(competencia);
+    let q = supabase
+      .from("procedimento_ocupacao")
+      .select("cbo")
+      .eq("procedimento", procedimento);
+    if (comp) q = q.eq("competencia", comp);
+    const { data, error } = await q.limit(1);
+    if (error) return null;
+    return Boolean(data && data.length > 0);
+  } catch {
+    return null;
+  }
+}
+
 export interface ServClassOpcao {
   servico: string;        // 3 díg.
   classificacao: string;  // 3 díg.

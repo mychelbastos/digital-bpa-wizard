@@ -120,13 +120,28 @@ export function ordenarRowsPorIdade(rows: RowData[]): RowData[] {
   return [...usadas, ...vazias];
 }
 
-// CBO incompleto numa sequência do BPA-C: o CBO foi começado mas não tem os 6 dígitos (1 a 5),
-// OU o procedimento está completo (10 dígitos) e o CBO não está com os 6 dígitos. Uma linha
-// totalmente vazia (sem procedimento e sem CBO) NÃO é considerada incompleta. Usado tanto pelo
-// crivo (acende o campo em vermelho) quanto pelo bloqueio de salvar — o crivo SIGTAP sozinho
-// não pega isto, porque a checagem de CBO só roda quando o CBO já tem os 6 dígitos.
-export function cboIncompletoNaLinha(r: RowData): boolean {
+// CBO PARCIAL: o CBO foi começado mas parou com 1 a 5 dígitos. É SEMPRE erro (ninguém lança
+// meio CBO) — independe do SIGTAP e do procedimento. Foi o caso que motivou o bloqueio: o CBO
+// ia para o arquivo faltando um número e o crivo SIGTAP não pegava (só roda com os 6 dígitos).
+export function cboParcialNaLinha(r: RowData): boolean {
+  const cbo = r.cbo.join("").replace(/\D/g, "");
+  return cbo.length >= 1 && cbo.length <= 5;
+}
+
+// CBO FALTANDO: procedimento completo (10 díg.) e CBO totalmente vazio. Diferente do parcial,
+// este NEM SEMPRE é erro: há procedimentos que o SIA não exige CBO (os que o SIGTAP não associa
+// a nenhuma ocupação — toda a Vigilância Sanitária, p.ex.). Quem decide se bloqueia é o chamador,
+// cruzando com procedimentoExigeCbo(); aqui só se identifica o formato "proc completo, CBO vazio".
+export function cboFaltandoNaLinha(r: RowData): boolean {
   const proc = r.procedimento.join("").replace(/\D/g, "");
   const cbo = r.cbo.join("").replace(/\D/g, "");
-  return (cbo.length >= 1 && cbo.length <= 5) || (proc.length === 10 && cbo.length !== 6);
+  return proc.length === 10 && cbo.length === 0;
+}
+
+// CBO incompleto numa sequência do BPA-C (checagem estrutural, agnóstica de SIGTAP): parcial OU
+// faltando. Uma linha totalmente vazia (sem procedimento e sem CBO) NÃO é incompleta. Onde o SIA
+// não exige CBO (vigilância), o chamador usa cboParcial/cboFaltando separadamente para liberar só
+// o "faltando" e manter o bloqueio do "parcial".
+export function cboIncompletoNaLinha(r: RowData): boolean {
+  return cboParcialNaLinha(r) || cboFaltandoNaLinha(r);
 }
