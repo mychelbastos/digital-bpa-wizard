@@ -105,8 +105,9 @@ function folhaDeLinha15(s: string, acoes: RaasAcao[]): RaasState {
     cep: N(s, L15.cep),
     municipioIbge: municipio,
     codLogradouro: T(s, L15.codLogradouro),
-    telefone: N(s, L15.telefone),
-    celular: N(s, L15.celular),
+    // Telefone como digitado no RAAS-PAD (dígitos + espaço interno, ex. "75 32521778").
+    telefone: sub(s, L15.telefone).replace(/[^\d ]/g, "").trim(),
+    celular: sub(s, L15.celular).replace(/[^\d ]/g, "").trim(),
     email: T(s, L15.email),
     cidPrincipal: T(s, L15.cidPrincipal).toUpperCase(),
     cidSec1: T(s, L15.cidSec1).toUpperCase(),
@@ -165,7 +166,9 @@ export function parseAas(texto: string): AasImportado {
     chavesVistas.add(k);
     const acoes = acoesPorChave.get(k) ?? [];
     if (acoes.length === 0) avisos.push(`Folha de ${T(l, L15.nomePac) || "(sem nome)"} sem ações vinculadas.`);
-    fichas.push(folhaDeLinha15(l, acoes));
+    // O nome do estabelecimento vem do cabeçalho (linha 01) — sem ele, regerar um mês importado
+    // sairia com o cabeçalho do .AAS sem o nome do CAPS.
+    fichas.push({ ...folhaDeLinha15(l, acoes), estabelecimentoNome: orgaoNome });
   }
 
   const usadas = new Set(r15.map(chave15));

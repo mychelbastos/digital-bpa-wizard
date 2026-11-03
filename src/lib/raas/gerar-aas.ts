@@ -44,6 +44,9 @@ const D8 = (iso: string | undefined) => {
   const d = digitos(iso);
   return d.length === 8 ? d : " ".repeat(8);
 };
+// Telefone/celular: o RAAS-PAD grava o que foi DIGITADO, à esquerda (ex.: "7599942410 ",
+// "32521778   " e, quando digitaram com espaço, "75 32521778"). Mantém dígitos e espaços.
+const FONE = (v: string | undefined) => (v || "").replace(/[^\d ]/g, "").trim().slice(0, 11).padEnd(11, " ");
 // Município IBGE: 6 dígitos (sem DV) à esquerda + espaço, em 7.
 const MUN = (v: string | undefined) => digitos(v).slice(0, 6).padEnd(7, " ");
 
@@ -97,9 +100,10 @@ function linha15(f: RaasState, totalAcoes: number): string {
   put(b, 189, T(responsavel(f), 30)); // ras_nomeresp (190-219) — obrigatório
   put(b, 219, nacRaas(f.nacionalidade)); // ras_nascpcnte (220-222)
   put(b, 222, NR(f.etnia, 4, " "));
-  // ras_telefone (227-237, obrigatório): sem fixo, usa o celular do próprio paciente.
-  put(b, 226, NL(digitos(f.telefone) ? f.telefone : f.celular, 11));
-  put(b, 237, NL(f.celular, 11)); // ras_celular (238-248)
+  // ras_telefone (227-237) / ras_celular (238-248): como digitados. Vazio é aceito pelo SIA
+  // (confirmado na importação de 09/2026) e o RAAS-PAD também deixa em branco — não preencher.
+  put(b, 226, FONE(f.telefone));
+  put(b, 237, FONE(f.celular));
   put(b, 248, "21".padEnd(10, " ")); // motsaida (249-250) + dt óbito/alta (251-258)
   put(b, 258, T(f.cidPrincipal, 4));
   put(b, 262, T(f.cidSec1, 4));
@@ -166,6 +170,22 @@ function cabecalho01(competencia: string, estabNome: string, cfg: GerarAasCfg, n
   return b.join("") + "a";
 }
 
+// Ação que vai para o arquivo: procedimento preenchido e quantidade > 0.
+const acaoValida = (a: RaasAcao) => digitos(a.procedimento).length > 0 && Number(digitos(a.quantidade)) > 0;
+
+// A folha só entra no .AAS se tiver ao menos uma ação válida (as demais são ignoradas pelo gerador).
+export function folhaEntraNoArquivo(f: RaasState): boolean {
+  return Boolean(digitos(f.cnes)) && f.acoes.some(acaoValida);
+}
+
+// Origem do paciente (ras_origempcn) é OBRIGATÓRIA: 01–06. Vazia sairia "00" e o SIA recusa a
+// folha com "ORIGEM DO USUARIO INVALIDO". Retorna a descrição do problema ou null.
+export function problemaOrigemRaas(origem: string | null | undefined): string | null {
+  const o = digitos(origem ?? "");
+  if (/^0[1-6]$/.test(o)) return null;
+  return o ? `Origem do paciente "${o}" inválida (use 01 a 06).` : "Origem do paciente não preenchida (obrigatória: 01 a 06).";
+}
+
 export interface GerarAasCfg {
   sigla: string; // órgão origem — sigla (6)
   cnpj: string; // CNPJ do gestor (14)
@@ -206,7 +226,7 @@ export function gerarAas(fichas: RaasState[], competencia: string, cfg: GerarAas
     let nFichas = 0;
     let nAcoes = 0;
     for (const f of grupo) {
-      const acoes = f.acoes.filter((a) => digitos(a.procedimento).length > 0 && Number(digitos(a.quantidade)) > 0);
+      const acoes = f.acoes.filter(acaoValida);
       if (acoes.length === 0) continue;
       linhas.push(linha15(f, acoes.length)); // total de ações = nº de registros 16 desta folha
       nFichas++;

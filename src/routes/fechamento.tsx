@@ -7,7 +7,8 @@ import { fichasDoMes } from "@/lib/bpa-i-v2/fichas";
 import { gerarArquivoMes, type FechamentoMes } from "@/lib/fechamento-mes";
 import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { baixarTxt } from "@/lib/export-txt";
-import { gerarAas, baixarAas, type ArquivoAas } from "@/lib/raas/gerar-aas";
+import { gerarAas, baixarAas, folhaEntraNoArquivo, problemaOrigemRaas, type ArquivoAas } from "@/lib/raas/gerar-aas";
+import { ROTULO_CATEGORIA } from "@/lib/relatorios/erros";
 import { listarProducoesRaas, registrarProducaoRaas, type ProducaoRaas } from "@/lib/raas/producoes-raas";
 import { ufDeMunicipio, type RaasState } from "@/lib/raas/raas-layout";
 import { problemaMunicipioUf } from "@/lib/geo-uf";
@@ -141,17 +142,23 @@ function Fechamento() {
   // uma UF inexistente (ex.: "46") ou de outro estado — mesmo que seja uma só ficha. Então, se
   // houver qualquer problema, avisamos nomeando o paciente e NÃO geramos (um arquivo com UF
   // errada é inútil: o SIA rejeita tudo). Retorna true quando bloqueou.
+  // Também cobre a ORIGEM do paciente (obrigatória 01–06; vazia vira "00" e o SIA recusa a folha).
+  // Só olha as folhas que de fato entram no arquivo (com ação válida).
   const bloquearPorMunicipioUf = (raas: RaasState[]): boolean => {
     const ufEsperada = ufDeMunicipio(cfgCab.municipioIbge);
     const probs = raas
-      .map((f) => ({ nome: (f.nomePaciente || "").trim(), prob: problemaMunicipioUf(f.municipioIbge, f.coduf, ufEsperada) }))
+      .filter(folhaEntraNoArquivo)
+      .map((f) => ({
+        nome: (f.nomePaciente || "").trim(),
+        prob: problemaMunicipioUf(f.municipioIbge, f.coduf, ufEsperada) ?? problemaOrigemRaas(f.origemPaciente),
+      }))
       .filter((x) => x.prob);
     if (probs.length === 0) return false;
     const ex = probs[0];
     toast.error(
-      `Município/UF inválido em ${probs.length} ficha(s) — o SIA recusaria o lote inteiro. ` +
+      `${probs.length} ficha(s) com dado que o SIA recusa. ` +
         `Ex.: ${ex.nome || "(sem nome)"} — ${ex.prob} ` +
-        `Corrija a ficha (ou rode o relatório de consistência → "Município/UF do paciente") antes de gerar.`,
+        `Corrija a ficha (ou rode o relatório de consistência → "${ROTULO_CATEGORIA["municipio-uf"]}") antes de gerar.`,
       { duration: 12000 },
     );
     return true;

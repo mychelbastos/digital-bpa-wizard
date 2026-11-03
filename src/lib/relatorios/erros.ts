@@ -15,6 +15,8 @@ import type { SeqData } from "@/lib/bpai-v2-layout";
 import { loadConfig } from "@/lib/bpa-i-v2/config";
 import { ufDeMunicipio } from "@/lib/raas/raas-layout";
 import { problemaMunicipioUf } from "@/lib/geo-uf";
+import { folhaEntraNoArquivo, problemaOrigemRaas } from "@/lib/raas/gerar-aas";
+import type { RaasState } from "@/lib/raas/raas-layout";
 
 export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade" | "tfd-sem-profissional" | "municipio-uf";
 export const ROTULO_CATEGORIA: Record<CategoriaErro, string> = {
@@ -23,7 +25,7 @@ export const ROTULO_CATEGORIA: Record<CategoriaErro, string> = {
   "paciente-revisao": "Cadastro de paciente",
   "duplicidade": "Duplicidade de fichas",
   "tfd-sem-profissional": "TFD sem profissional",
-  "municipio-uf": "Município/UF do paciente",
+  "municipio-uf": "RAAS: município/UF e origem",
 };
 
 export interface ErroItem {
@@ -265,8 +267,10 @@ function errosMunicipioUf(fichas: FichaCompleta[], ufEsperada: string): ErroItem
   for (const f of fichas) {
     if (f.tipo !== "RAAS") continue;
     try {
-      const d = f.dados as { municipioIbge?: string; coduf?: string; nomePaciente?: string; cnes?: string; competencia?: string };
-      const prob = problemaMunicipioUf(d.municipioIbge, d.coduf, ufEsperada);
+      const d = f.dados as RaasState;
+      if (!folhaEntraNoArquivo(d)) continue; // sem ação válida não vai pro .AAS
+      // Origem obrigatória (01–06): vazia sai "00" e o SIA recusa com "ORIGEM DO USUARIO INVALIDO".
+      const prob = problemaMunicipioUf(d.municipioIbge, d.coduf, ufEsperada) ?? problemaOrigemRaas(d.origemPaciente);
       if (!prob) continue;
       const nome = (d.nomePaciente ?? "").trim();
       out.push({

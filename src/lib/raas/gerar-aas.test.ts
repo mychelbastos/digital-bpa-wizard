@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { gerarAas, controle4, type GerarAasCfg } from "./gerar-aas";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { gerarAas, controle4, folhaEntraNoArquivo, problemaOrigemRaas, type GerarAasCfg } from "./gerar-aas";
 import { parseAas } from "./raas-aas";
 import { emptyRaasState, emptyAcao } from "./raas-layout";
 
@@ -111,9 +113,19 @@ describe("gerarAas", () => {
     expect(r.slice(219, 222)).toBe("010"); // nacionalidade vazia → Brasil
     expect(r.slice(391, 402)).toBe("00000000000"); // tem CNS → CPF zerado
     expect(r.slice(189, 219).trim()).toBe("FULANO DE TAL"); // adulto sem responsável → o próprio
-    expect(r.slice(226, 237).trim()).toBe("75999990000"); // sem fixo → celular no telefone
+    // telefone/celular como digitados; sem fixo o telefone fica EM BRANCO (igual ao RAAS-PAD)
+    expect(r.slice(226, 237)).toBe(" ".repeat(11));
+    expect(r.slice(237, 248)).toBe("75999990000");
     const r16 = a.conteudo.split("\r\n").find((l) => l.startsWith("16"))!;
     expect(r16.slice(95, 106)).toBe("00000000000");
+  });
+
+  it("telefone digitado com espaço sai como digitado (ex.: '75 32521778')", () => {
+    const f = { ...fichaExemplo(), telefone: "75 32521778", celular: "75999990000" };
+    const [a] = gerarAas([f], "202603", cfg, "20260410");
+    const r = a.conteudo.split("\r\n").find((l) => l.startsWith("15"))!;
+    expect(r.slice(226, 248)).toBe("75 3252177875999990000");
+    expect(parseAas(a.conteudo).fichas[0].telefone).toBe("75 32521778");
   });
 
   it("menor de idade sem responsável → nome da mãe; sem CNS → CPF vai no arquivo", () => {
@@ -129,11 +141,49 @@ describe("gerarAas", () => {
     expect(r.slice(391, 402)).toBe("12345678901");
   });
 
+  it("origem obrigatória (01–06) e só folhas com ação válida entram no arquivo", () => {
+    expect(problemaOrigemRaas("02")).toBeNull();
+    expect(problemaOrigemRaas("")).toMatch(/não preenchida/);
+    expect(problemaOrigemRaas("00")).toMatch(/inválida/);
+    expect(problemaOrigemRaas("07")).toMatch(/inválida/);
+    expect(folhaEntraNoArquivo(fichaExemplo())).toBe(true);
+    expect(folhaEntraNoArquivo({ ...fichaExemplo(), acoes: [{ ...emptyAcao(), procedimento: "", quantidade: "" }] })).toBe(false);
+  });
+
   it("ignora ações sem procedimento ou quantidade zero", () => {
     const ficha = fichaExemplo();
     ficha.acoes.push({ ...emptyAcao(), procedimento: "", quantidade: "" });
     ficha.acoes.push({ ...emptyAcao(), procedimento: "0301080300", quantidade: "000000" });
     const [a] = gerarAas([ficha], "202603", cfg, "20260410");
     expect(a.acoes).toBe(2);
+  });
+});
+
+// ESTRUTURA GRAVADA (nov/2026): fixture = 19 folhas / 50 ações REAIS do AA292720.AGO gerado pelo
+// RAAS-PAD (importado limpo no SIA), com todo dado pessoal trocado por fictício mantendo posição e
+// formato, e dígito de controle recalculado (anonimizador: scratchpad anon_aas.py). Cobre origem
+// 01/02/04, telefone com espaço/em branco, ESF S/N, droga S com tipos, local C/T, 1–5 ações.
+// Importar + gerar tem de reproduzir CADA registro 15/16 byte a byte. Se este teste quebrar, o
+// .AAS deixou de sair igual ao programa oficial — não "ajuste o esperado" sem conferir no SIA.
+describe("estrutura do .AAS = RAAS-PAD (golden byte a byte)", () => {
+  const FIXTURE = fileURLToPath(new URL("../__fixtures__/aas-raaspad-anon.txt", import.meta.url));
+
+  it("importar + gerar reproduz todos os registros 15/16 do arquivo oficial", () => {
+    const txt = readFileSync(FIXTURE, "latin1");
+    const orig = txt.split("\r\n").filter(Boolean);
+    const h = orig[0];
+    const imp = parseAas(txt);
+    expect(imp.avisos).toEqual([]);
+    const [g] = gerarAas(
+      imp.fichas,
+      imp.competencia,
+      { sigla: h.slice(53, 59).trim(), cnpj: h.slice(59, 73), gestorNome: h.slice(73, 113).trim(), destinoTipo: h[113] === "E" ? "E" : "M" },
+      h.slice(114, 122),
+    );
+    const ger = g.conteudo.split("\r\n").filter(Boolean);
+    expect(ger.length).toBe(orig.length);
+    for (let i = 1; i < orig.length; i++) expect(ger[i], `linha ${i + 1}`).toBe(orig[i]);
+    // Cabeçalho idêntico, exceto [13,23) — nº de remessa interno do SIA (não deriva do conteúdo).
+    expect(ger[0].slice(0, 13) + ger[0].slice(23)).toBe(h.slice(0, 13) + h.slice(23));
   });
 });
