@@ -4,7 +4,11 @@
 //
 // Formato (texto ISO-8859-1, CRLF; dígitos gravados pela CIFRA de substituição):
 //   Cifra: 0-9  ->  * . ; / ? : > , ( )
-//   Cabeçalho (142): "ÃÇF" + competência(6, cifrada) + "*/0*." + "EEEEEE" + espaços.
+//   Cabeçalho (142): "ÃÇF" + competência(6, cifrada) + VERSÃO do FPO-Mag (5, cifrada) + "EEEEEE" + espaços.
+//     Versão = "03.01" cifrada com o "." virando "0" → "*/0*." (é o que o MACIO07.IMP oficial,
+//     gerado pelo FPO-Mag 03.01, traz; o .VTP do mesmo lote grava "0301" em claro). O SIA recusa
+//     arquivo de versão antiga ("NAO FOI GERADO PELO FPO-MAG. UTILIZE A VERSAO MAIS ATUAL").
+//     Ao sair versão nova no siasus (listar_ftp_fpo.php / FPO_Leiame.txt), atualizar FPO_MAG_VERSAO.
 //   Linha de dado (142), decifrada = concatenação de:
 //     [0:6]   competência AAAAMM
 //     [6:13]  CNES (7)
@@ -20,6 +24,11 @@
 const CIFRA: Record<string, string> = {
   "0": "*", "1": ".", "2": ";", "3": "/", "4": "?", "5": ":", "6": ">", "7": ",", "8": "(", "9": ")",
 };
+// Versão do FPO-Mag gravada no cabeçalho — a mais recente publicada no SIASUS (29/10/2026;
+// obrigatória desde 202609 = 03.05). As versões 03.02–03.07 só mudaram consistência/valoração
+// (FPO_Leiame.txt), não o layout do .IMP.
+export const FPO_MAG_VERSAO = "03.07";
+
 const cifrar = (digitos: string): string => {
   let out = "";
   for (const c of digitos) out += CIFRA[c] ?? "";
@@ -58,8 +67,15 @@ function linha(comp: string, it: FpoMagItem): string {
   return cifrar(full);
 }
 
-function cabecalho(comp: string): string {
-  const base = "ÃÇF" + cifrar(z(comp, 6)) + "*/0*." + "EEEEEE"; // 20 chars
+// "03.07" → "*/0*,": dígitos pela cifra, o ponto vira "0".
+export function cifrarVersao(versao: string): string {
+  const m = /^(\d{2})\.(\d{2})$/.exec(versao);
+  if (!m) throw new Error(`Versão do FPO-Mag inválida: ${versao} (esperado NN.NN)`);
+  return cifrar(m[1]) + "0" + cifrar(m[2]);
+}
+
+function cabecalho(comp: string, versao: string): string {
+  const base = "ÃÇF" + cifrar(z(comp, 6)) + cifrarVersao(versao) + "EEEEEE"; // 20 chars
   return base + " ".repeat(142 - base.length);
 }
 
@@ -72,13 +88,15 @@ export interface FpoMagArquivo {
 
 // Gera o conteúdo do .IMP a partir dos itens (vários CNES). `prefixoNome` default "MACIO"
 // (≤ 8 chars com o mês — exigência do SIA). Ordena por CNES e procedimento crescentes.
-export function gerarFpoMagnetico(competencia: string, itens: FpoMagItem[], prefixoNome = "MACIO"): FpoMagArquivo {
+export function gerarFpoMagnetico(
+  competencia: string, itens: FpoMagItem[], prefixoNome = "MACIO", versao = FPO_MAG_VERSAO,
+): FpoMagArquivo {
   const comp = z(competencia, 6);
   const ordenados = [...itens]
     .filter((it) => /^[0-9]{7}$/.test(it.cnes) && /^[0-9]{9}$/.test(it.codigoFpo))
     .sort((a, b) => a.cnes.localeCompare(b.cnes) || a.codigoFpo.localeCompare(b.codigoFpo));
   const corpo = ordenados.map((it) => linha(comp, it));
-  const conteudo = [cabecalho(comp), ...corpo].join("\r\n") + "\r\n";
+  const conteudo = [cabecalho(comp, versao), ...corpo].join("\r\n") + "\r\n";
   const mm = comp.slice(4, 6);
   const unidades = new Set(ordenados.map((it) => it.cnes)).size;
   return { conteudo, nome: `${prefixoNome}${mm}.IMP`, linhas: corpo.length, unidades };

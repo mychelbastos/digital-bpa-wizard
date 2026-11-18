@@ -33,7 +33,8 @@ describe("gerarFpoMagnetico — golden byte a byte (.local)", () => {
         valorUnitario: parseInt(d.slice(32, 47), 10) / 100,
       };
     });
-    const { conteudo } = gerarFpoMagnetico(comp, itens);
+    // O arquivo real foi gerado pelo FPO-Mag 03.01 → cabeçalho com essa versão.
+    const { conteudo } = gerarFpoMagnetico(comp, itens, "MACIO", "03.01");
     expect(conteudo).toBe(real.endsWith("\r\n") ? real : real + "\r\n");
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gerarFpoMagnetico, type FpoMagItem } from "./gerar-fpo-magnetico";
+import { gerarFpoMagnetico, cifrarVersao, FPO_MAG_VERSAO, type FpoMagItem } from "./gerar-fpo-magnetico";
 
 const DECIFRA: Record<string, string> = {
   "*": "0", ".": "1", ";": "2", "/": "3", "?": "4", ":": "5", ">": "6", ",": "7", "(": "8", ")": "9",
@@ -51,5 +51,15 @@ describe("gerarFpoMagnetico", () => {
   it("usa o código de apuração padrão quando inválido/vazio", () => {
     const linha = gerarFpoMagnetico("202607", [{ ...item, codApuracao: "" }]).conteudo.split("\r\n")[1];
     expect(dec(linha).slice(22, 24)).toBe("24");
+  });
+
+  it("grava a versão do FPO-Mag no cabeçalho (03.01 do arquivo oficial → \"*/0*.\")", () => {
+    expect(cifrarVersao("03.01")).toBe("*/0*.");
+    expect(cifrarVersao("03.07")).toBe("*/0*,");
+    const v01 = gerarFpoMagnetico("202607", [item], "MACIO", "03.01").conteudo.split("\r\n")[0];
+    expect(v01.slice(0, 20)).toBe("ÃÇF;*;>*,*/0*.EEEEEE"); // = cabeçalho real do MACIO07.IMP
+    const atual = gerarFpoMagnetico("202610", [item]).conteudo.split("\r\n")[0];
+    expect(atual.slice(9, 14)).toBe(cifrarVersao(FPO_MAG_VERSAO));
+    expect(atual).toHaveLength(142);
   });
 });
