@@ -61,7 +61,7 @@ async function ftpList(host: string, dir: string, ms = 15000): Promise<string> {
 // conferência MANUAL via link oficial. `prefixo` = prefixo da tag no catálogo (ex.: "bpa-v05-00").
 const PROGRAMAS = [
   { item: "BPA Magnético", nosso: "05.00", prefixo: "bpa", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_bpa.php" },
-  { item: "FPO Magnético", nosso: "03.03", prefixo: "fpo", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_fpo.php" },
+  { item: "FPO Magnético", nosso: "03.07", /* = FPO_MAG_VERSAO (src/lib/fpo/gerar-fpo-magnetico.ts); teste trava */ prefixo: "fpo", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_fpo.php" },
   { item: "RAAS", nosso: "02.35", prefixo: "raas", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_raas.php" },
   { item: "APAC Magnético", nosso: "04.02", prefixo: "apac", pagina: "https://sia.datasus.gov.br/versao/listar_ftp_apac.php" },
 ];
