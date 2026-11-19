@@ -12,7 +12,7 @@ import { ROTULO_CATEGORIA } from "@/lib/relatorios/erros";
 import { listarProducoesRaas, registrarProducaoRaas, type ProducaoRaas } from "@/lib/raas/producoes-raas";
 import { ufDeMunicipio, type RaasState } from "@/lib/raas/raas-layout";
 import { problemaMunicipioUf } from "@/lib/geo-uf";
-import { cnesComPermissao, souSuperAdmin } from "@/lib/permissoes";
+import { cnesComPermissao } from "@/lib/permissoes";
 import { exportarProducao, reabrirProducao, listarProducoes, type Producao } from "@/lib/producoes";
 import { movimentoFaturamento, rotuloMovimento } from "@/lib/faturamento";
 import { gerarRelexp } from "@/lib/relexp";
@@ -39,10 +39,6 @@ function Fechamento() {
   const [reabrindoBusy, setReabrindoBusy] = useState(false);
   // Re-baixar o arquivo de uma produção já fechada (id em download).
   const [baixandoProd, setBaixandoProd] = useState<string | null>(null);
-  // "Baixar para o SIA" (PA + RELEXP.PRN) — aparece p/ a conta DONA (super-admin) OU p/ quem
-  // pode gerar a produção/remessa (permissão gerar_producao, que o cargo "operador de remessa"
-  // tem). Ver o gate `ehDona || podeGerar` nos botões.
-  const [ehDona, setEhDona] = useState(false);
   // Cabeçalho que sairá no arquivo (versão/destino) — muda quase todo mês; mostramos para o
   // operador conferir antes de fechar.
   const [cfgCab, setCfgCab] = useState(() => loadConfig());
@@ -59,20 +55,21 @@ function Fechamento() {
   }, []);
   useEffect(() => {
     cnesComPermissao("gerar_producao").then(setCnesPermitidos);
-    souSuperAdmin().then(setEhDona);
     recarregarProducoes();
     // Espelha a config do cabeçalho da organização (fonte da verdade) para o gerador.
     sincronizarConfigDaOrg().then(() => setCfgCab(loadConfig()));
   }, [recarregarProducoes]);
 
   // Baixa o pacote para o SIA: o arquivo PA + o RELEXP.PRN (relatório de controle de remessa).
-  const baixarParaSia = (arquivo: ArquivoBpa, compArg: string) => {
+  // É o ÚNICO download da tela (fechar e re-baixar usam este).
+  const baixarParaSia = async (arquivo: ArquivoBpa, compArg: string) => {
     baixarTxt(arquivo.nome, arquivo.conteudo);
     const relexp = gerarRelexp(loadConfig(), compArg, arquivo.nome, {
       linhas: arquivo.linhas, folhas: arquivo.folhas, controle: arquivo.controle ?? 0,
     });
+    // pequeno intervalo: alguns navegadores bloqueiam 2 downloads simultâneos
+    await new Promise((r) => setTimeout(r, 600));
     baixarTxt("RELEXP.PRN", relexp);
-    toast.success(`Baixados ${arquivo.nome} + RELEXP.PRN.`);
   };
 
   const podeGerar = cnesPermitidos !== null && cnesPermitidos.length > 0;
@@ -108,13 +105,9 @@ function Fechamento() {
     }
   };
 
-  const baixar = () => {
-    if (res?.arquivo) baixarTxt(res.arquivo.nome, res.arquivo.conteudo);
-  };
-
   // Re-baixa o .txt de uma produção JÁ FECHADA. As fichas estão congeladas, então regenerar
   // produz exatamente o mesmo arquivo exportado. Usa o nome gravado na produção.
-  const baixarProducaoFechada = async (p: Producao, paraSia = false) => {
+  const baixarProducaoFechada = async (p: Producao) => {
     if (!/^\d{6}$/.test(p.mes_producao)) return;
     setBaixandoProd(p.id);
     try {
@@ -128,8 +121,8 @@ function Fechamento() {
       );
       if (!r.arquivo) { toast.warning("Nenhuma produção encontrada para esse mês."); return; }
       // Usa o nome REGENERADO (padrão atual PA<municipio>.<MMM>), não o salvo antigo.
-      if (paraSia) baixarParaSia(r.arquivo, p.mes_producao);
-      else baixarTxt(r.arquivo.nome, r.arquivo.conteudo);
+      await baixarParaSia(r.arquivo, p.mes_producao);
+      toast.success(`Baixados ${r.arquivo.nome} + RELEXP.PRN.`);
     } catch (err) {
       console.error(err);
       toast.error("Falha ao baixar o arquivo. Veja o console.");
@@ -258,9 +251,9 @@ function Fechamento() {
     setFechando(true);
     try {
       const r = await exportarProducao(comp, res.arquivo.nome);
-      baixar();
+      await baixarParaSia(res.arquivo, comp);
       toast.success(
-        `Produção de ${comp} fechada — ${r.fichas_congeladas} ficha(s) congelada(s). Arquivo baixado.`,
+        `Produção de ${comp} fechada — ${r.fichas_congeladas} ficha(s) congelada(s). Baixados ${res.arquivo.nome} + RELEXP.PRN.`,
       );
       recarregarProducoes();
     } catch (err) {
@@ -411,21 +404,6 @@ function Fechamento() {
             {res.arquivo ? (
               <>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={baixar}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted"
-                  >
-                    <Download className="size-4" /> Baixar prévia ({res.arquivo.nome})
-                  </button>
-                  {(ehDona || podeGerar) && (
-                    <button
-                      onClick={() => baixarParaSia(res.arquivo!, comp)}
-                      title="Baixa o arquivo PA + o RELEXP.PRN para importar direto no SIA/SUS (quem gera a produção/remessa)"
-                      className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
-                    >
-                      <Download className="size-4" /> Baixar para o SIA (PA + RELEXP)
-                    </button>
-                  )}
                   <button
                     onClick={() => setConfirmarFechar(true)}
                     disabled={
@@ -587,20 +565,10 @@ function Fechamento() {
                     <button
                       onClick={() => baixarProducaoFechada(p)}
                       disabled={baixandoProd === p.id}
-                      title="Baixar novamente o arquivo desta produção"
+                      title="Baixar novamente o arquivo PA + o RELEXP.PRN desta produção"
                       className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60"
                     >
                       {baixandoProd === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />} Baixar
-                    </button>
-                  )}
-                  {(ehDona || podeGerar) && (p.status === "exportada" || p.status === "transmitida") && (
-                    <button
-                      onClick={() => baixarProducaoFechada(p, true)}
-                      disabled={baixandoProd === p.id}
-                      title="Baixar PA + RELEXP.PRN para importar direto no SIA/SUS (quem gera a produção/remessa)"
-                      className="inline-flex items-center gap-1 rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                    >
-                      <Download className="size-3.5" /> SIA
                     </button>
                   )}
                   {p.status === "exportada" &&
