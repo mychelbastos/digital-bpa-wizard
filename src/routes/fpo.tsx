@@ -14,6 +14,7 @@ import {
   cnesEditaveisFpo, carregarFpoParaExport, type FpoComparacaoRow, type FpoItemResolvido,
 } from "@/lib/fpo/fpo";
 import { gerarFpoMagnetico, baixarFpoMagnetico } from "@/lib/fpo/gerar-fpo-magnetico";
+import { gerarVtp, carregarVtpBase } from "@/lib/fpo/gerar-vtp";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { construirPdfFpo } from "@/lib/fpo/relatorio-fpo";
 import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
@@ -140,7 +141,8 @@ function FpoPage() {
   const nomeUnidade = cnesOpcoes.find((o) => o.cnes === cnes)?.nome ?? cnes;
 
   // Exporta o FPO do MUNICÍPIO INTEIRO (todas as unidades que o usuário edita) para o SIA:
-  // gera o .IMP do FPO Magnético (MACIO<MM>.IMP) a partir dos tetos vigentes da competência.
+  // gera o .IMP do FPO Magnético (MACIO<MM>.IMP) a partir dos tetos vigentes da competência
+  // e o Valores_AAAAMM.VTP (tabela de valores) — o SIA só aceita os dois juntos.
   const [exportando, setExportando] = useState(false);
   const exportarSia = async () => {
     if (exportando) return;
@@ -151,9 +153,15 @@ function FpoPage() {
       const arq = gerarFpoMagnetico(competencia, itens.map((i) => ({
         cnes: i.cnes, codigoFpo: i.codigoFpo, qtdOrcada: i.qtdOrcada, valorUnitario: i.valorUnitario, codApuracao: i.codApuracao ?? "",
       })));
+      // O SIA exige o .VTP (tabela de valores) JUNTO com o .IMP — gera os dois.
+      const vtp = gerarVtp(competencia, await carregarVtpBase());
       baixarFpoMagnetico(arq.nome, arq.conteudo);
-      if (semApuracao > 0) toast.warning(`${arq.nome}: ${arq.linhas} itens em ${arq.unidades} unidade(s). ${semApuracao} sem nível de apuração saíram com o padrão (24) — confira.`);
-      else toast.success(`${arq.nome} gerado: ${arq.linhas} itens, ${arq.unidades} unidade(s).`);
+      // pequeno intervalo: alguns navegadores bloqueiam 2 downloads simultâneos
+      await new Promise((r) => setTimeout(r, 600));
+      baixarFpoMagnetico(vtp.nome, vtp.conteudo);
+      const par = `${arq.nome} + ${vtp.nome}`;
+      if (semApuracao > 0) toast.warning(`${par}: ${arq.linhas} itens em ${arq.unidades} unidade(s). ${semApuracao} sem nível de apuração saíram com o padrão (24) — confira.`);
+      else toast.success(`${par} gerados: ${arq.linhas} itens, ${arq.unidades} unidade(s). Importe os 2 juntos no SIA.`);
     } catch (e) {
       console.error("export FPO .IMP falhou", e);
       toast.error("Falha ao gerar o arquivo do SIA. Veja o console.");
@@ -182,7 +190,7 @@ function FpoPage() {
               )}
               {editaveis.size > 0 && (
                 <button onClick={exportarSia} disabled={exportando}
-                  title="Gera o arquivo do FPO Magnético (MACIO<MM>.IMP) do município inteiro para importar no SIA/SUS"
+                  title="Gera os arquivos do FPO Magnético (MACIO<MM>.IMP + Valores_AAAAMM.VTP) do município inteiro para importar juntos no SIA/SUS"
                   className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3.5 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">
                   {exportando ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Exportar FPO para o SIA
                 </button>
