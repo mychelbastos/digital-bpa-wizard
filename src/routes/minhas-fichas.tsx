@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X, Trash2, Search } from "lucide-react";
+import { FolderOpen, Pencil, Check, Loader2, FileText, Printer, ChevronLeft, ChevronRight, ChevronDown, CalendarDays, Square, CheckSquare, X, Trash2, Search, Download } from "lucide-react";
+import { salvarImagensPdf, nomeArquivoFicha } from "@/lib/export-pdf";
 import { listarFichas, renomearFicha, excluirFicha, buscarFichasConteudo, type FichaResumo } from "@/lib/bpa-i-v2/fichas";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ const rotaDoTipo = (tipo: FichaResumo["tipo"], id: string) =>
   tipo === "BPA-C" ? `/bpa-c-v3?ficha=${id}` : tipo === "RAAS" ? `/raas?ficha=${id}` : tipo === "APAC" ? `/apac?ficha=${id}` : tipo === "AIH" ? `/laudo-aih?ficha=${id}` : `/bpa-i-v3?ficha=${id}`;
 // Token de uma ficha para a página /imprimir ("I~<id>" ou "C~<id>"). RAAS ainda não tem
 // impressão/overlay — não gera token (é filtrado antes de entrar na seleção de impressão).
+const rotaCaptura = (f: FichaResumo) => `${f.tipo === "BPA-C" ? "/bpa-c-v3" : f.tipo === "RAAS" ? "/raas-folha" : "/bpa-i-v3"}?ficha=${f.id}&capture=1`;
 const tokenImpressao = (f: FichaResumo) => `${f.tipo === "BPA-C" ? "C" : f.tipo === "RAAS" ? "R" : "I"}~${f.id}`;
 
 type TipoFiltro = "todos" | "BPA-C" | "BPA-I" | "RAAS" | "APAC" | "AIH";
@@ -51,6 +53,28 @@ function MinhasFichasPage() {
   // Exclusão (soft-delete) de ficha não exportada — com confirmação.
   const [excluirAlvo, setExcluirAlvo] = useState<FichaResumo | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  // Download individual (PDF com o nome da ficha): a ficha é montada num iframe oculto
+  // (mesma captura do /imprimir) e as folhas voltam por postMessage.
+  const [baixando, setBaixando] = useState<FichaResumo | null>(null);
+
+  useEffect(() => {
+    if (!baixando) return;
+    const alvo = baixando;
+    const fim = () => setBaixando(null);
+    function onMsg(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data as { tipo?: string; ficha?: string; imgs?: string[]; erro?: string } | null;
+      if (!d || d.tipo !== "bpa-captura" || (d.ficha && d.ficha !== alvo.id)) return;
+      if (Array.isArray(d.imgs) && d.imgs.length) {
+        try { salvarImagensPdf(d.imgs, nomeArquivoFicha(rotuloExibicao(alvo))); toast.success("Ficha baixada."); }
+        catch { toast.error("Não foi possível gerar o PDF da ficha."); }
+      } else toast.error("Não foi possível preparar a ficha para baixar.");
+      fim();
+    }
+    window.addEventListener("message", onMsg);
+    const t = window.setTimeout(() => { toast.error("A ficha demorou demais para preparar. Tente de novo."); fim(); }, 30000);
+    return () => { window.removeEventListener("message", onMsg); clearTimeout(t); };
+  }, [baixando]);
   // Busca (lupa): filtro instantâneo nos metadados + busca no servidor dentro do conteúdo
   // (paciente/procedimento). `idsConteudo` = ids que casaram no conteúdo (null = ainda não veio).
   const [busca, setBusca] = useState("");
@@ -426,6 +450,15 @@ function MinhasFichasPage() {
                                   className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
                                 ><Printer className="mr-1 inline size-3.5" />Imprimir</a>
                               )}
+                              {imprimivel(f) && (
+                                <button
+                                  aria-label="Baixar ficha (PDF)"
+                                  title="Baixar ficha (PDF com o nome da ficha)"
+                                  disabled={Boolean(baixando)}
+                                  onClick={() => setBaixando(f)}
+                                  className="shrink-0 rounded-md border border-border p-1.5 text-foreground hover:bg-muted disabled:opacity-50"
+                                >{baixando?.id === f.id ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}</button>
+                              )}
                               <button aria-label="Renomear" onClick={() => { setEditandoId(f.id); setNovoNome(f.titulo || ""); }} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-4" /></button>
                               {!f.congelada && (
                                 <button aria-label="Excluir ficha" title="Excluir ficha (não exportada)" onClick={() => setExcluirAlvo(f)} className="shrink-0 rounded-md p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="size-4" /></button>
@@ -445,6 +478,16 @@ function MinhasFichasPage() {
           </>
         )}
       </main>
+
+      {baixando && (
+        <iframe
+          key={baixando.id}
+          title="captura-download"
+          aria-hidden="true"
+          style={{ position: "fixed", left: -10000, top: 0, width: 1200, height: 1500, border: 0 }}
+          src={rotaCaptura(baixando)}
+        />
+      )}
 
       <ConfirmModal
         open={Boolean(excluirAlvo)}

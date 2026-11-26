@@ -85,3 +85,22 @@ export async function exportSheetsPdf(sheets: HTMLElement[], filename: string) {
   }
   pdf.save(filename);
 }
+
+// Monta um PDF A4 (uma imagem por página) a partir das folhas já rasterizadas (JPEG data URL)
+// — usado pelo "baixar ficha" de Minhas fichas, que recebe as imagens do iframe de captura.
+export function salvarImagensPdf(imgs: string[], filename: string) {
+  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const w = pdf.internal.pageSize.getWidth(), h = pdf.internal.pageSize.getHeight();
+  imgs.forEach((img, i) => {
+    if (i > 0) pdf.addPage();
+    pdf.addImage(img, "JPEG", 0, 0, w, h);
+  });
+  pdf.save(filename);
+}
+
+// Nome de arquivo a partir do nome da ficha: tira caracteres proibidos no Windows/Mac
+// ("/" de "11/2026" vira "-") e espaços repetidos.
+export function nomeArquivoFicha(rotulo: string, ext = "pdf"): string {
+  const base = rotulo.replace(/[\\/]/g, "-").replace(/[:*?"<>|\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim().slice(0, 150);
+  return `${base || "ficha"}.${ext}`;
+}
