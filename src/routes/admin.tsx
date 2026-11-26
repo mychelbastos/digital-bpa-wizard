@@ -57,6 +57,7 @@ export const Route = createFileRoute("/admin")({
 
 const LABEL_CARGO: Record<string, string> = {
   digitador: "Digitador",
+  profissional_saude: "Profissional de Saúde",
   coordenador: "Coordenador",
   operador_remessa: "Operador de remessa",
   secretario_municipal: "Secretário municipal",
@@ -73,6 +74,7 @@ const DESC_CARGO: Record<string, string> = {
 type Escopo = "cnes" | "organizacao" | "global";
 const ESCOPO_CARGO: Record<string, Escopo> = {
   digitador: "cnes",
+  profissional_saude: "cnes",
   coordenador: "cnes",
   operador_remessa: "cnes",
   secretario_municipal: "organizacao",
