@@ -20,7 +20,7 @@ import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario, carregarDescricoesCbo } from "@/lib/dashboard-producao";
 import { anoAte4Digitos } from "@/lib/validacao-data";
 import {
-  emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
+  emptyRaasState, emptyAcao, totalAcoes, errosAcoesRaas, ufDeMunicipio,
   RAAS_ORIGEM_PACIENTE, RAAS_DESTINO_PACIENTE, RAAS_TIPO_DROGA, RAAS_LOCAL_REALIZACAO,
   RAAS_SIM_NAO, RAAS_NACIONALIDADES, situacaoParaNacionalidadeRaas,
   type RaasState, type RaasAcao, type ComboOption,
@@ -513,7 +513,16 @@ function RaasPage() {
     profissionalNome: state.nomePaciente || null,
   });
 
+  // Trava: não salva com ação sem procedimento/quantidade (mostra o que falta).
+  const acoesBloqueiam = (): boolean => {
+    const erros = errosAcoesRaas(state.acoes);
+    if (erros.length === 0) return false;
+    toast.error(`Não dá para salvar: ${erros.join(" · ")}.`);
+    return true;
+  };
+
   const gravar = async (titulo: string, comoNovo: boolean) => {
+    if (acoesBloqueiam()) return;
     const comp = /^\d{6}$/.test(state.competencia) ? state.competencia : "";
     const idAlvo = comoNovo ? null : fichaIdRef.current;
     const id = await salvarFicha(idAlvo, titulo, comp, state, metaFicha());
@@ -526,6 +535,7 @@ function RaasPage() {
   };
 
   const salvarClique = async () => {
+    if (acoesBloqueiam()) return;
     if (!fichaIdRef.current) { setSalvarComoNovo(false); setSalvarOpen(true); return; }
     setSalvando(true);
     await gravar(fichaTituloRef.current!, false);
@@ -644,7 +654,8 @@ function RaasPage() {
   // "Motivo de saída/permanência" (ras_motsaida) NÃO entra nas pendências: no fluxo oficial
   // do RAAS-PSICO quem define saída/permanência é o "Destino do Paciente". O campo do layout
   // é derivado/legado — vamos confirmar o preenchimento com um .AAS real antes de gerar.
-  if (totalAcoes(state.acoes) === 0) faltando.push("Ao menos uma ação com procedimento");
+  // Ações sem procedimento/quantidade BLOQUEIAM o salvar (errosAcoesRaas); aparecem aqui também.
+  faltando.push(...errosAcoesRaas(state.acoes));
 
   const total = totalAcoes(state.acoes);
 
@@ -720,7 +731,7 @@ function RaasPage() {
                   {salvando ? "Salvando…" : `💾 Salvar${fichaTituloRef.current ? "" : " ficha"}`}
                 </button>
                 {fichaIdRef.current && (
-                  <button onClick={() => { setSalvarComoNovo(true); setSalvarOpen(true); }}
+                  <button onClick={() => { if (acoesBloqueiam()) return; setSalvarComoNovo(true); setSalvarOpen(true); }}
                     className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
                     Salvar como…
                   </button>
@@ -736,7 +747,7 @@ function RaasPage() {
           <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
             <div className="mx-auto max-w-[1100px]">
               <span className="font-semibold">Pendências para o RAAS ficar completo:</span>{" "}
-              {faltando.join(" · ")}. <span className="opacity-80">(Você ainda pode salvar como rascunho.)</span>
+              {faltando.join(" · ")}. <span className="opacity-80">{errosAcoesRaas(state.acoes).length ? "(Procedimento e quantidade das ações são obrigatórios para salvar.)" : "(Você ainda pode salvar como rascunho.)"}</span>
             </div>
           </div>
         )}

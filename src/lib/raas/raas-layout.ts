@@ -263,3 +263,25 @@ export function emptyRaasState(): RaasState {
 export function totalAcoes(acoes: RaasAcao[]): number {
   return acoes.filter((a) => a.procedimento.replace(/\D/g, "").length > 0).length;
 }
+
+// Ação totalmente em branco (o usuário clicou "Adicionar ação" e não preencheu): é ignorada.
+// Serviço/classificação/local não contam — vêm preenchidos automaticamente.
+const acaoEmBranco = (a: RaasAcao) =>
+  ![a.procedimento, a.cbo, a.cnsExecutante, a.dataExec, a.quantidade].some((v) => String(v ?? "").trim());
+
+// Trava de salvar (26/11/2026): toda ação começada precisa de PROCEDIMENTO e QUANTIDADE (> 0),
+// e a ficha precisa de ao menos uma ação assim. Devolve as mensagens; vazio = pode salvar.
+export function errosAcoesRaas(acoes: RaasAcao[]): string[] {
+  const erros: string[] = [];
+  let validas = 0;
+  acoes.forEach((a, i) => {
+    if (acaoEmBranco(a)) return;
+    const faltam: string[] = [];
+    if (a.procedimento.replace(/\D/g, "").length !== 10) faltam.push("procedimento");
+    if (!(Number(String(a.quantidade).replace(/\D/g, "")) > 0)) faltam.push("quantidade");
+    if (faltam.length) erros.push(`Ação ${i + 1}: falta ${faltam.join(" e ")}`);
+    else validas++;
+  });
+  if (validas === 0 && erros.length === 0) erros.push("Preencha ao menos uma ação com procedimento e quantidade");
+  return erros;
+}
