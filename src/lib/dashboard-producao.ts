@@ -113,6 +113,47 @@ export async function carregarProducaoDashboardPeriodo(
 // Série mensal p/ o gráfico "Últimos 6 meses": só as colunas que o gráfico e os filtros usam.
 export const COLS_SERIE =
   "id,tipo,mes_producao,cnes,profissional_cns,profissional_nome,cbo,procedimento,quantidade";
+// Série JÁ SOMADA no banco (RPC dashboard_serie_mensal, security invoker → mesma visibilidade
+// da view; calcula na hora = tempo real). ~400 linhas numa consulta, em vez de milhares.
+// Devolve null se a RPC falhar (o chamador cai no modo mês a mês).
+export async function carregarSerieAgregada(
+  de: string,
+  ate: string,
+): Promise<ProducaoBpaRow[] | null> {
+  if (!supabase || !/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate)) return [];
+  try {
+    const { data, error } = await supabase.rpc(
+      "dashboard_serie_mensal" as never,
+      { _de: de, _ate: ate } as never,
+    );
+    if (error || !Array.isArray(data)) return null;
+    return (data as Record<string, unknown>[]).map(
+      (r, i) =>
+        ({
+          id: `s${i}`,
+          ficha_id: null,
+          tipo: r.tipo as TipoBpa,
+          competencia: null,
+          mes_producao: (r.mes_producao as string) ?? null,
+          cnes: (r.cnes as string) ?? null,
+          estabelecimento_nome: null,
+          profissional_cns: (r.profissional_cns as string) ?? null,
+          profissional_nome: (r.profissional_nome as string) ?? null,
+          cbo: (r.cbo as string) ?? null,
+          procedimento: (r.procedimento as string) ?? "",
+          quantidade: Number(r.quantidade) || 0,
+          servico: null,
+          classificacao: null,
+          cid: null,
+          carater: null,
+          idade: null,
+        }) as unknown as ProducaoBpaRow,
+    );
+  } catch {
+    return null;
+  }
+}
+
 // UM mês por vez (filtro de igualdade): no banco, cada página do mês sai em ~0,1–0,25 s,
 // contra ~1 s por página quando se filtra o PERÍODO (between) — medido em 27/11/2026.
 export async function carregarMesSerie(mes: string): Promise<ProducaoBpaRow[]> {

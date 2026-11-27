@@ -11,6 +11,7 @@ import {
   carregarDescricoesCbo,
   carregarProducaoDashboard,
   carregarMesSerie,
+  carregarSerieAgregada,
   carregarNomeOrganizacao,
   type VinculoResumo,
   type ProducaoBpaRow,
@@ -53,7 +54,6 @@ export const Route = createFileRoute("/")({
 });
 
 // Cache em memória da série de 6 meses, por período (não recarrega ao trocar filtros).
-const cacheMes = new Map<string, ProducaoBpaRow[]>(); // meses ANTERIORES (o atual vem da carga principal)
 
 function Home() {
   const [rows, setRows] = useState<ProducaoBpaRow[]>([]);
@@ -156,8 +156,9 @@ function Home() {
   }, [cnes]);
 
   // Série de 6 meses: só depois da carga principal (não atrasa os números do topo). O mês
-  // atual reaproveita `rows`; os 5 anteriores vêm UM MÊS POR VEZ, em paralelo (bem mais rápido
-  // no banco que o período inteiro) e ficam em cache (trocar filtro/mês não rebusca).
+  // atual reaproveita `rows` (o mesmo dado do topo); os 5 anteriores vêm JÁ SOMADOS do banco
+  // numa consulta (tempo real: recalculada a cada abertura, Atualizar ou troca de mês; trocar
+  // filtro não rebusca). Se a consulta somada falhar, cai no modo mês a mês, em sequência.
   const deSerie = somarMes(competencia, -5);
   const mesesAnteriores = useMemo(
     () => Array.from({ length: 5 }, (_, i) => somarMes(deSerie, i)),
@@ -165,26 +166,29 @@ function Home() {
   );
   const [serieAnt, setSerieAnt] = useState<ProducaoBpaRow[] | null>(null);
   const serieRef = useRef(0);
-  const carregarSerie = async (forcar = false) => {
+  const carregarSerie = async () => {
     const token = ++serieRef.current;
     setSerieErro(false);
-    if (forcar) mesesAnteriores.forEach((m) => cacheMes.delete(m));
-    const faltam = mesesAnteriores.filter((m) => !cacheMes.has(m));
-    if (faltam.length) setSerieAnt(null);
+    setSerieAnt(null);
     try {
-      // Um mês DEPOIS do outro (não em paralelo): a view recalcula as fichas a cada consulta e
-      // o plano do banco tem pouca CPU — consultas simultâneas fazem fila e travam a página toda.
-      for (const m of faltam) {
-        const r = await carregarMesSerie(m);
-        if (serieRef.current !== token) return;
-        cacheMes.set(m, r);
+      let r = await carregarSerieAgregada(
+        mesesAnteriores[0],
+        mesesAnteriores[mesesAnteriores.length - 1],
+      );
+      if (r === null) {
+        r = [];
+        for (const m of mesesAnteriores) {
+          r.push(...(await carregarMesSerie(m)));
+          if (serieRef.current !== token) return;
+        }
       }
       if (serieRef.current !== token) return;
-      setSerieAnt(mesesAnteriores.flatMap((m) => cacheMes.get(m) ?? []));
+      setSerieAnt(r);
     } catch {
       if (serieRef.current === token) setSerieErro(true);
     }
   };
+  // Recarrega a série sempre que a carga principal termina (abertura, Atualizar ou troca de mês).
   useEffect(() => {
     if (loading) return;
     void carregarSerie();
@@ -195,7 +199,6 @@ function Home() {
     [serieAnt, rows],
   );
   const atualizar = () => {
-    mesesAnteriores.forEach((m) => cacheMes.delete(m));
     void carregar();
   };
 
@@ -453,7 +456,7 @@ function Home() {
               erro={serieErro}
               selecionado={competencia}
               onSelecionar={(c) => setCompetencia(c > maxComp ? maxComp : c)}
-              onTentarDeNovo={() => void carregarSerie(true)}
+              onTentarDeNovo={() => void carregarSerie()}
             />
             <FpoPorUnidade
               resumo={resumoFpo}
