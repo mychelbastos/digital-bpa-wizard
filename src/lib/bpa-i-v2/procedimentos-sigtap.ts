@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { FunctionRegion } from "@supabase/supabase-js";
 
 export interface ProcedimentoSigtap {
   codigo: string;
@@ -265,7 +266,9 @@ export async function servicosDoCnes(cnes: string): Promise<Set<string>> {
 export async function sincronizarServicosCnes(cnes: string): Promise<number> {
   if (!supabase || !/^\d{7}$/.test(cnes)) return 0;
   try {
-    const { data, error } = await supabase.functions.invoke("cnes-profissionais", { body: { cnes, servicos: true } });
+    // Roda a função em SÃO PAULO: o site público do CNES recusa conexões de servidores fora do
+    // Brasil (a região padrão é nos EUA — testado em 27/11/2026: "Failure when receiving data").
+    const { data, error } = await supabase.functions.invoke("cnes-profissionais", { body: { cnes, servicos: true }, region: FunctionRegion.SaEast1 });
     if (error) return 0;
     return (data as { total?: number } | null)?.total ?? 0;
   } catch {
