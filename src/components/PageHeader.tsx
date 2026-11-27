@@ -5,7 +5,33 @@
 // A seta "voltar ao início" só aparece no MOBILE (onde o menu lateral fica oculto);
 // no desktop o menu já tem o botão "Início", então ela seria redundante.
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { ArrowLeft, type LucideIcon } from "lucide-react";
+import { buscarAutoriaFicha, dataHoraBr, EVENTO_FICHA_SALVA, type AutoriaFicha } from "@/lib/ficha-autoria";
+
+// "Criada por X em … · Editada por Y em …" — só visualização (fora da folha: não sai no
+// PDF/impressão/exportação). Atualiza ao trocar de ficha e logo após salvar.
+export function AutoriaFichaLinha({ fichaId }: { fichaId?: string | null }) {
+  const [a, setA] = useState<AutoriaFicha | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    const carregar = () => { if (fichaId) buscarAutoriaFicha(fichaId).then((r) => { if (vivo) setA(r); }); };
+    setA(null);
+    carregar();
+    const onSalva = (e: Event) => { if ((e as CustomEvent).detail === fichaId) carregar(); };
+    window.addEventListener(EVENTO_FICHA_SALVA, onSalva);
+    return () => { vivo = false; window.removeEventListener(EVENTO_FICHA_SALVA, onSalva); };
+  }, [fichaId]);
+  if (!fichaId || !a?.criado_por) return null;
+  return (
+    <p className="no-print truncate text-[11px] leading-tight text-muted-foreground" data-html2canvas-ignore="true">
+      Criada por <strong className="font-semibold text-foreground/80">{a.criado_por}</strong> em {dataHoraBr(a.criado_em)}
+      {a.editado_por && (
+        <> · Editada por <strong className="font-semibold text-foreground/80">{a.editado_por}</strong> em {dataHoraBr(a.editado_em)}</>
+      )}
+    </p>
+  );
+}
 
 export function PageHeader({ icon: Icon, titulo, descricao, right }: {
   icon: LucideIcon;
@@ -37,11 +63,12 @@ export function PageHeader({ icon: Icon, titulo, descricao, right }: {
 // descrição), mas numa única linha ao lado dos botões — economiza altura na tela de edição.
 // `fichaTitulo` mostra o nome da ficha atual (ex.: "Nova ficha") junto do nome do formulário.
 // A seta de voltar continua só no mobile.
-export function FormIdentity({ icon: Icon, nome, descricao, fichaTitulo }: {
+export function FormIdentity({ icon: Icon, nome, descricao, fichaTitulo, fichaId }: {
   icon: LucideIcon;
   nome: string;
   descricao?: string;
   fichaTitulo?: string | null;
+  fichaId?: string | null; // ficha salva aberta → mostra quem criou/editou
 }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
@@ -62,6 +89,7 @@ export function FormIdentity({ icon: Icon, nome, descricao, fichaTitulo }: {
           )}
         </div>
         {descricao && <p className="truncate text-[11px] leading-tight text-muted-foreground">{descricao}</p>}
+        <AutoriaFichaLinha fichaId={fichaId} />
       </div>
     </div>
   );

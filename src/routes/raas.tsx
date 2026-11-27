@@ -712,7 +712,7 @@ function RaasPage() {
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-3">
           <FormIdentity icon={HeartPulse} nome="RAAS"
-            descricao="Registro das Ações Ambulatoriais de Saúde — Psicossocial (CAPS)." fichaTitulo={fichaTitulo} />
+            descricao="Registro das Ações Ambulatoriais de Saúde — Psicossocial (CAPS)." fichaTitulo={fichaTitulo} fichaId={fichaTitulo !== null ? fichaIdRef.current : null} />
           <div className="flex flex-wrap items-center gap-2">
             {/* Abre a folha oficial (overlay) numa nova aba: preenchida com o que está na tela
                 (rascunho local, sempre atualizado) para conferir/calibrar posições e gerar o PDF. */}

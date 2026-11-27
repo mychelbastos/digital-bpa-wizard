@@ -455,7 +455,7 @@ export function FormularioOverlay({ titulo, descricao, icone, storageKey, campos
     <div className="min-h-screen bg-muted/40 pb-16">
       <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2">
-          <FormIdentity icon={icone ?? FileText} nome={titulo} descricao={descricao} fichaTitulo={fichaTitulo} />
+          <FormIdentity icon={icone ?? FileText} nome={titulo} descricao={descricao} fichaTitulo={fichaTitulo} fichaId={fichaTitulo !== null ? fichaIdRef.current : null} />
           <div className="flex flex-wrap items-center gap-2">
             {calibravel && (
               <button onClick={() => setEditar((e) => !e)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${editar ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border bg-card text-foreground hover:bg-muted"}`}>

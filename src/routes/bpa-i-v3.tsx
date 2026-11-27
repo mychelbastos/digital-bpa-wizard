@@ -386,7 +386,7 @@ function BpaI() {
       <header className="sticky top-[52px] z-30 border-b bg-background/95 backdrop-blur md:top-0">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-3">
           <FormIdentity icon={FileText} nome="BPA-I"
-            descricao="Boletim de Produção Ambulatorial Individualizado." fichaTitulo={fichaTitulo} />
+            descricao="Boletim de Produção Ambulatorial Individualizado." fichaTitulo={fichaTitulo} fichaId={fichaTitulo !== null ? fichaIdRef.current : null} />
           <div className="flex flex-wrap items-center gap-2">
             {user && (
               <div className="group relative flex">

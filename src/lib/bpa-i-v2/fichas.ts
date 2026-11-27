@@ -1,4 +1,5 @@
 import { supabase, buscarTodasPaginado } from "@/lib/supabase";
+import { avisarFichaSalva } from "@/lib/ficha-autoria";
 import { movimentoFaturamento } from "@/lib/faturamento";
 
 // Persistência das fichas do BPA-I v2 no Supabase (tabela `fichas`, RLS dono-apenas).
@@ -84,6 +85,7 @@ export async function salvarFicha(
         .from("fichas")
         .update({ ...payload, updated_at: new Date().toISOString() })
         .eq("id", id);
+      if (!error) avisarFichaSalva(id);
       return error ? null : id;
     }
     const mesProd = meta.mesProducao ?? movimentoFaturamento();
@@ -96,7 +98,9 @@ export async function salvarFicha(
       .insert({ ...payload, mes_producao: mesProd })
       .select("id")
       .single();
-    return error || !data ? null : (data as { id: string }).id;
+    if (error || !data) return null;
+    avisarFichaSalva((data as { id: string }).id);
+    return (data as { id: string }).id;
   } catch {
     return null;
   }
