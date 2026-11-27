@@ -61,26 +61,48 @@ export async function carregarProducaoDashboard(mesProducao?: string): Promise<P
 // as páginas EM PARALELO — reduz muito o tempo de carga. Cai para o modo serial se a contagem
 // falhar. Ordena por (mes_producao, id) — estável.
 const TAM_PAGINA = 1000;
-export async function carregarProducaoDashboardPeriodo(de: string, ate: string): Promise<ProducaoBpaRow[]> {
+// `colunas`: por padrão todas; o gráfico de 6 meses pede só as que usa (carga bem menor).
+export async function carregarProducaoDashboardPeriodo(
+  de: string,
+  ate: string,
+  colunas: string = COLS,
+): Promise<ProducaoBpaRow[]> {
   if (!supabase || !/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate)) return [];
   const [ini, fim] = de <= ate ? [de, ate] : [ate, de]; // tolera inversão
-  const base = () => supabase!.from("producao_dashboard").select(COLS).gte("mes_producao", ini).lte("mes_producao", fim)
-    .order("mes_producao", { ascending: true }).order("id", { ascending: true });
+  const base = () =>
+    supabase!
+      .from("producao_dashboard")
+      .select(colunas as typeof COLS)
+      .gte("mes_producao", ini)
+      .lte("mes_producao", fim)
+      .order("mes_producao", { ascending: true })
+      .order("id", { ascending: true });
   try {
-    const { count } = await supabase.from("producao_dashboard").select("id", { count: "exact", head: true })
-      .gte("mes_producao", ini).lte("mes_producao", fim);
+    const { count } = await supabase
+      .from("producao_dashboard")
+      .select("id", { count: "exact", head: true })
+      .gte("mes_producao", ini)
+      .lte("mes_producao", fim);
     if (count == null) {
       // Sem contagem: paginação serial (fallback seguro).
-      return await buscarTodasPaginado<ProducaoBpaRow>((lo, hi) => base().range(lo, hi), TAM_PAGINA);
+      return await buscarTodasPaginado<ProducaoBpaRow>(
+        (lo, hi) => base().range(lo, hi),
+        TAM_PAGINA,
+      );
     }
     if (count === 0) return [];
     const nPaginas = Math.ceil(count / TAM_PAGINA);
     const paginas = await Promise.all(
-      Array.from({ length: nPaginas }, (_, i) => base().range(i * TAM_PAGINA, i * TAM_PAGINA + TAM_PAGINA - 1)),
+      Array.from({ length: nPaginas }, (_, i) =>
+        base().range(i * TAM_PAGINA, i * TAM_PAGINA + TAM_PAGINA - 1),
+      ),
     );
     // Se ALGUMA página falhou, não devolve resultado parcial (subcontaria): cai para o serial.
     if (paginas.some((p) => p.error || !p.data)) {
-      return await buscarTodasPaginado<ProducaoBpaRow>((lo, hi) => base().range(lo, hi), TAM_PAGINA);
+      return await buscarTodasPaginado<ProducaoBpaRow>(
+        (lo, hi) => base().range(lo, hi),
+        TAM_PAGINA,
+      );
     }
     return paginas.flatMap((p) => p.data as ProducaoBpaRow[]);
   } catch {
@@ -88,14 +110,31 @@ export async function carregarProducaoDashboardPeriodo(de: string, ate: string):
   }
 }
 
+// Série mensal p/ o gráfico "Últimos 6 meses": só as colunas que o gráfico e os filtros usam.
+export const COLS_SERIE =
+  "id,tipo,mes_producao,cnes,profissional_cns,profissional_nome,cbo,procedimento,quantidade";
+export function carregarSerieMensal(de: string, ate: string): Promise<ProducaoBpaRow[]> {
+  return carregarProducaoDashboardPeriodo(de, ate, COLS_SERIE);
+}
+
+// Nome da organização do usuário (linha acima do título da dashboard). Só quando a pessoa
+// enxerga UMA organização (o dono do sistema vê várias → não mostra). Nunca lança.
+export async function carregarNomeOrganizacao(): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.from("organizacoes").select("nome").limit(2);
+    if (error || !data || data.length !== 1) return null;
+    return ((data[0] as { nome: string | null }).nome ?? "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 // Vínculos ativos do usuário logado (RLS: a pessoa vê os próprios).
 export async function carregarVinculosUsuario(): Promise<VinculoResumo[]> {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
-      .from("vinculos")
-      .select("cnes, papel")
-      .is("fim", null);
+    const { data, error } = await supabase.from("vinculos").select("cnes, papel").is("fim", null);
     return error || !data ? [] : (data as VinculoResumo[]);
   } catch {
     return [];
@@ -125,7 +164,9 @@ export async function carregarDescricoesCid(codigos: string[]): Promise<Record<s
 
 // Nome oficial (SIGTAP) de vários procedimentos de uma vez. Retorna um mapa
 // código→nome; códigos não encontrados simplesmente ficam de fora. Nunca lança.
-export async function carregarNomesProcedimentos(codigos: string[]): Promise<Record<string, string>> {
+export async function carregarNomesProcedimentos(
+  codigos: string[],
+): Promise<Record<string, string>> {
   const unicos = [...new Set(codigos.filter((c) => c && c.length === 10))];
   if (!supabase || unicos.length === 0) return {};
   try {
