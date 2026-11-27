@@ -38,12 +38,14 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 }
 
 // Cabeçalhos de segurança aplicados a TODA resposta do servidor (páginas SSR):
-// - não deixa outro site abrir o SPA dentro de um <iframe> (golpe de "clickjacking");
+// - não deixa OUTRO site abrir o SPA dentro de um <iframe> (golpe de "clickjacking"). Tem de ser
+//   SAMEORIGIN/'self' e não DENY/'none': o próprio SPA usa iframe oculto da ficha para
+//   imprimir (/imprimir) e baixar o PDF (Minhas fichas) — DENY travava os dois;
 // - navegador não "adivinha" tipo de arquivo; não vaza a URL completa para outros sites;
 // - bloqueia câmera/microfone/localização/pagamento (o sistema não usa).
 const CABECALHOS_SEGURANCA: Record<string, string> = {
-  "X-Frame-Options": "DENY",
-  "Content-Security-Policy": "frame-ancestors 'none'",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Content-Security-Policy": "frame-ancestors 'self'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",

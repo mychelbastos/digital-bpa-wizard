@@ -7,8 +7,8 @@ describe("cabeçalhos de segurança", () => {
     expect(r.status).toBe(201);
     expect(await r.text()).toBe("ola");
     expect(r.headers.get("content-type")).toBe("text/html");
-    expect(r.headers.get("x-frame-options")).toBe("DENY");
-    expect(r.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+    expect(r.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+    expect(r.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
     expect(r.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });
