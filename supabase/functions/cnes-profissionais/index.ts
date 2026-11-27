@@ -162,6 +162,13 @@ Deno.serve(async (req) => {
           fetch(VINC_URL, { method: "POST", headers: { "Content-Type": "application/soap+xml;charset=UTF-8" }, body: envelopeVinculo(cns, cnes, t) })
             .then((r) => r.text()).catch(() => "")));
         for (const xml of respostas) for (const c of parseCbos(xml)) map.set(c.codigo, c.descricao);
+        // Resposta "válida" = achou CBO ou o DATASUS disse NO_RESULT. Vazio/erro/HTML = falha
+        // de rede/instabilidade. Se houve falha e nada foi achado, NÃO grava "sem CBO" no cache
+        // (24/11/2026: uma instabilidade virou "sem CBO" por 7 dias p/ quem tinha CBO).
+        const falhas = respostas.filter((x) => !x.includes("NO_RESULT") && !/codigoCBO/.test(x)).length;
+        if (falhas > 0 && map.size === 0) {
+          return json({ aviso: `DATASUS instável (${falhas}/9 consultas falharam) — tente de novo`, cbos: [] });
+        }
       } catch (e) {
         return json({ aviso: `falha: ${String(e)}`, cbos: [] });
       }

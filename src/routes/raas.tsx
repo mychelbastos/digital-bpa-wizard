@@ -955,8 +955,16 @@ function RaasPage() {
                       onPatch={(patch) => updateAcao(i, patch)} />
                   </div>
                   <Campo label="CBO executante">
-                    <Txt inputMode="numeric" maxLength={6} esperaLen={6} value={a.cbo} title={dicaCbo(a.cbo)}
-                      onChange={(e) => updateAcao(i, { cbo: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
+                    {/* Legenda imediata no hover (o title nativo demora ~1s). */}
+                    <div className="group relative">
+                      <Txt inputMode="numeric" maxLength={6} esperaLen={6} value={a.cbo}
+                        onChange={(e) => updateAcao(i, { cbo: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
+                      {dicaCbo(a.cbo) && (
+                        <div role="tooltip" className="pointer-events-none invisible absolute bottom-full left-0 z-50 mb-1 max-w-xs rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-lg group-hover:visible">
+                          {dicaCbo(a.cbo)}
+                        </div>
+                      )}
+                    </div>
                   </Campo>
                   <Campo label="CNS executante">
                     <Txt inputMode="numeric" maxLength={15} esperaLen={15} value={a.cnsExecutante}
