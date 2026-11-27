@@ -67,6 +67,22 @@ begin
   if atual is not null and atual > 0 and not usado then
     return NEW; -- número livre: mantém
   end if;
+
+  -- UPDATE de ficha já numerada, mesma chave: número colidindo/vazio = tela desatualizada
+  -- (ex.: aberta antes de uma renumeração) → MANTÉM o número que a ficha já tinha.
+  if TG_OP = 'UPDATE' and jsonb_typeof(OLD.dados->campo) = 'array'
+     and OLD.cnes is not distinct from NEW.cnes and OLD.competencia is not distinct from NEW.competencia
+     and OLD.profissional_cns is not distinct from NEW.profissional_cns
+     and (OLD.dados->>'profNome') is not distinct from (NEW.dados->>'profNome') then
+    s := regexp_replace(coalesce((select string_agg(x, '') from jsonb_array_elements_text(OLD.dados->campo) x), ''), '\D', '', 'g');
+    if s <> '' then
+      NEW.dados := jsonb_set(NEW.dados, array[campo], OLD.dados->campo, true);
+      if NEW.titulo ~ 'folha \d+' then
+        NEW.titulo := regexp_replace(NEW.titulo, 'folha \d+', 'folha ' || s::int);
+      end if;
+      return NEW;
+    end if;
+  end if;
   novo := novo + 1;
 
   -- Grava no mesmo formato da tela: 3 casinhas, dígitos à direita.
