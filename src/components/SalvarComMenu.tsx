@@ -2,7 +2,15 @@
 // ▾ que abre "Salvar como… (nova cópia)".
 import { useState } from "react";
 
-export function SalvarComMenu({ onSalvar, onSalvarComo, salvando = false, jaSalva, desabilitado = false, title, apagado = false }: {
+export function SalvarComMenu({
+  onSalvar,
+  onSalvarComo,
+  salvando = false,
+  jaSalva,
+  desabilitado = false,
+  title,
+  apagado = false,
+}: {
   onSalvar: () => void;
   onSalvarComo: () => void;
   salvando?: boolean;
@@ -18,7 +26,10 @@ export function SalvarComMenu({ onSalvar, onSalvarComo, salvando = false, jaSalv
         type="button"
         onClick={onSalvar}
         disabled={salvando || desabilitado}
-        title={title ?? (jaSalva ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)")}
+        title={
+          title ??
+          (jaSalva ? "Salvar alterações nesta ficha" : "Salvar esta ficha na sua conta (nuvem)")
+        }
         className={`rounded-l-md border border-r-0 border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60${apagado ? " opacity-50" : ""}`}
       >
         {salvando ? "Salvando…" : `💾 Salvar${jaSalva ? "" : " ficha"}`}
@@ -37,7 +48,14 @@ export function SalvarComMenu({ onSalvar, onSalvarComo, salvando = false, jaSalv
         <>
           <div className="fixed inset-0 z-40" onClick={() => setAberto(false)} />
           <div className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-md border border-border bg-background py-1 text-xs shadow-lg">
-            <button type="button" onClick={() => { setAberto(false); onSalvarComo(); }} className="block w-full px-3 py-2 text-left hover:bg-muted">
+            <button
+              type="button"
+              onClick={() => {
+                setAberto(false);
+                onSalvarComo();
+              }}
+              className="block w-full px-3 py-2 text-left hover:bg-muted"
+            >
               Salvar como… <span className="text-muted-foreground">(nova cópia)</span>
             </button>
           </div>
