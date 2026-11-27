@@ -1,7 +1,8 @@
 // Coletor de ERROS/crivo da produção — alimenta o "Relatório de erros".
 // Quatro categorias (selecionáveis): produção×SIGTAP, fichas incompletas, cadastro de
 // pacientes (revisão) e duplicidade de fichas. Tudo null-safe: degrada sem quebrar a tela.
-import { supabase } from "@/lib/supabase";
+import { supabase, buscarTodasPaginado } from "@/lib/supabase";
+import { procedimentoExigeCbo } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { carregarProducaoDashboardPeriodo, type ProducaoBpaRow } from "@/lib/dashboard-producao";
 import { fichasDoMes, type FichaCompleta } from "@/lib/bpa-i-v2/fichas";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
@@ -18,7 +19,7 @@ import { problemaMunicipioUf } from "@/lib/geo-uf";
 import { folhaEntraNoArquivo, problemaOrigemRaas } from "@/lib/raas/gerar-aas";
 import type { RaasState } from "@/lib/raas/raas-layout";
 
-export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade" | "tfd-sem-profissional" | "municipio-uf";
+export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade" | "tfd-sem-profissional" | "municipio-uf" | "sem-cbo-proc-qtd";
 export const ROTULO_CATEGORIA: Record<CategoriaErro, string> = {
   "producao-sigtap": "Produção × SIGTAP",
   "ficha-incompleta": "Ficha incompleta",
@@ -26,6 +27,7 @@ export const ROTULO_CATEGORIA: Record<CategoriaErro, string> = {
   "duplicidade": "Duplicidade de fichas",
   "tfd-sem-profissional": "TFD sem profissional",
   "municipio-uf": "RAAS: município/UF e origem",
+  "sem-cbo-proc-qtd": "Sem CBO/procedimento/quantidade (criadas desde 11/2026)",
 };
 
 export interface ErroItem {
@@ -285,6 +287,80 @@ function errosMunicipioUf(fichas: FichaCompleta[], ufEsperada: string): ErroItem
   return out;
 }
 
+// ---- G) Fichas sem CBO, procedimento ou quantidade — TODAS as criadas desde 01/11/2026
+//         (independe do período escolhido). Linha "começada" = tem algum dado; linha
+//         totalmente vazia é ignorada. CBO ausente só conta se o procedimento EXIGE CBO no
+//         SIGTAP (vigilância sanitária não exige — ver procedimentoExigeCbo).
+export const CRIADAS_DESDE = "2026-11-01T00:00:00-03:00";
+interface FichaCriada { id: string; tipo: FichaCompleta["tipo"]; cnes: string | null; titulo: string | null; dados: unknown }
+
+async function fichasCriadasDesde(iso: string): Promise<FichaCriada[]> {
+  if (!supabase) return [];
+  try {
+    return await buscarTodasPaginado<FichaCriada>((de, ate) => supabase!
+      .from("fichas")
+      .select("id, tipo, cnes, titulo, dados")
+      .gte("created_at", iso)
+      .is("excluida_em", null)
+      .is("substituida_por", null)
+      .in("tipo", ["BPA-I", "BPA-C", "RAAS"])
+      .order("id", { ascending: true })
+      .range(de, ate));
+  } catch { return []; }
+}
+
+const d0 = (v: unknown) => jc(v).replace(/\D/g, "");
+
+async function errosSemCboProcQtd(cnesFiltro: Set<string> | null): Promise<ErroItem[]> {
+  const fichas = (await fichasCriadasDesde(CRIADAS_DESDE)).filter((f) => !cnesFiltro || cnesFiltro.has(f.cnes ?? ""));
+  // Linhas candidatas: { ficha, rótulo da linha, proc, cbo, qtd }
+  type Linha = { f: FichaCriada; rot: string; proc: string; cbo: string; qtd: string; prof: string };
+  const linhas: Linha[] = [];
+  for (const f of fichas) {
+    try {
+      if (f.tipo === "BPA-I") {
+        const d = f.dados as { seqs?: SeqData[]; profCbo?: unknown; profNome?: string; profCns?: unknown };
+        const prof = (d.profNome ?? "").trim() || d0(d.profCns) || "—";
+        (Array.isArray(d.seqs) ? d.seqs : []).forEach((sq, i) => {
+          const comecada = [sq.cnsPac, sq.codProc, sq.qtde, sq.dataAtend].some((x) => d0(x)) || (sq.nomePac ?? "").trim();
+          if (comecada) linhas.push({ f, rot: `Seq. ${i + 1}`, proc: d0(sq.codProc), cbo: d0(d.profCbo), qtd: d0(sq.qtde), prof });
+        });
+      } else if (f.tipo === "BPA-C") {
+        const d = f.dados as { rows?: { procedimento?: unknown; cbo?: unknown; quantidade?: unknown; idade?: unknown }[]; profNome?: string };
+        const prof = (d.profNome ?? "").trim() || "—";
+        (Array.isArray(d.rows) ? d.rows : []).forEach((r, i) => {
+          if ([r.procedimento, r.cbo, r.quantidade, r.idade].some((x) => d0(x)))
+            linhas.push({ f, rot: `Linha ${i + 1}`, proc: d0(r.procedimento), cbo: d0(r.cbo), qtd: d0(r.quantidade), prof });
+        });
+      } else if (f.tipo === "RAAS") {
+        const d = f.dados as RaasState;
+        const prof = (d.nomePaciente ?? "").trim() || "—";
+        (Array.isArray(d.acoes) ? d.acoes : []).forEach((a, i) => {
+          if ([a.procedimento, a.cbo, a.cnsExecutante, a.dataExec, a.quantidade].some((x) => String(x ?? "").trim()))
+            linhas.push({ f, rot: `Ação ${i + 1}`, proc: d0(a.procedimento), cbo: d0(a.cbo), qtd: d0(a.quantidade), prof });
+        });
+      }
+    } catch { /* shape inesperado — ignora */ }
+  }
+  // Quais procedimentos exigem CBO (uma consulta por código distinto).
+  const exige = new Map<string, boolean | null>();
+  await Promise.all([...new Set(linhas.map((l) => l.proc).filter((p) => p.length === 10))]
+    .map(async (p) => exige.set(p, await procedimentoExigeCbo(p))));
+  const out: ErroItem[] = [];
+  for (const l of linhas) {
+    const faltam: string[] = [];
+    if (l.proc.length !== 10) faltam.push(l.proc ? `procedimento incompleto (${l.proc.length}/10)` : "procedimento");
+    if (l.cbo.length === 0) { if (l.proc.length !== 10 || exige.get(l.proc) !== false) faltam.push("CBO"); }
+    else if (l.cbo.length !== 6) faltam.push(`CBO incompleto (${l.cbo.length}/6)`);
+    if (!(Number(l.qtd) > 0)) faltam.push("quantidade");
+    if (!faltam.length) continue;
+    out.push({ categoria: "sem-cbo-proc-qtd", gravidade: "erro", fichaId: l.f.id, tipo: l.f.tipo,
+      competencia: "", cnes: l.f.cnes ?? "", profissional: l.prof, procedimento: l.proc,
+      descricao: `${l.f.titulo ? `"${l.f.titulo}" — ` : ""}${l.rot}: falta ${faltam.join(", ")}.` });
+  }
+  return out;
+}
+
 export interface OpcoesErros { de: string; ate: string; categorias: Set<CategoriaErro>; cnes?: string[] }
 
 // Meses AAAAMM no intervalo [de, ate] (inclusive). Ex.: 202607..202608 -> ["202607","202608"].
@@ -327,6 +403,7 @@ export async function coletarErros({ de, ate, categorias, cnes }: OpcoesErros): 
   if (categorias.has("duplicidade")) tarefas.push(Promise.resolve(errosDuplicidade(fichas)));
   if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional(cnesSet));
   if (categorias.has("municipio-uf")) tarefas.push(Promise.resolve(errosMunicipioUf(fichas, ufEsperada)));
+  if (categorias.has("sem-cbo-proc-qtd")) tarefas.push(errosSemCboProcQtd(cnesSet));
   for (const bloco of await Promise.all(tarefas)) res.push(...bloco);
   return res;
 }

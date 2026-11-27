@@ -14,7 +14,7 @@ export const Route = createFileRoute("/relatorios/consistencia")({
   component: ConsistenciaPage,
 });
 
-const TODAS_CATS: CategoriaErro[] = ["producao-sigtap", "ficha-incompleta", "paciente-revisao", "duplicidade", "tfd-sem-profissional", "municipio-uf"];
+const TODAS_CATS: CategoriaErro[] = ["producao-sigtap", "ficha-incompleta", "paciente-revisao", "duplicidade", "tfd-sem-profissional", "municipio-uf", "sem-cbo-proc-qtd"];
 
 function ConsistenciaPage() {
   const { pode } = usePermissoes();
