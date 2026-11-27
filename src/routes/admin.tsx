@@ -1,25 +1,16 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { PageHeader } from "@/components/PageHeader";
-import { useCallback, useEffect, useMemo, useState } from "react";
+// Administração (/admin) — orquestrador. Carrega os dados, guarda os handlers (todos com as
+// mesmas RPCs de antes) e repassa para os componentes de src/components/admin/.
+// Navegação pela URL: /admin?pref=<org>&aba=usuarios|unidades|arquivo|relatorios&usuario=<user>
+// e, na tela inicial, /admin?aba=lgpd. (Redesign 11/2026.)
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { Loader2, Plus, ShieldCheck } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { souSuperAdmin } from "@/lib/permissoes";
 import { limparCacheLogoOrg } from "@/lib/org-logo";
 import { sincronizarProfissionais } from "@/lib/bpa-i-v2/profissionais";
-import {
-  ShieldCheck,
-  Loader2,
-  Users,
-  Eye,
-  EyeOff,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Building2,
-  Plus,
-  X,
-  Landmark,
-  Trash2,
-} from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   listarVinculosAdmin,
   listarPessoasAdmin,
@@ -48,95 +39,70 @@ import {
   type LeituraLog,
   type DonoSistema,
 } from "@/lib/admin";
-import { ProfissionalPicker } from "@/components/admin/ProfissionalPicker";
+import { nomeCargo } from "@/components/admin/constantes";
+import { useConfirmar } from "@/components/admin/ConfirmarDialog";
+import { PrefeiturasLista } from "@/components/admin/PrefeiturasLista";
+import { AuditoriaLgpd } from "@/components/admin/AuditoriaLgpd";
+import { PrefeituraHeader, type AbaPref } from "@/components/admin/PrefeituraHeader";
+import { UsuariosAba } from "@/components/admin/UsuariosAba";
+import {
+  UsuarioPainel,
+  tituloPessoa,
+  type HandlersUsuario,
+} from "@/components/admin/UsuarioPainel";
+import { UnidadesAba } from "@/components/admin/UnidadesAba";
+import { ArquivoMagneticoAba } from "@/components/admin/ArquivoMagneticoAba";
+import { RelatoriosGestaoAba, type GestaoForm } from "@/components/admin/RelatoriosGestaoAba";
+import { CriarContaDialog } from "@/components/admin/CriarContaDialog";
+import { CriarPrefeituraDialog } from "@/components/admin/CriarPrefeituraDialog";
+import { SalvarBarra } from "@/components/admin/SalvarBarra";
+import { btnPrimario } from "@/components/admin/ui";
+
+type AbaUrl = AbaPref | "lgpd";
+interface BuscaAdmin {
+  pref?: string;
+  aba?: AbaUrl;
+  usuario?: string;
+  unidade?: string;
+}
+const ABAS: AbaUrl[] = ["usuarios", "unidades", "arquivo", "relatorios", "lgpd"];
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Administração de vínculos e acessos" }] }),
+  validateSearch: (s: Record<string, unknown>): BuscaAdmin => ({
+    pref: typeof s.pref === "string" && s.pref ? s.pref : undefined,
+    aba:
+      typeof s.aba === "string" && (ABAS as string[]).includes(s.aba)
+        ? (s.aba as AbaUrl)
+        : undefined,
+    usuario: typeof s.usuario === "string" && s.usuario ? s.usuario : undefined,
+    unidade: typeof s.unidade === "string" && /^\d{7}$/.test(s.unidade) ? s.unidade : undefined,
+  }),
+  head: () => ({ meta: [{ title: "Administração — Prefeituras e acessos" }] }),
   component: Admin,
 });
 
-const LABEL_CARGO: Record<string, string> = {
-  digitador: "Digitador",
-  profissional_saude: "Profissional de Saúde",
-  coordenador: "Coordenador",
-  operador_remessa: "Operador de remessa",
-  secretario_municipal: "Secretário municipal",
-};
-const nomeCargo = (p: string) => LABEL_CARGO[p] ?? p;
-
-// Descrição curta do que o cargo FAZ (o nome diz o que ele É). Ex.: Coordenador "só visualiza".
-const DESC_CARGO: Record<string, string> = {
-  coordenador: "só visualiza",
-};
-
-// Escopo de cada cargo, mostrado como etiqueta na tela. O "Dono do sistema" (super-admin)
-// não é um papel de papel_permissoes — é Global e não atribuível pela tela.
-type Escopo = "cnes" | "organizacao" | "global";
-const ESCOPO_CARGO: Record<string, Escopo> = {
-  digitador: "cnes",
-  profissional_saude: "cnes",
-  coordenador: "cnes",
-  operador_remessa: "cnes",
-  secretario_municipal: "organizacao",
-};
-const LABEL_ESCOPO: Record<Escopo, string> = {
-  cnes: "CNES",
-  organizacao: "Organização",
-  global: "Global",
-};
-const escopoDoCargo = (p: string): Escopo => ESCOPO_CARGO[p] ?? "cnes";
-
-// Rótulos curtos e legíveis das permissões (o código cru vai no tooltip, p/ suporte).
-// Fallback: se surgir uma permissão nova no catálogo sem rótulo aqui, usa a descrição
-// do banco e, na falta dela, o próprio código — nunca fica em branco.
-const LABEL_PERM: Record<string, string> = {
-  gerir_pacientes: "Cadastrar/editar pacientes",
-  gerir_tfd: "Registrar e gerir TFD",
-  criar_ficha: "Criar ficha",
-  editar_ficha_propria: "Editar a própria ficha",
-  conferir_ficha: "Conferir/assinar ficha",
-  ver_fichas_da_unidade: "Ver fichas da unidade",
-  gerar_producao: "Fechar e gerar produção",
-  reabrir_producao: "Reabrir produção",
-  retificar_ficha_exportada: "Retificar ficha exportada",
-  gerenciar_vinculos: "Gerenciar usuários e acessos",
-  ver_fichas_do_municipio: "Ver fichas do município",
-};
-const nomePerm = (p: PermissaoCat) => LABEL_PERM[p.codigo] ?? p.descricao ?? p.codigo;
-
-// Grupo de uma permissão de ORGANIZAÇÃO (para separar a UI): menu, relatório ou gestão/acessos.
-const MENU_PERMS = new Set(["ver_dashboard", "ver_minhas_fichas", "ver_relatorios", "ver_fpo", "ver_exportar", "ver_importar", "ver_formularios"]);
-function grupoOrg(codigo: string): "menu" | "relatorio" | "gestao" {
-  if (codigo.startsWith("emitir_rel_")) return "relatorio";
-  if (MENU_PERMS.has(codigo)) return "menu";
-  return "gestao";
-}
-// Rótulo curto dentro do grupo (tira o prefixo "Menu · " / "Relatório · ").
-const rotuloCurto = (p: PermissaoCat) => nomePerm(p).replace(/^Menu\s·\s/, "").replace(/^Relatório\s·\s/, "");
-
-// Estado de uma permissão numa pessoa, derivado de quantos vínculos a têm vs. o total.
-type EstadoPerm = {
-  ativa: boolean; // todos os vínculos têm
-  parcial: boolean; // alguns têm
-  padrao: boolean; // faz parte do pacote do cargo
-  override: boolean; // difere do padrão do cargo (ou é parcial)
-};
-
-function estadoPermissao(
-  codigo: string,
-  perms: Record<string, number>,
-  total: number,
-  defaults: Set<string>,
-): EstadoPerm {
-  const c = perms[codigo] ?? 0;
-  const ativa = total > 0 && c >= total;
-  const parcial = c > 0 && c < total;
-  const padrao = defaults.has(codigo);
-  const override = parcial || ativa !== padrao;
-  return { ativa, parcial, padrao, override };
-}
+// Campos do formulário da prefeitura (Arquivo magnético + Relatórios) — p/ detectar alteração.
+const CAMPOS_ORG: (keyof OrganizacaoAdmin)[] = [
+  "nome",
+  "municipio_ibge",
+  "uf",
+  "cab_orgao_origem",
+  "cab_sigla",
+  "cab_cgc_cpf",
+  "cab_orgao_destino",
+  "cab_destino_tipo",
+  "cab_versao",
+  "cor_relatorio",
+  "logo_relatorio",
+];
+const mudouOrg = (a: OrganizacaoAdmin | null, b: OrganizacaoAdmin | null) =>
+  Boolean(a && b && CAMPOS_ORG.some((k) => (a[k] ?? null) !== (b[k] ?? null)));
 
 function Admin() {
+  const busca = Route.useSearch();
+  const navigate = useNavigate({ from: "/admin" });
+  const { confirmar, dialogo } = useConfirmar();
+
   const [pessoas, setPessoas] = useState<PessoaAdmin[]>([]);
   const [vinculos, setVinculos] = useState<VinculoAdmin[]>([]);
   const [perms, setPerms] = useState<PermissaoCat[]>([]);
@@ -146,10 +112,10 @@ function Admin() {
   const [leituras, setLeituras] = useState<LeituraLog[]>([]);
   const [donos, setDonos] = useState<DonoSistema[]>([]);
   const [superAdmin, setSuperAdmin] = useState(false);
-  // Master-detail: null = lista de prefeituras; id = detalhe daquela prefeitura.
-  const [prefSel, setPrefSel] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
+  const [criarContaAberto, setCriarContaAberto] = useState(false);
+  const [criarPrefAberto, setCriarPrefAberto] = useState(false);
 
   useEffect(() => {
     souSuperAdmin().then(setSuperAdmin);
@@ -190,6 +156,7 @@ function Admin() {
 
   const permsOrg = useMemo(() => perms.filter((p) => p.escopo === "organizacao"), [perms]);
   const permsCnes = useMemo(() => perms.filter((p) => p.escopo === "cnes"), [perms]);
+  const cargos = useMemo(() => Object.keys(cargoDefaults).sort(), [cargoDefaults]);
 
   const defaultsDaPessoa = useCallback(
     (pessoa: PessoaAdmin) => {
@@ -200,27 +167,18 @@ function Admin() {
     [cargoDefaults],
   );
 
-  const fmt = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-    } catch {
-      return iso;
-    }
-  };
-
-  // Toggle no nível da PESSOA: aplica a todos os vínculos. Se já é override, reseta ao padrão.
   // Conta do dono do sistema (super-admin): intocável por quem não é super-admin. O banco
   // também bloqueia (defesa em profundidade); aqui evitamos a tentativa e avisamos.
   const protegido = (userId: string) => !superAdmin && donos.some((d) => d.user_id === userId);
-  const avisarProtegido = () => toast.error("Conta do dono do sistema — só o próprio dono pode alterar.");
+  const avisarProtegido = () =>
+    toast.error("Conta do dono do sistema — só o próprio dono pode alterar.");
 
-  const togglePessoa = async (pessoa: PessoaAdmin, p: PermissaoCat, est: EstadoPerm) => {
+  // ---------- Handlers (mesmas RPCs e mensagens de antes) ----------
+  const definirPessoa = async (pessoa: PessoaAdmin, codigo: string, alvo: boolean | null) => {
     if (protegido(pessoa.user_id)) return avisarProtegido();
-    const chave = `${pessoa.user_id}:${p.codigo}`;
-    setSalvando(chave);
+    setSalvando(`${pessoa.user_id}:${codigo}`);
     try {
-      const alvo: boolean | null = est.override ? null : !est.padrao;
-      await definirPermissaoPessoa(pessoa.user_id, pessoa.organizacao_id, p.codigo, alvo);
+      await definirPermissaoPessoa(pessoa.user_id, pessoa.organizacao_id, codigo, alvo);
       await recarregar();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao alterar permissão.");
@@ -229,14 +187,42 @@ function Admin() {
     }
   };
 
-  // Aplica um mesmo alvo (true=liberar, false=bloquear, null=padrão do cargo) a várias
-  // permissões de uma vez (ações em massa por grupo). Recarrega uma vez ao fim.
+  // Override por UNIDADE (um vínculo).
+  const definirVinculo = async (v: VinculoAdmin, codigo: string, alvo: boolean | null) => {
+    if (protegido(v.user_id)) return avisarProtegido();
+    setSalvando(`${v.vinculo_id}:${codigo}`);
+    try {
+      await definirPermissao(v.vinculo_id, codigo, alvo);
+      await recarregar();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao alterar permissão.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  // Mesmo alvo (true=liberar, false=bloquear, null=padrão do cargo) para várias permissões.
   const definirGrupo = async (pessoa: PessoaAdmin, codigos: string[], alvo: boolean | null) => {
     if (protegido(pessoa.user_id)) return avisarProtegido();
     if (codigos.length === 0) return;
     setSalvando(`${pessoa.user_id}:grupo`);
     try {
-      for (const c of codigos) await definirPermissaoPessoa(pessoa.user_id, pessoa.organizacao_id, c, alvo);
+      for (const c of codigos)
+        await definirPermissaoPessoa(pessoa.user_id, pessoa.organizacao_id, c, alvo);
+      await recarregar();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao alterar permissões.");
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const definirGrupoVinculo = async (v: VinculoAdmin, codigos: string[], alvo: boolean | null) => {
+    if (protegido(v.user_id)) return avisarProtegido();
+    if (codigos.length === 0) return;
+    setSalvando(`${v.vinculo_id}:grupo`);
+    try {
+      for (const c of codigos) await definirPermissao(v.vinculo_id, c, alvo);
       await recarregar();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao alterar permissões.");
@@ -247,16 +233,22 @@ function Admin() {
 
   const trocarCargo = async (pessoa: PessoaAdmin, papel: string) => {
     if (protegido(pessoa.user_id)) return avisarProtegido();
-    if (papel === (pessoa.papeis.length === 1 ? pessoa.papeis[0] : "")) return;
-    if (
-      !window.confirm(
-        `Trocar o cargo de ${pessoa.email} para "${nomeCargo(papel)}"? ` +
-          "As permissões voltam ao pacote do cargo (ajustes por unidade são descartados).",
-      )
-    )
-      return;
-    const chave = `${pessoa.user_id}:cargo`;
-    setSalvando(chave);
+    if (!papel || papel === (pessoa.papeis.length === 1 ? pessoa.papeis[0] : "")) return;
+    const ok = await confirmar({
+      titulo: "Trocar o cargo?",
+      descricao: (
+        <>
+          <p>
+            Trocar o cargo de <strong className="text-foreground">{tituloPessoa(pessoa)}</strong>{" "}
+            para “{nomeCargo(papel)}”?
+          </p>
+          <p>As permissões voltam ao pacote do cargo (ajustes por unidade são descartados).</p>
+        </>
+      ),
+      confirmarRotulo: "Trocar cargo",
+    });
+    if (!ok) return;
+    setSalvando(`${pessoa.user_id}:cargo`);
     try {
       await trocarCargoPessoa(pessoa.user_id, pessoa.organizacao_id, papel);
       await recarregar();
@@ -268,29 +260,9 @@ function Admin() {
     }
   };
 
-  // Override por UNIDADE (um vínculo). Mesma lógica de ciclo contra o padrão do cargo do vínculo.
-  const toggleVinculo = async (v: VinculoAdmin, p: PermissaoCat) => {
-    if (protegido(v.user_id)) return avisarProtegido();
-    const padrao = (cargoDefaults[v.papel] ?? []).includes(p.codigo);
-    const ativa = v.permissoes.includes(p.codigo);
-    const override = ativa !== padrao;
-    const chave = `${v.vinculo_id}:${p.codigo}`;
-    setSalvando(chave);
-    try {
-      const alvo: boolean | null = override ? null : !padrao;
-      await definirPermissao(v.vinculo_id, p.codigo, alvo);
-      await recarregar();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao alterar permissão.");
-    } finally {
-      setSalvando(null);
-    }
-  };
-
   const vincular = async (pessoa: PessoaAdmin, cnes: string, papel: string) => {
     if (protegido(pessoa.user_id)) return avisarProtegido();
-    const chave = `${pessoa.user_id}:vinc`;
-    setSalvando(chave);
+    setSalvando(`${pessoa.user_id}:vinc`);
     try {
       await vincularUnidade(pessoa.user_id, pessoa.organizacao_id, cnes, papel);
       await recarregar();
@@ -304,15 +276,22 @@ function Admin() {
 
   const desvincular = async (pessoa: PessoaAdmin, cnes: string) => {
     if (protegido(pessoa.user_id)) return avisarProtegido();
-    if (
-      !window.confirm(
-        `Desvincular ${pessoa.email} do CNES ${cnes}? ` +
-          "O acesso é encerrado agora; o histórico do vínculo é preservado.",
-      )
-    )
-      return;
-    const chave = `${pessoa.user_id}:${cnes}:desvinc`;
-    setSalvando(chave);
+    const ok = await confirmar({
+      titulo: "Desvincular unidade?",
+      descricao: (
+        <>
+          <p>
+            Desvincular <strong className="text-foreground">{tituloPessoa(pessoa)}</strong> do CNES{" "}
+            <span className="font-mono">{cnes}</span>?
+          </p>
+          <p>O acesso é encerrado agora; o histórico do vínculo é preservado.</p>
+        </>
+      ),
+      confirmarRotulo: "Desvincular",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    setSalvando(`${pessoa.user_id}:${cnes}:desvinc`);
     try {
       await desvincularUnidade(pessoa.user_id, pessoa.organizacao_id, cnes);
       await recarregar();
@@ -324,20 +303,35 @@ function Admin() {
     }
   };
 
-  // Exclui a pessoa (remove todos os vínculos da org). Ação destrutiva — dupla confirmação.
+  // Exclui a pessoa (remove todos os vínculos da org). Ação destrutiva — confirmação.
   const excluir = async (pessoa: PessoaAdmin) => {
     if (protegido(pessoa.user_id)) return avisarProtegido();
-    if (!window.confirm(
-      `Excluir o usuário ${pessoa.email} desta organização?\n\n` +
-      "Todos os vínculos e permissões dele serão REMOVIDOS e o acesso, encerrado. " +
-      "A conta de login continua existindo, mas sem acesso a nada. Esta ação não pode ser desfeita aqui.",
-    )) return;
-    const chave = `${pessoa.user_id}:excluir`;
-    setSalvando(chave);
+    const ok = await confirmar({
+      titulo: "Excluir usuário desta prefeitura?",
+      descricao: (
+        <>
+          <p>
+            Excluir o usuário <strong className="text-foreground">{tituloPessoa(pessoa)}</strong> (
+            {pessoa.email}) desta organização?
+          </p>
+          <p>
+            Todos os vínculos e permissões dele serão{" "}
+            <strong className="text-foreground">removidos</strong> e o acesso, encerrado. A conta de
+            login continua existindo, mas sem acesso a nada. Esta ação não pode ser desfeita aqui.
+          </p>
+        </>
+      ),
+      confirmarRotulo: "Excluir usuário",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    setSalvando(`${pessoa.user_id}:excluir`);
     try {
       await excluirPessoa(pessoa.user_id, pessoa.organizacao_id);
       await recarregar();
       toast.success(`Usuário ${pessoa.email} excluído da organização.`);
+      if (busca.usuario === pessoa.user_id)
+        void navigate({ search: (s: BuscaAdmin) => ({ ...s, usuario: undefined }) });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao excluir o usuário.");
     } finally {
@@ -345,7 +339,14 @@ function Admin() {
     }
   };
 
-  const criarContaNova = async (email: string, senha: string, cnes: string, papel: string, nome: string, cns: string) => {
+  const criarContaNova = async (
+    email: string,
+    senha: string,
+    cnes: string,
+    papel: string,
+    nome: string,
+    cns: string,
+  ) => {
     setSalvando("criar-conta");
     try {
       await criarConta(email, senha, cnes, papel, nome, cns);
@@ -380,17 +381,16 @@ function Admin() {
       limparCacheLogoOrg();
       await recarregar();
       toast.success("Organização salva.");
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao salvar organização.");
+      return false;
     } finally {
       setSalvando(null);
     }
   };
 
-  const gravarGestao = async (
-    o: OrganizacaoAdmin,
-    g: { id: string | null; nome: string; inicio: string; fim: string },
-  ) => {
+  const gravarGestao = async (o: OrganizacaoAdmin, g: GestaoForm) => {
     setSalvando(`gestao:${o.id}`);
     try {
       await salvarGestao(o.id, g.id, g.nome, g.inicio, g.fim || null);
@@ -435,1149 +435,264 @@ function Admin() {
     }
   };
 
+  // ---------- Prefeitura aberta + formulário compartilhado (Arquivo / Relatórios) ----------
+  const org = busca.pref ? (organizacoes.find((o) => o.id === busca.pref) ?? null) : null;
+  const [formOrg, setFormOrg] = useState<OrganizacaoAdmin | null>(null);
+  useEffect(() => {
+    setFormOrg(org);
+    // Só ao trocar de prefeitura (ou quando ela chega do banco); recarregar por outra ação não
+    // apaga o que está sendo editado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org?.id]);
+  const sujo = mudouOrg(formOrg, org);
+  const setCampoOrg = <K extends keyof OrganizacaoAdmin>(k: K, v: OrganizacaoAdmin[K]) =>
+    setFormOrg((p) => (p ? { ...p, [k]: v } : p));
+  const salvarForm = async () => {
+    if (formOrg) await gravarOrganizacao(formOrg);
+  };
+
+  // Navegação: pergunta antes de sair com alteração não salva (Arquivo ↔ Relatórios não perde nada).
+  const irPara = async (nova: BuscaAdmin, opts: { replace?: boolean } = {}) => {
+    const saiDoForm =
+      nova.pref !== busca.pref || (nova.aba !== "arquivo" && nova.aba !== "relatorios");
+    if (sujo && saiDoForm) {
+      const ok = await confirmar({
+        titulo: "Descartar alterações?",
+        descricao: (
+          <p>
+            Há alterações não salvas no arquivo magnético ou na identidade dos relatórios. Se sair
+            agora, elas serão perdidas.
+          </p>
+        ),
+        confirmarRotulo: "Descartar e sair",
+        destrutivo: true,
+      });
+      if (!ok) return;
+      setFormOrg(org);
+    }
+    void navigate({ search: nova, replace: opts.replace });
+  };
+
   const hojeISO = new Date().toISOString().slice(0, 10);
   const semAcesso = !carregando && pessoas.length === 0 && organizacoes.length === 0 && !superAdmin;
+  const handlers: HandlersUsuario = {
+    onTrocarCargo: trocarCargo,
+    onVincular: vincular,
+    onDesvincular: desvincular,
+    onExcluir: excluir,
+    onDefinirPessoa: definirPessoa,
+    onDefinirVinculo: definirVinculo,
+    onDefinirGrupo: definirGrupo,
+    onDefinirGrupoVinculo: definirGrupoVinculo,
+  };
+
+  let conteudo: ReactNode;
+  if (carregando) {
+    conteudo = (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" /> Carregando…
+      </div>
+    );
+  } else if (semAcesso) {
+    conteudo = (
+      <p className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-[14px] text-amber-900">
+        Você não administra nenhuma organização (precisa da permissão “gerenciar vínculos”).
+      </p>
+    );
+  } else if (busca.pref && !org) {
+    conteudo = (
+      <div className="space-y-3 rounded-2xl border border-border bg-card px-5 py-6 text-sm">
+        <p>Prefeitura não encontrada ou sem acesso.</p>
+        <button type="button" className={btnPrimario} onClick={() => void navigate({ search: {} })}>
+          Voltar para prefeituras
+        </button>
+      </div>
+    );
+  } else if (org && formOrg) {
+    const aba: AbaPref = busca.aba && busca.aba !== "lgpd" ? busca.aba : "usuarios";
+    const pessoasOrg = pessoas.filter((p) => p.organizacao_id === org.id);
+    const estabs = estabPorOrg[org.id] ?? [];
+    const pessoaSel = busca.usuario
+      ? (pessoasOrg.find((p) => p.user_id === busca.usuario) ?? null)
+      : null;
+    const painel = pessoaSel ? (
+      <UsuarioPainel
+        key={pessoaSel.user_id}
+        pessoa={pessoaSel}
+        ehDono={donos.some((d) => d.user_id === pessoaSel.user_id)}
+        permsOrg={permsOrg}
+        permsCnes={permsCnes}
+        defaults={defaultsDaPessoa(pessoaSel)}
+        cargos={cargos}
+        vinculos={vinculos.filter(
+          (v) =>
+            v.user_id === pessoaSel.user_id &&
+            v.organizacao_id === org.id &&
+            (v.fim === null || v.fim >= hojeISO),
+        )}
+        estabelecimentos={estabs}
+        cargoDefaults={cargoDefaults}
+        salvando={salvando}
+        onFechar={() =>
+          void navigate({ search: (s: BuscaAdmin) => ({ ...s, usuario: undefined }) })
+        }
+        h={handlers}
+      />
+    ) : null;
+    conteudo = (
+      <div className="space-y-6">
+        <PrefeituraHeader
+          org={org}
+          nUsuarios={pessoasOrg.length}
+          nUnidades={estabs.length}
+          aba={aba}
+          onAba={(a) => void irPara({ pref: org.id, aba: a })}
+          onVoltar={() => void irPara({})}
+        />
+        {aba === "usuarios" && (
+          <UsuariosAba
+            pessoas={pessoasOrg}
+            estabelecimentos={estabs}
+            cargos={cargos}
+            perms={perms}
+            defaultsDaPessoa={defaultsDaPessoa}
+            usuarioSel={pessoaSel?.user_id ?? null}
+            filtroCnes={busca.unidade ?? ""}
+            onFiltroCnes={(c) =>
+              void navigate({
+                search: (s: BuscaAdmin) => ({ ...s, unidade: c || undefined }),
+                replace: true,
+              })
+            }
+            onSelecionar={(id) =>
+              void navigate({ search: (s: BuscaAdmin) => ({ ...s, usuario: id ?? undefined }) })
+            }
+            onCriarConta={() => setCriarContaAberto(true)}
+            painel={painel}
+          />
+        )}
+        {aba === "unidades" && (
+          <UnidadesAba
+            estabelecimentos={estabs}
+            pessoas={pessoasOrg}
+            salvando={salvando === `estab:${org.id}`}
+            onAdicionar={(cnes, nome) => adicionarCnes(org, cnes, nome)}
+            onVerUsuarios={(cnes) => void irPara({ pref: org.id, aba: "usuarios", unidade: cnes })}
+          />
+        )}
+        {aba === "arquivo" && <ArquivoMagneticoAba o={formOrg} set={setCampoOrg} />}
+        {aba === "relatorios" && (
+          <RelatoriosGestaoAba
+            org={org}
+            o={formOrg}
+            set={setCampoOrg}
+            salvandoOrg={salvando === `org:${org.id}`}
+            salvandoGestao={salvando === `gestao:${org.id}`}
+            onSalvarIdentidade={() => void salvarForm()}
+            onSalvarGestao={(g) => void gravarGestao(org, g)}
+          />
+        )}
+        {(aba === "arquivo" || aba === "relatorios") && (
+          <SalvarBarra
+            visivel={sujo}
+            salvando={salvando === `org:${org.id}`}
+            onDescartar={() => setFormOrg(org)}
+            onSalvar={() => void salvarForm()}
+          />
+        )}
+        <CriarContaDialog
+          aberto={criarContaAberto}
+          onAberto={setCriarContaAberto}
+          orgs={[{ id: org.id, nome: org.nome }]}
+          orgNome={org.nome}
+          cargos={cargos}
+          cargoDefaults={cargoDefaults}
+          perms={perms}
+          estabPorOrg={estabPorOrg}
+          criando={salvando === "criar-conta"}
+          onCriar={criarContaNova}
+        />
+      </div>
+    );
+  } else {
+    const abaInicio = busca.aba === "lgpd" ? "lgpd" : "prefeituras";
+    conteudo = (
+      <div className="space-y-5">
+        <div
+          role="tablist"
+          aria-label="Seções da administração"
+          className="flex gap-1 border-b border-border"
+        >
+          {[
+            { id: "prefeituras", rotulo: "Prefeituras" },
+            { id: "lgpd", rotulo: "Auditoria LGPD" },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={abaInicio === t.id}
+              onClick={() => void navigate({ search: t.id === "lgpd" ? { aba: "lgpd" } : {} })}
+              className={cn(
+                "-mb-px inline-flex min-h-11 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
+                abaInicio === t.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t.rotulo}
+            </button>
+          ))}
+        </div>
+        {abaInicio === "lgpd" ? (
+          <AuditoriaLgpd leituras={leituras} />
+        ) : (
+          <PrefeiturasLista
+            organizacoes={organizacoes}
+            estabPorOrg={estabPorOrg}
+            pessoas={pessoas}
+            donos={donos}
+            leituras={leituras}
+            onAbrir={(id) => void navigate({ search: { pref: id, aba: "usuarios" } })}
+            onVerAuditoria={() => void navigate({ search: { aba: "lgpd" } })}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-muted/40 pb-16">
-      <main className="mx-auto mt-6 max-w-[1000px] px-4">
-        <PageHeader icon={ShieldCheck} titulo="Administração"
-          descricao="Vínculos, permissões e acessos de usuários e unidades." />
-        {carregando ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Carregando…
-          </div>
-        ) : semAcesso ? (
-          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Você não administra nenhuma organização (precisa da permissão “gerenciar vínculos”).
-          </p>
-        ) : prefSel ? (
-          (() => {
-            const org = organizacoes.find((o) => o.id === prefSel);
-            if (!org) {
-              return (
-                <button
-                  onClick={() => setPrefSel(null)}
-                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                >
-                  <ChevronLeft className="size-4" /> Voltar para prefeituras
-                </button>
-              );
-            }
-            const pessoasOrg = pessoas.filter((p) => p.organizacao_id === prefSel);
-            return (
-              <>
-                <button
-                  onClick={() => setPrefSel(null)}
-                  className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronLeft className="size-4" /> Todas as prefeituras
-                </button>
-
-                {/* Gestão, cabeçalho magnético e unidades desta prefeitura */}
-                <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Landmark className="size-4" /> {org.nome}
-                  </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Dados do município, gestão e o <strong>cabeçalho do arquivo magnético</strong>{" "}
-                    (registro 01), além das unidades (CNES) da prefeitura.
-                  </p>
-                  <div className="mt-4">
-                    <OrgCard
-                      org={org}
-                      estabelecimentos={estabPorOrg[org.id] ?? []}
-                      salvandoOrg={salvando === `org:${org.id}`}
-                      salvandoGestao={salvando === `gestao:${org.id}`}
-                      salvandoCnes={salvando === `estab:${org.id}`}
-                      onSalvarOrg={gravarOrganizacao}
-                      onSalvarGestao={gravarGestao}
-                      onAddCnes={adicionarCnes}
-                    />
-                  </div>
-                </section>
-
-                {/* Usuários desta prefeitura */}
-                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <Users className="size-4" /> Usuários ({pessoasOrg.length})
-                    </h2>
-                    <CriarContaForm
-                      orgs={[{ id: org.id, nome: org.nome }]}
-                      cargos={Object.keys(cargoDefaults).sort()}
-                      estabPorOrg={estabPorOrg}
-                      criando={salvando === "criar-conta"}
-                      onCriar={criarContaNova}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Uma pessoa por cartão. O <strong>cargo</strong> traz o pacote-padrão de
-                    permissões; ajustes ficam marcados como{" "}
-                    <span className="text-amber-700">≠ padrão</span>. As permissões de unidade valem
-                    para todas as unidades da pessoa (personalize por unidade no rodapé de cada
-                    cartão).
-                  </p>
-                  <div className="mt-4 space-y-4">
-                    {pessoasOrg.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Nenhum usuário nesta prefeitura ainda.
-                      </p>
-                    ) : (
-                      pessoasOrg.map((pessoa) => (
-                        <PessoaCard
-                          key={`${pessoa.user_id}:${pessoa.organizacao_id}`}
-                          pessoa={pessoa}
-                          ehDono={donos.some((d) => d.user_id === pessoa.user_id)}
-                          permsOrg={permsOrg}
-                          permsCnes={permsCnes}
-                          defaults={defaultsDaPessoa(pessoa)}
-                          cargos={Object.keys(cargoDefaults).sort()}
-                          vinculos={vinculos.filter(
-                            (v) =>
-                              v.user_id === pessoa.user_id &&
-                              v.organizacao_id === pessoa.organizacao_id &&
-                              (v.fim === null || v.fim >= hojeISO),
-                          )}
-                          estabelecimentos={estabPorOrg[pessoa.organizacao_id] ?? []}
-                          cargoDefaults={cargoDefaults}
-                          salvando={salvando}
-                          onTogglePessoa={togglePessoa}
-                          onTrocarCargo={trocarCargo}
-                          onToggleVinculo={toggleVinculo}
-                          onVincular={vincular}
-                          onDesvincular={desvincular}
-                          onExcluir={excluir}
-                          onDefinirGrupo={definirGrupo}
-                        />
-                      ))
-                    )}
-                  </div>
-                </section>
-              </>
-            );
-          })()
-        ) : (
-          <>
-            {/* Dono do sistema — escopo global, não atribuível pela tela */}
-            {donos.length > 0 && (
-              <section className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 p-5 shadow-sm">
-                <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-violet-900">
-                  <ShieldCheck className="size-4" /> Dono do sistema
-                  <span className="rounded bg-violet-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-900">
-                    {LABEL_ESCOPO.global}
-                  </span>
-                </h2>
-                <p className="mt-1 text-xs text-violet-800">
-                  {donos.map((d) => d.email).join(", ")} — administra qualquer prefeitura; para ver
-                  ficha ainda precisa de vínculo no CNES. Não atribuível pela tela.
-                </p>
-              </section>
+      <main className="mx-auto mt-6 max-w-[1280px] px-4">
+        {!org && (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <PageHeader
+              icon={ShieldCheck}
+              titulo="Prefeituras e acessos"
+              descricao="Escolha uma prefeitura para gerenciar usuários, unidades, arquivo magnético e relatórios."
+            />
+            {superAdmin && !carregando && (
+              <button
+                type="button"
+                className={btnPrimario}
+                onClick={() => setCriarPrefAberto(true)}
+              >
+                <Plus className="size-4" /> Nova prefeitura
+              </button>
             )}
-
-            {/* Lista de prefeituras — clique para configurar gestão, unidades e usuários */}
-            <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Landmark className="size-4" /> Prefeituras ({organizacoes.length})
-                </h2>
-                {superAdmin && (
-                  <CriarPrefeituraForm
-                    criando={salvando === "criar-prefeitura"}
-                    onCriar={criarPrefeitura}
-                  />
-                )}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Abra uma prefeitura para ver e editar sua gestão, unidades e usuários.
-                {superAdmin && " Como super-admin, você vê todas as prefeituras."}
-              </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {organizacoes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nenhuma prefeitura cadastrada.</p>
-                ) : (
-                  organizacoes.map((o) => {
-                    const nUnid = (estabPorOrg[o.id] ?? []).length;
-                    const nPess = pessoas.filter((p) => p.organizacao_id === o.id).length;
-                    return (
-                      <button
-                        key={o.id}
-                        onClick={() => setPrefSel(o.id)}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary/50 hover:bg-muted"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-foreground">
-                            {o.nome}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {nUnid} unidade{nUnid === 1 ? "" : "s"} · {nPess} usuário
-                            {nPess === 1 ? "" : "s"}
-                          </div>
-                        </div>
-                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-
-            {/* Logs de acesso (LGPD) */}
-            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Eye className="size-4" /> Acessos a fichas BPA-I (LGPD) — {leituras.length}{" "}
-                recentes
-              </h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Toda abertura de ficha BPA-I (com dado pessoal do paciente) é registrada.
-              </p>
-              {leituras.length === 0 ? (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Nenhum acesso registrado ainda.
-                </p>
-              ) : (
-                <div className="mt-3 max-h-80 overflow-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="text-muted-foreground">
-                      <tr>
-                        <th className="py-1 pr-3 font-medium">Quando</th>
-                        <th className="py-1 pr-3 font-medium">Quem</th>
-                        <th className="py-1 pr-3 font-medium">CNES</th>
-                        <th className="py-1 font-medium">Ficha</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leituras.map((l, i) => (
-                        <tr key={i} className="border-t border-border">
-                          <td className="py-1 pr-3 tabular-nums">{fmt(l.lida_em)}</td>
-                          <td className="py-1 pr-3">{l.email}</td>
-                          <td className="py-1 pr-3 font-mono">{l.cnes}</td>
-                          <td className="py-1 truncate">{l.titulo}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </>
+          </div>
         )}
+        {conteudo}
       </main>
-    </div>
-  );
-}
-
-function PermPill({
-  label,
-  title,
-  est,
-  loading,
-  onClick,
-}: {
-  label: string;
-  title: string;
-  est: EstadoPerm;
-  loading: boolean;
-  onClick: () => void;
-}) {
-  const base =
-    "relative rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50";
-  let cls: string;
-  if (est.parcial) cls = "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100";
-  else if (est.ativa)
-    cls = "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
-  else cls = "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100";
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      title={`${title}${est.override ? " · diferente do padrão do cargo" : ""}`}
-      className={`${base} ${cls} ${est.override ? "ring-2 ring-amber-300/70" : ""}`}
-    >
-      {loading ? "…" : est.parcial ? "◐ " : est.ativa ? "✓ " : "+ "}
-      {label}
-      {est.override && !loading ? <span className="ml-1 text-amber-600">≠</span> : null}
-    </button>
-  );
-}
-
-function CriarPrefeituraForm({
-  criando,
-  onCriar,
-}: {
-  criando: boolean;
-  onCriar: (nome: string, ibge: string, uf: string) => Promise<boolean>;
-}) {
-  const [aberto, setAberto] = useState(false);
-  const [nome, setNome] = useState("");
-  const [ibge, setIbge] = useState("");
-  const [uf, setUf] = useState("");
-  const campo = "rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground";
-
-  const submeter = async () => {
-    if (!nome.trim()) return;
-    const ok = await onCriar(nome.trim(), ibge.trim(), uf.trim());
-    if (ok) {
-      setNome("");
-      setIbge("");
-      setUf("");
-      setAberto(false);
-    }
-  };
-
-  if (!aberto) {
-    return (
-      <button
-        onClick={() => setAberto(true)}
-        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-      >
-        <Plus className="size-3.5" /> Criar prefeitura
-      </button>
-    );
-  }
-  return (
-    <div className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-2">
-      <label className="flex flex-1 flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-        Nome da prefeitura
-        <input
-          className={campo}
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-          placeholder="Ex.: FMS — Cidade/UF"
+      {superAdmin && (
+        <CriarPrefeituraDialog
+          aberto={criarPrefAberto}
+          onAberto={setCriarPrefAberto}
+          criando={salvando === "criar-prefeitura"}
+          onCriar={criarPrefeitura}
         />
-      </label>
-      <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-        Município (IBGE)
-        <input
-          className={`${campo} w-24`}
-          value={ibge}
-          onChange={(e) => setIbge(e.target.value.replace(/\D/g, ""))}
-          placeholder="2927200"
-        />
-      </label>
-      <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-        UF
-        <input
-          className={`${campo} w-12`}
-          maxLength={2}
-          value={uf}
-          onChange={(e) => setUf(e.target.value.toUpperCase())}
-        />
-      </label>
-      <button
-        onClick={submeter}
-        disabled={!nome.trim() || criando}
-        className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
-      >
-        {criando ? <Loader2 className="size-3.5 animate-spin" /> : null} Criar
-      </button>
-      <button
-        onClick={() => setAberto(false)}
-        className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
-      >
-        Cancelar
-      </button>
-    </div>
-  );
-}
-
-function OrgCard({
-  org,
-  estabelecimentos,
-  salvandoOrg,
-  salvandoGestao,
-  salvandoCnes,
-  onSalvarOrg,
-  onSalvarGestao,
-  onAddCnes,
-}: {
-  org: OrganizacaoAdmin;
-  estabelecimentos: EstabelecimentoOrg[];
-  salvandoOrg: boolean;
-  salvandoGestao: boolean;
-  salvandoCnes: boolean;
-  onSalvarOrg: (o: OrganizacaoAdmin) => void;
-  onSalvarGestao: (
-    o: OrganizacaoAdmin,
-    g: { id: string | null; nome: string; inicio: string; fim: string },
-  ) => void;
-  onAddCnes: (o: OrganizacaoAdmin, cnes: string, nome: string) => Promise<boolean>;
-}) {
-  const [o, setO] = useState<OrganizacaoAdmin>(org);
-  const [addCnesAberto, setAddCnesAberto] = useState(false);
-  const [novoCnes, setNovoCnes] = useState("");
-  const [novoNome, setNovoNome] = useState("");
-  const [g, setG] = useState({
-    id: org.gestao_id,
-    nome: org.gestao_nome ?? "",
-    inicio: org.gestao_inicio ?? "",
-    fim: org.gestao_fim ?? "",
-  });
-  const set = <K extends keyof OrganizacaoAdmin>(k: K, v: OrganizacaoAdmin[K]) =>
-    setO((prev) => ({ ...prev, [k]: v }));
-  const campo = "rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground";
-  const rotulo = "flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground";
-
-  const confirmarAddCnes = async () => {
-    if (!/^[0-9]{7}$/.test(novoCnes)) return;
-    const ok = await onAddCnes(org, novoCnes, novoNome);
-    if (ok) {
-      setNovoCnes("");
-      setNovoNome("");
-      setAddCnesAberto(false);
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-border p-4">
-      <div className="text-sm font-semibold text-foreground">{org.nome}</div>
-
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className={rotulo}>
-          Nome da organização
-          <input className={campo} value={o.nome} onChange={(e) => set("nome", e.target.value)} />
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className={rotulo}>
-            Município (IBGE)
-            <input
-              className={campo}
-              value={o.municipio_ibge ?? ""}
-              onChange={(e) => set("municipio_ibge", e.target.value)}
-            />
-          </label>
-          <label className={rotulo}>
-            UF
-            <input
-              className={campo}
-              maxLength={2}
-              value={o.uf ?? ""}
-              onChange={(e) => set("uf", e.target.value.toUpperCase())}
-            />
-          </label>
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="text-[11px] font-medium text-muted-foreground">Cor de destaque dos relatórios</div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          Usada nos cabeçalhos e totais dos PDFs (Produção e FPO). Cada gestão pode adotar a sua cor;
-          o padrão do sistema é verde.
-        </p>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <input type="color" value={o.cor_relatorio ?? "#107A57"}
-            onChange={(e) => set("cor_relatorio", e.target.value.toUpperCase())}
-            data-nocaps className="h-8 w-12 cursor-pointer rounded border border-border bg-background p-0.5" />
-          <span className="font-mono text-[11px] text-muted-foreground">{o.cor_relatorio ?? "padrão (verde)"}</span>
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="text-[11px] font-medium text-muted-foreground">Logo / timbre dos relatórios</div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          Imagem no topo dos PDFs. Ideal um timbre horizontal (proporção ~3:1, ex.: 1400×436, PNG).
-          Lembre de clicar em <strong>Salvar organização</strong> depois de trocar.
-        </p>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          {o.logo_relatorio ? (
-            <img src={o.logo_relatorio} alt="Logo atual" className="h-10 w-auto rounded border border-border bg-white object-contain px-1" />
-          ) : (
-            <span className="text-[11px] text-muted-foreground">Nenhuma logo definida.</span>
-          )}
-          <label className="cursor-pointer rounded border border-border px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted">
-            {o.logo_relatorio ? "Trocar imagem" : "Enviar imagem"}
-            <input type="file" accept="image/png,image/jpeg" className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = "";
-                if (!f) return;
-                if (f.size > 1_500_000) { toast.error("Imagem muito grande (máx. 1,5 MB). Reduza o arquivo."); return; }
-                const r = new FileReader();
-                r.onload = () => set("logo_relatorio", typeof r.result === "string" ? r.result : null);
-                r.readAsDataURL(f);
-              }} />
-          </label>
-          {o.logo_relatorio && (
-            <button type="button" onClick={() => set("logo_relatorio", null)}
-              className="rounded border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted">
-              Remover
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-3 text-[11px] font-medium text-muted-foreground">
-        Cabeçalho do arquivo magnético (registro 01)
-      </div>
-      <p className="mt-0.5 text-[10px] text-muted-foreground">
-        Deve bater com o que o DATASUS aceita <strong>na competência de apresentação</strong>. O
-        órgão de destino e a versão mudam quase todo mês (atual{" "}
-        <span className="font-mono">D04.14</span>) — atualize a cada remessa.
-      </p>
-      <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className={rotulo}>
-          Órgão de origem (máx. 30)
-          <input
-            className={campo}
-            maxLength={30}
-            value={o.cab_orgao_origem ?? ""}
-            onChange={(e) => set("cab_orgao_origem", e.target.value)}
-            placeholder="Ex.: SECRETARIA MUNICIPAL DE SAUDE"
-          />
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className={rotulo}>
-            Sigla (máx. 6)
-            <input
-              className={campo}
-              maxLength={6}
-              value={o.cab_sigla ?? ""}
-              onChange={(e) => set("cab_sigla", e.target.value)}
-            />
-          </label>
-          <label className={rotulo}>
-            CNPJ/CPF (14 díg.)
-            <input
-              className={campo}
-              inputMode="numeric"
-              maxLength={14}
-              value={o.cab_cgc_cpf ?? ""}
-              onChange={(e) => set("cab_cgc_cpf", e.target.value.replace(/\D/g, ""))}
-            />
-          </label>
-        </div>
-        <label className={rotulo}>
-          Órgão de destino (máx. 40)
-          <input
-            className={campo}
-            maxLength={40}
-            value={o.cab_orgao_destino ?? ""}
-            onChange={(e) => set("cab_orgao_destino", e.target.value)}
-          />
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className={rotulo}>
-            Tipo de destino
-            <select
-              className={campo}
-              value={o.cab_destino_tipo}
-              onChange={(e) => set("cab_destino_tipo", e.target.value)}
-            >
-              <option value="M">Municipal</option>
-              <option value="E">Estadual</option>
-            </select>
-          </label>
-          <label className={rotulo}>
-            Versão do layout
-            <input
-              className={campo}
-              maxLength={6}
-              value={o.cab_versao}
-              onChange={(e) => set("cab_versao", e.target.value)}
-            />
-          </label>
-        </div>
-      </div>
-      <p className="mt-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">
-        ⚠️ O layout do DATASUS <strong>muda quase todo mês</strong>: atualize o órgão de destino e a
-        versão quando sair uma nova (jun/2026 = MINISTERIO DA SAUDE / D04.14; mar = Secretaria do
-        Estado / D04.11). E o tipo é <strong>“Municipal” (M)</strong> mesmo com destino federal — é
-        o valor que o DATASUS aceita (o relatório imprime “ORGAO (M)UNICIPAL OU (E)STADUAL : M”).
-        Não troque para “E” sem novo arquivo de referência.
-      </p>
-      <div className="mt-2">
-        <button
-          onClick={() => onSalvarOrg(o)}
-          disabled={salvandoOrg}
-          className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
-        >
-          {salvandoOrg ? <Loader2 className="size-3.5 animate-spin" /> : null} Salvar organização
-        </button>
-      </div>
-
-      <div className="mt-4 border-t border-border pt-3">
-        <div className="text-[11px] font-medium text-muted-foreground">
-          Gestão vigente (mandato)
-        </div>
-        <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className={rotulo}>
-            Nome
-            <input
-              className={campo}
-              value={g.nome}
-              onChange={(e) => setG((p) => ({ ...p, nome: e.target.value }))}
-              placeholder="Ex.: 2025–2028"
-            />
-          </label>
-          <label className={rotulo}>
-            Início
-            <input
-              type="date"
-              className={campo}
-              value={g.inicio}
-              onChange={(e) => setG((p) => ({ ...p, inicio: e.target.value }))}
-            />
-          </label>
-          <label className={rotulo}>
-            Fim (opcional)
-            <input
-              type="date"
-              className={campo}
-              value={g.fim}
-              onChange={(e) => setG((p) => ({ ...p, fim: e.target.value }))}
-            />
-          </label>
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            onClick={() => onSalvarGestao(org, g)}
-            disabled={salvandoGestao || !g.nome || !g.inicio}
-            className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
-          >
-            {salvandoGestao ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            {g.id ? "Salvar gestão" : "Criar gestão"}
-          </button>
-          {g.id && (
-            <button
-              onClick={() => setG({ id: null, nome: "", inicio: "", fim: "" })}
-              className="text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              + nova gestão
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-4 border-t border-border pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-[11px] font-medium text-muted-foreground">
-            Unidades (CNES) — {estabelecimentos.length}
-          </div>
-          {!addCnesAberto && (
-            <button
-              onClick={() => setAddCnesAberto(true)}
-              className="inline-flex items-center gap-0.5 rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <Plus className="size-3" /> Adicionar CNES
-            </button>
-          )}
-        </div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          Ao cadastrar um CNES, o sistema puxa os profissionais dele pela API do CNES. (A busca
-          automática por município virá da base pública do DATASUS.)
-        </p>
-        {estabelecimentos.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {estabelecimentos.map((e) => (
-              <span
-                key={e.cnes}
-                title={e.nome}
-                className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[11px] text-foreground"
-              >
-                <span className="font-mono">{e.cnes}</span> · {e.nome}
-              </span>
-            ))}
-          </div>
-        )}
-        {addCnesAberto && (
-          <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-2">
-            <label className={rotulo}>
-              CNES (7 dígitos)
-              <input
-                className={`${campo} w-28`}
-                inputMode="numeric"
-                maxLength={7}
-                value={novoCnes}
-                onChange={(e) => setNovoCnes(e.target.value.replace(/\D/g, ""))}
-                placeholder="2510332"
-              />
-            </label>
-            <label className={`${rotulo} flex-1`}>
-              Nome da unidade (opcional)
-              <input
-                className={campo}
-                value={novoNome}
-                onChange={(e) => setNovoNome(e.target.value)}
-                placeholder="Ex.: HOSPITAL REGIONAL"
-              />
-            </label>
-            <button
-              onClick={confirmarAddCnes}
-              disabled={!/^[0-9]{7}$/.test(novoCnes) || salvandoCnes}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
-            >
-              {salvandoCnes ? <Loader2 className="size-3.5 animate-spin" /> : null} Cadastrar
-            </button>
-            <button
-              onClick={() => setAddCnesAberto(false)}
-              className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
-            >
-              Cancelar
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CriarContaForm({
-  orgs,
-  cargos,
-  estabPorOrg,
-  criando,
-  onCriar,
-}: {
-  orgs: { id: string; nome: string }[];
-  cargos: string[];
-  estabPorOrg: Record<string, EstabelecimentoOrg[]>;
-  criando: boolean;
-  onCriar: (email: string, senha: string, cnes: string, papel: string, nome: string, cns: string) => Promise<boolean>;
-}) {
-  const [aberto, setAberto] = useState(false);
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [org, setOrg] = useState(orgs.length === 1 ? orgs[0].id : "");
-  const [cnes, setCnes] = useState("");
-  const [papel, setPapel] = useState("");
-  const [nome, setNome] = useState("");
-  const [cns, setCns] = useState("");
-  const [confere, setConfere] = useState(false);
-  const [verSenha, setVerSenha] = useState(false);
-
-  const estabs = estabPorOrg[org] ?? [];
-  const senhaCurta = senha.length > 0 && senha.length < 8;
-  const valido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && senha.length >= 8 && cnes && papel && nome.trim() && /^[0-9]{15}$/.test(cns);
-
-  const submeter = async () => {
-    if (!valido) return;
-    const ok = await onCriar(email.trim(), senha, cnes, papel, nome.trim(), cns);
-    if (ok) {
-      setEmail(""); setSenha(""); setCnes(""); setPapel("");
-      setNome(""); setCns(""); setConfere(false); setVerSenha(false);
-      setAberto(false);
-    }
-  };
-
-  if (!aberto) {
-    return (
-      <button
-        onClick={() => {
-          setAberto(true);
-          setOrg(orgs.length === 1 ? orgs[0].id : "");
-        }}
-        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-      >
-        <Plus className="size-3.5" /> Criar conta
-      </button>
-    );
-  }
-
-  return (
-    <div className="w-full rounded-xl border border-border bg-muted/30 p-3">
-      <div className="text-xs font-semibold text-foreground">Criar conta nova</div>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
-        A conta é ativada na hora (sem e-mail de confirmação). A pessoa entra com este e-mail e
-        senha — oriente-a a trocar a senha depois.
-      </p>
-      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-          E-mail
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="pessoa@exemplo.com"
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-          />
-        </label>
-        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-          Senha inicial (mín. 8)
-          <div className="relative">
-            <input
-              type={verSenha ? "text" : "password"}
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              autoComplete="new-password"
-              className={`w-full rounded-md border bg-background px-2 py-1 pr-8 text-xs text-foreground ${senhaCurta ? "border-destructive" : "border-border"}`}
-            />
-            <button
-              type="button"
-              onClick={() => setVerSenha((v) => !v)}
-              title={verSenha ? "Ocultar senha" : "Mostrar senha"}
-              aria-label={verSenha ? "Ocultar senha" : "Mostrar senha"}
-              className="absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground hover:text-foreground"
-            >
-              {verSenha ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-            </button>
-          </div>
-        </label>
-        {orgs.length > 1 && (
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-            Organização
-            <select
-              value={org}
-              onChange={(e) => {
-                setOrg(e.target.value);
-                setCnes("");
-              }}
-              className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-            >
-              <option value="">Selecione…</option>
-              {orgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-          Unidade (CNES)
-          <select
-            value={cnes}
-            onChange={(e) => setCnes(e.target.value)}
-            disabled={!org}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-50"
-          >
-            <option value="">Selecione…</option>
-            {estabs.map((e) => (
-              <option key={e.cnes} value={e.cnes}>
-                {e.cnes} — {e.nome}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-          Cargo
-          <select
-            value={papel}
-            onChange={(e) => setPapel(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-          >
-            <option value="">Selecione…</option>
-            {cargos.map((c) => (
-              <option key={c} value={c}>
-                {nomeCargo(c)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground sm:col-span-2">
-          Profissional da unidade (crivo por nome/CNS)
-          <ProfissionalPicker cnes={cnes} nome={nome} cns={cns} confere={confere}
-            onChange={(nm, c, ok) => { setNome(nm); setCns(c); setConfere(ok); }} />
-        </label>
-      </div>
-      <p className="mt-1.5 text-[10px] text-muted-foreground">
-        Esta é a <strong>unidade de cadastro</strong> (base) do usuário. Ele confere com o cadastro SCNES do CNES. Depois você pode dar acesso a outras unidades no card da pessoa.
-      </p>
-      <div className="mt-2 flex items-center gap-2">
-        <button
-          onClick={submeter}
-          disabled={!valido || criando}
-          className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
-        >
-          {criando ? <Loader2 className="size-3.5 animate-spin" /> : null} Criar e vincular
-        </button>
-        <button
-          onClick={() => setAberto(false)}
-          className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PessoaCard({
-  pessoa,
-  ehDono,
-  permsOrg,
-  permsCnes,
-  defaults,
-  cargos,
-  vinculos,
-  estabelecimentos,
-  cargoDefaults,
-  salvando,
-  onTogglePessoa,
-  onTrocarCargo,
-  onToggleVinculo,
-  onVincular,
-  onDesvincular,
-  onExcluir,
-  onDefinirGrupo,
-}: {
-  pessoa: PessoaAdmin;
-  ehDono: boolean;
-  permsOrg: PermissaoCat[];
-  permsCnes: PermissaoCat[];
-  defaults: Set<string>;
-  cargos: string[];
-  vinculos: VinculoAdmin[];
-  estabelecimentos: EstabelecimentoOrg[];
-  cargoDefaults: Record<string, string[]>;
-  salvando: string | null;
-  onTogglePessoa: (p: PessoaAdmin, perm: PermissaoCat, est: EstadoPerm) => void;
-  onTrocarCargo: (p: PessoaAdmin, papel: string) => void;
-  onToggleVinculo: (v: VinculoAdmin, perm: PermissaoCat) => void;
-  onVincular: (p: PessoaAdmin, cnes: string, papel: string) => void;
-  onDesvincular: (p: PessoaAdmin, cnes: string) => void;
-  onExcluir: (p: PessoaAdmin) => void;
-  onDefinirGrupo: (p: PessoaAdmin, codigos: string[], alvo: boolean | null) => void;
-}) {
-  const [abrirUnidades, setAbrirUnidades] = useState(false);
-  const [addAberto, setAddAberto] = useState(false);
-  const [novoCnes, setNovoCnes] = useState("");
-  const [novoPapel, setNovoPapel] = useState("");
-  const cargoAtual = pessoa.papeis.length === 1 ? pessoa.papeis[0] : "";
-  const cnesDisponiveis = estabelecimentos.filter((e) => !pessoa.cnes.includes(e.cnes));
-
-  const confirmarAdd = () => {
-    if (!novoCnes || !novoPapel) return;
-    onVincular(pessoa, novoCnes, novoPapel);
-    setAddAberto(false);
-    setNovoCnes("");
-    setNovoPapel("");
-  };
-
-  return (
-    <div className="rounded-xl border border-border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-foreground">{pessoa.email}</span>
-            {ehDono && (
-              <span
-                title="Super-admin: administra qualquer prefeitura. Não atribuível pela tela."
-                className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-800"
-              >
-                Dono do sistema · {LABEL_ESCOPO.global}
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-muted-foreground">{pessoa.org_nome}</div>
-          {!ehDono && (
-            <button
-              type="button"
-              onClick={() => onExcluir(pessoa)}
-              disabled={salvando === `${pessoa.user_id}:excluir`}
-              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 transition-colors hover:text-rose-700 hover:underline disabled:opacity-50"
-            >
-              <Trash2 className="size-3.5" /> Excluir usuário
-            </button>
-          )}
-        </div>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          Cargo
-          <div className="relative">
-            <select
-              value={cargoAtual}
-              onChange={(e) => onTrocarCargo(pessoa, e.target.value)}
-              disabled={salvando === `${pessoa.user_id}:cargo`}
-              className="appearance-none rounded-md border border-border bg-background py-1 pl-2.5 pr-7 text-xs font-medium text-foreground disabled:opacity-50"
-            >
-              {cargoAtual === "" && <option value="">— vários —</option>}
-              {cargos.map((c) => (
-                <option key={c} value={c}>
-                  {nomeCargo(c)}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          </div>
-          {cargoAtual !== "" && (
-            <span
-              title={`Escopo do cargo: ${LABEL_ESCOPO[escopoDoCargo(cargoAtual)]}`}
-              className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground"
-            >
-              {LABEL_ESCOPO[escopoDoCargo(cargoAtual)]}
-            </span>
-          )}
-        </label>
-      </div>
-      {cargoAtual !== "" && DESC_CARGO[cargoAtual] && (
-        <div className="mt-0.5 text-right text-[11px] text-muted-foreground">{DESC_CARGO[cargoAtual]}</div>
       )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-          <Building2 className="size-3" /> Unidades ({pessoa.cnes.length}):
-        </span>
-        {pessoa.cnes.length === 0 && (
-          <span className="text-[11px] text-muted-foreground">nenhuma unidade ativa</span>
-        )}
-        {pessoa.cnes.map((c) => (
-          <span
-            key={c}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 py-0.5 pl-1.5 pr-1 font-mono text-[11px] text-foreground"
-          >
-            {c}
-            <button
-              onClick={() => onDesvincular(pessoa, c)}
-              disabled={salvando === `${pessoa.user_id}:${c}:desvinc`}
-              title="Desvincular esta unidade"
-              className="rounded-sm p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-        {!addAberto && cnesDisponiveis.length > 0 && (
-          <button
-            onClick={() => {
-              setAddAberto(true);
-              setNovoPapel(cargoAtual || "");
-            }}
-            className="inline-flex items-center gap-0.5 rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Plus className="size-3" /> Adicionar unidade
-          </button>
-        )}
-      </div>
-
-      {addAberto && (
-        <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-2">
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-            Unidade (CNES)
-            <select
-              value={novoCnes}
-              onChange={(e) => setNovoCnes(e.target.value)}
-              className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-            >
-              <option value="">Selecione…</option>
-              {cnesDisponiveis.map((e) => (
-                <option key={e.cnes} value={e.cnes}>
-                  {e.cnes} — {e.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium text-muted-foreground">
-            Cargo na unidade
-            <select
-              value={novoPapel}
-              onChange={(e) => setNovoPapel(e.target.value)}
-              className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-            >
-              <option value="">Selecione…</option>
-              {cargos.map((c) => (
-                <option key={c} value={c}>
-                  {nomeCargo(c)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            onClick={confirmarAdd}
-            disabled={!novoCnes || !novoPapel || salvando === `${pessoa.user_id}:vinc`}
-            className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
-          >
-            Vincular
-          </button>
-          <button
-            onClick={() => setAddAberto(false)}
-            className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
-          >
-            Cancelar
-          </button>
-        </div>
-      )}
-
-      {(() => {
-        const grupos: { chave: string; titulo: string; curto: boolean; perms: PermissaoCat[] }[] = [
-          { chave: "menu", titulo: "Menu (páginas)", curto: true, perms: permsOrg.filter((p) => grupoOrg(p.codigo) === "menu") },
-          { chave: "relatorio", titulo: "Relatórios", curto: true, perms: permsOrg.filter((p) => grupoOrg(p.codigo) === "relatorio") },
-          { chave: "gestao", titulo: "Gestão e acessos", curto: false, perms: permsOrg.filter((p) => grupoOrg(p.codigo) === "gestao") },
-          { chave: "cnes", titulo: "Fichas e produção (todas as unidades)", curto: false, perms: permsCnes },
-        ];
-        const grpBusy = salvando === `${pessoa.user_id}:grupo`;
-        return grupos.filter((g) => g.perms.length > 0).map((g) => {
-          const codigos = g.perms.map((p) => p.codigo);
-          const todasAtivas = g.perms.every((p) => estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults).ativa);
-          const nenhumaAtiva = g.perms.every((p) => !estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults).ativa);
-          return (
-            <div key={g.chave} className="mt-3 rounded-lg border border-border/70 bg-muted/20 p-2.5">
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{g.titulo} <span className="font-normal normal-case text-muted-foreground/70">· {g.perms.length}</span></span>
-                {g.chave !== "gestao" && (
-                  <span className="flex items-center gap-1">
-                    <button type="button" disabled={grpBusy || todasAtivas} onClick={() => onDefinirGrupo(pessoa, codigos, true)}
-                      className="rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">Liberar tudo</button>
-                    <button type="button" disabled={grpBusy || nenhumaAtiva} onClick={() => onDefinirGrupo(pessoa, codigos, false)}
-                      className="rounded border border-rose-300 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40">Bloquear tudo</button>
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {g.perms.map((p) => {
-                  const est = estadoPermissao(p.codigo, pessoa.perms, pessoa.total_vinculos, defaults);
-                  return (
-                    <PermPill
-                      key={p.codigo}
-                      label={g.curto ? rotuloCurto(p) : nomePerm(p)}
-                      title={p.codigo}
-                      est={est}
-                      loading={salvando === `${pessoa.user_id}:${p.codigo}` || grpBusy}
-                      onClick={() => onTogglePessoa(pessoa, p, est)}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          );
-        });
-      })()}
-
-      {vinculos.length > 1 && (
-        <div className="mt-3 border-t border-border pt-2">
-          <button
-            onClick={() => setAbrirUnidades((v) => !v)}
-            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ChevronDown
-              className={`size-3.5 transition-transform ${abrirUnidades ? "rotate-180" : ""}`}
-            />
-            Personalizar por unidade
-          </button>
-          {abrirUnidades && (
-            <div className="mt-2 space-y-2">
-              {vinculos.map((v) => (
-                <div key={v.vinculo_id} className="rounded-lg border border-border/70 p-2">
-                  <div className="text-[11px] text-muted-foreground">
-                    CNES <span className="font-mono text-foreground">{v.cnes}</span> · cargo{" "}
-                    {nomeCargo(v.papel)}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {permsCnes.map((p) => {
-                      const padrao = (cargoDefaults[v.papel] ?? []).includes(p.codigo);
-                      const ativa = v.permissoes.includes(p.codigo);
-                      const est: EstadoPerm = {
-                        ativa,
-                        parcial: false,
-                        padrao,
-                        override: ativa !== padrao,
-                      };
-                      return (
-                        <PermPill
-                          key={p.codigo}
-                          label={nomePerm(p)}
-                          title={p.codigo}
-                          est={est}
-                          loading={salvando === `${v.vinculo_id}:${p.codigo}`}
-                          onClick={() => onToggleVinculo(v, p)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {dialogo}
     </div>
   );
 }
