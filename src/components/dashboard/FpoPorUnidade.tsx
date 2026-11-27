@@ -21,13 +21,19 @@ export function FpoPorUnidade({
   carregando: boolean;
 }) {
   const [aberto, setAberto] = useState<string | null>(null);
+  // Só as unidades que FATURARAM algo no mês (com ou sem teto). Unidade sem nenhuma produção
+  // (0%) não aparece — o card fica curto e focado. A faixa do topo continua com o teto total.
+  const comProducao = resumo.filter(
+    (u) => u.produzidoQtd > 0 || u.produzidoForaQtd > 0 || u.produzidoRS > 0,
+  );
   // A primeira unidade com problema (acima do teto ou produção sem teto) já vem aberta.
   useEffect(() => {
-    const prob = resumo.find(
+    const prob = comProducao.find(
       (u) =>
         u.estourados > 0 || u.produzidoForaQtd > 0 || (u.tetoRS > 0 && u.produzidoRS > u.tetoRS),
     );
     setAberto(prob ? prob.cnes : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumo]);
 
   return (
@@ -42,6 +48,10 @@ export function FpoPorUnidade({
             <Sk key={i} h={54} style={{ borderRadius: 12 }} />
           ))}
         </div>
+      ) : resumo.length > 0 && comProducao.length === 0 ? (
+        <p className="text-[13.5px] text-[#5B6B82]">
+          Nenhuma unidade com produção no FPO neste mês.
+        </p>
       ) : resumo.length === 0 ? (
         <p className="text-[13.5px] text-[#5B6B82]">
           Sem FPO cadastrada para as unidades neste mês.{" "}
@@ -54,7 +64,7 @@ export function FpoPorUnidade({
           </Link>
         </p>
       ) : (
-        resumo.map((u) => {
+        comProducao.map((u) => {
           const r = u.tetoRS > 0 ? u.produzidoRS / u.tetoRS : 0;
           const over = r > 1;
           const sem = !over && u.produzidoForaQtd > 0;

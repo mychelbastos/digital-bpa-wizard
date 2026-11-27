@@ -338,7 +338,10 @@ function Home() {
       // Unidades com teto mas sem produção no mês não estão em `rows` (nome desconhecido):
       // busca o nome do cadastro para não exibir só o código.
       const nomes = await Promise.all(
-        r.map(async (u) => [u.cnes, (await buscarEstabelecimento(u.cnes)) || ""] as const),
+        r
+          // Só as que aparecem no card (com produção) — evita buscas à toa.
+          .filter((u) => u.produzidoQtd > 0 || u.produzidoForaQtd > 0 || u.produzidoRS > 0)
+          .map(async (u) => [u.cnes, (await buscarEstabelecimento(u.cnes)) || ""] as const),
       );
       if (vivo)
         setNomesEstabFpo((prev) => ({
