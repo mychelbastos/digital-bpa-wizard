@@ -3,7 +3,8 @@
 // pacientes (revisão) e duplicidade de fichas. Tudo null-safe: degrada sem quebrar a tela.
 import { supabase, buscarTodasPaginado } from "@/lib/supabase";
 import { procedimentoExigeCbo } from "@/lib/bpa-i-v2/procedimentos-sigtap";
-import { carregarProducaoDashboardPeriodo, type ProducaoBpaRow } from "@/lib/dashboard-producao";
+import { carregarProducaoPeriodoRapido, type ProducaoBpaRow } from "@/lib/dashboard-producao";
+import { competenciaPadrao } from "@/lib/faturamento";
 import { fichasDoMes, type FichaCompleta } from "@/lib/bpa-i-v2/fichas";
 import { buscarProcedimentoSigtap } from "@/lib/bpa-i-v2/procedimentos-sigtap";
 import { procedimentoExigeServico, procedimentoExigeCid } from "@/lib/bpa-i-v3/exigencias-sigtap";
@@ -19,12 +20,19 @@ import { problemaMunicipioUf } from "@/lib/geo-uf";
 import { folhaEntraNoArquivo, problemaOrigemRaas } from "@/lib/raas/gerar-aas";
 import type { RaasState } from "@/lib/raas/raas-layout";
 
-export type CategoriaErro = "producao-sigtap" | "ficha-incompleta" | "paciente-revisao" | "duplicidade" | "tfd-sem-profissional" | "municipio-uf" | "sem-cbo-proc-qtd";
+export type CategoriaErro =
+  | "producao-sigtap"
+  | "ficha-incompleta"
+  | "paciente-revisao"
+  | "duplicidade"
+  | "tfd-sem-profissional"
+  | "municipio-uf"
+  | "sem-cbo-proc-qtd";
 export const ROTULO_CATEGORIA: Record<CategoriaErro, string> = {
   "producao-sigtap": "Produção × SIGTAP",
   "ficha-incompleta": "Ficha incompleta",
   "paciente-revisao": "Cadastro de paciente",
-  "duplicidade": "Duplicidade de fichas",
+  duplicidade: "Duplicidade de fichas",
   "tfd-sem-profissional": "TFD sem profissional",
   "municipio-uf": "RAAS: município/UF e origem",
   "sem-cbo-proc-qtd": "Sem CBO/procedimento/quantidade (criadas desde 11/2026)",
@@ -34,20 +42,25 @@ export interface ErroItem {
   categoria: CategoriaErro;
   gravidade: "erro" | "aviso";
   fichaId: string | null;
-  tipo: string;          // BPA-I / BPA-C / —
-  competencia: string;   // AAAAMM (atendimento) ou ""
+  tipo: string; // BPA-I / BPA-C / —
+  competencia: string; // AAAAMM (atendimento) ou ""
   cnes: string;
   profissional: string;
-  procedimento: string;  // código, quando aplicável
+  procedimento: string; // código, quando aplicável
   descricao: string;
   pacienteId?: string | null; // preenchido em "paciente-revisao" p/ resolver a marca
 }
 
 const jc = (a: unknown): string => (Array.isArray(a) ? a.join("") : String(a ?? ""));
-const nomeOuCodigo = (nome: string | null | undefined, codigo: string | null | undefined) => (nome?.trim() || codigo || "—");
-const mesesDiff = (a: string, b: string) => { // a - b em meses (AAAAMM)
+const nomeOuCodigo = (nome: string | null | undefined, codigo: string | null | undefined) =>
+  nome?.trim() || codigo || "—";
+const mesesDiff = (a: string, b: string) => {
+  // a - b em meses (AAAAMM)
   if (!/^\d{6}$/.test(a) || !/^\d{6}$/.test(b)) return 0;
-  return (Number(a.slice(0, 4)) - Number(b.slice(0, 4))) * 12 + (Number(a.slice(4, 6)) - Number(b.slice(4, 6)));
+  return (
+    (Number(a.slice(0, 4)) - Number(b.slice(0, 4))) * 12 +
+    (Number(a.slice(4, 6)) - Number(b.slice(4, 6)))
+  );
 };
 
 // ---- A) Produção × SIGTAP ----
@@ -56,39 +69,94 @@ async function errosProducaoSigtap(rows: ProducaoBpaRow[]): Promise<ErroItem[]> 
   const procCache = new Map<string, Awaited<ReturnType<typeof buscarProcedimentoSigtap>>>();
   const servCache = new Map<string, boolean | null>();
   const cidCache = new Map<string, boolean | null>();
-  const distintos = [...new Set(rows.map((r) => r.procedimento).filter((c) => c && c.length === 10))];
-  await Promise.all(distintos.map(async (c) => {
-    procCache.set(c, await buscarProcedimentoSigtap(c));
-    servCache.set(c, await procedimentoExigeServico(c));
-    cidCache.set(c, await procedimentoExigeCid(c));
-  }));
+  const distintos = [
+    ...new Set(rows.map((r) => r.procedimento).filter((c) => c && c.length === 10)),
+  ];
+  await Promise.all(
+    distintos.map(async (c) => {
+      procCache.set(c, await buscarProcedimentoSigtap(c));
+      servCache.set(c, await procedimentoExigeServico(c));
+      cidCache.set(c, await procedimentoExigeCid(c));
+    }),
+  );
 
   for (const r of rows) {
-    const base = { tipo: r.tipo, competencia: r.competencia, cnes: r.cnes ?? "", fichaId: r.ficha_id,
-      profissional: nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo), procedimento: r.procedimento };
-    const proc = r.procedimento && r.procedimento.length === 10 ? procCache.get(r.procedimento) : null;
+    const base = {
+      tipo: r.tipo,
+      competencia: r.competencia,
+      cnes: r.cnes ?? "",
+      fichaId: r.ficha_id,
+      profissional: nomeOuCodigo(r.profissional_nome, r.profissional_cns || r.cbo),
+      procedimento: r.procedimento,
+    };
+    const proc =
+      r.procedimento && r.procedimento.length === 10 ? procCache.get(r.procedimento) : null;
     if (!proc) {
-      out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: `Procedimento ${r.procedimento || "(vazio)"} não consta no SIGTAP das competências carregadas.` });
+      out.push({
+        ...base,
+        categoria: "producao-sigtap",
+        gravidade: "erro",
+        descricao: `Procedimento ${r.procedimento || "(vazio)"} não consta no SIGTAP das competências carregadas.`,
+      });
       continue; // sem SIGTAP não dá p/ checar as demais regras
     }
-    if (r.quantidade <= 0) out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "Quantidade inválida (0)." });
+    if (r.quantidade <= 0)
+      out.push({
+        ...base,
+        categoria: "producao-sigtap",
+        gravidade: "erro",
+        descricao: "Quantidade inválida (0).",
+      });
     // Serviço/Classificação NÃO se aplica ao BPA Consolidado (o formulário só registra
     // procedimento/CBO/idade/quantidade — não há esses campos). Só cobramos no individualizado.
-    if (r.tipo !== "BPA-C" && servCache.get(r.procedimento) === true && (!r.servico || !r.classificacao))
-      out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "Serviço/Classificação obrigatório para o procedimento (SIGTAP) e está ausente." });
+    if (
+      r.tipo !== "BPA-C" &&
+      servCache.get(r.procedimento) === true &&
+      (!r.servico || !r.classificacao)
+    )
+      out.push({
+        ...base,
+        categoria: "producao-sigtap",
+        gravidade: "erro",
+        descricao: "Serviço/Classificação obrigatório para o procedimento (SIGTAP) e está ausente.",
+      });
     // CID também não se aplica ao BPA Consolidado (o formulário não registra CID).
-    if (r.tipo !== "BPA-C" && cidCache.get(r.procedimento) === true && (!r.cid || r.cid.trim().length < 3))
-      out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: "CID obrigatório para o procedimento (SIGTAP) e está ausente." });
+    if (
+      r.tipo !== "BPA-C" &&
+      cidCache.get(r.procedimento) === true &&
+      (!r.cid || r.cid.trim().length < 3)
+    )
+      out.push({
+        ...base,
+        categoria: "producao-sigtap",
+        gravidade: "erro",
+        descricao: "CID obrigatório para o procedimento (SIGTAP) e está ausente.",
+      });
     // Competência (folha/realização) × movimento de faturamento (mes_producao). Regra:
     // competência ≤ faturamento (fatura-se no mês ou depois, nunca antes de realizar).
-    if (r.mes_producao && r.competencia && /^\d{6}$/.test(r.competencia) && /^\d{6}$/.test(r.mes_producao)) {
+    if (
+      r.mes_producao &&
+      r.competencia &&
+      /^\d{6}$/.test(r.competencia) &&
+      /^\d{6}$/.test(r.mes_producao)
+    ) {
       const dif = mesesDiff(r.mes_producao, r.competencia); // faturamento − competência
       if (dif < 0)
         // Competência POSTERIOR ao faturamento — impossível (ex.: atendimento 09/2026 na produção de 07/2026).
-        out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: `Competência ${r.competencia} (realização) é POSTERIOR ao faturamento ${r.mes_producao} — impossível: não se fatura produção que ainda não foi realizada. Corrija a competência da folha.` });
+        out.push({
+          ...base,
+          categoria: "producao-sigtap",
+          gravidade: "erro",
+          descricao: `Competência ${r.competencia} (realização) é POSTERIOR ao faturamento ${r.mes_producao} — impossível: não se fatura produção que ainda não foi realizada. Corrija a competência da folha.`,
+        });
       else if (dif > 3)
         // Retroatividade acima da janela do SIA/SUS (~3 competências) → o DATASUS recusa.
-        out.push({ ...base, categoria: "producao-sigtap", gravidade: "erro", descricao: `Competência ${r.competencia} (realização) faturada em ${r.mes_producao} — retroatividade de ${dif} competências (acima do limite ~3). O BPA Magnético recusa; corrija a competência da folha.` });
+        out.push({
+          ...base,
+          categoria: "producao-sigtap",
+          gravidade: "erro",
+          descricao: `Competência ${r.competencia} (realização) faturada em ${r.mes_producao} — retroatividade de ${dif} competências (acima do limite ~3). O BPA Magnético recusa; corrija a competência da folha.`,
+        });
     }
   }
   return out;
@@ -110,19 +178,31 @@ async function errosFichasIncompletas(fichas: FichaCompleta[]): Promise<ErroItem
       const cns = jc(d.profCns).replace(/\D/g, "");
       const cnes = jc(d.cnes).replace(/\D/g, "");
       if (!nome && /^[0-9]{15}$/.test(cns) && /^[0-9]{7}$/.test(cnes)) pares.push({ cnes, cns });
-    } catch { /* ignora */ }
+    } catch {
+      /* ignora */
+    }
   }
   const nomesPorCns = pares.length ? await buscarNomesPorCns(pares) : new Map<string, string>();
-  const resolverNome = (cnesDig: string, cnsDig: string): string => nomesPorCns.get(`${cnesDig}|${cnsDig}`) ?? nomesPorCns.get(cnsDig) ?? "";
+  const resolverNome = (cnesDig: string, cnsDig: string): string =>
+    nomesPorCns.get(`${cnesDig}|${cnsDig}`) ?? nomesPorCns.get(cnsDig) ?? "";
 
   for (const f of fichas) {
     if (f.tipo !== "BPA-I") continue;
     try {
-      const d = f.dados as { seqs?: SeqData[]; profNome?: string; profCns?: unknown; cnes?: unknown; profMes?: unknown; profAno?: unknown };
+      const d = f.dados as {
+        seqs?: SeqData[];
+        profNome?: string;
+        profCns?: unknown;
+        cnes?: unknown;
+        profMes?: unknown;
+        profAno?: unknown;
+      };
       const cnes = jc(d.cnes);
       // Nome "efetivo": o digitado OU o resolvido pelo CNS (igual à ficha aberta). Vale tanto
       // para o rótulo do relatório quanto para decidir se o nome está mesmo ausente.
-      const nomeResolvido = ((d.profNome as string) ?? "").trim() || resolverNome(jc(d.cnes).replace(/\D/g, ""), jc(d.profCns).replace(/\D/g, ""));
+      const nomeResolvido =
+        ((d.profNome as string) ?? "").trim() ||
+        resolverNome(jc(d.cnes).replace(/\D/g, ""), jc(d.profCns).replace(/\D/g, ""));
       const prof = nomeResolvido || jc(d.profCns) || "—";
       const seqs = Array.isArray(d.seqs) ? d.seqs : [];
       const profMesArr = Array.isArray(d.profMes) ? (d.profMes as string[]) : [];
@@ -132,24 +212,51 @@ async function errosFichasIncompletas(fichas: FichaCompleta[]): Promise<ErroItem
       if (seqs.some((s) => seqPreenchida(s))) {
         const profCnsDig = jc(d.profCns).replace(/\D/g, "");
         if (profCnsDig.length !== 15) {
-          out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
-            competencia: "", cnes, profissional: prof, procedimento: "",
-            descricao: profCnsDig ? `CNS do profissional incompleto (${profCnsDig.length}/15 dígitos).` : "CNS do profissional ausente." });
+          out.push({
+            categoria: "ficha-incompleta",
+            gravidade: "erro",
+            fichaId: f.id,
+            tipo: "BPA-I",
+            competencia: "",
+            cnes,
+            profissional: prof,
+            procedimento: "",
+            descricao: profCnsDig
+              ? `CNS do profissional incompleto (${profCnsDig.length}/15 dígitos).`
+              : "CNS do profissional ausente.",
+          });
         }
         // Nome ausente SÓ quando não há nome digitado NEM resolvível pelo CNS (SCNES). Fichas
         // importadas com CNS válido deixam de ser falso-positivo — o nome não vai no .MAR mesmo.
         if (!nomeResolvido) {
-          out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
-            competencia: "", cnes, profissional: prof, procedimento: "", descricao: "Nome do profissional ausente." });
+          out.push({
+            categoria: "ficha-incompleta",
+            gravidade: "erro",
+            fichaId: f.id,
+            tipo: "BPA-I",
+            competencia: "",
+            cnes,
+            profissional: prof,
+            procedimento: "",
+            descricao: "Nome do profissional ausente.",
+          });
         }
       }
       seqs.forEach((s, i) => {
         if (!seqPreenchida(s)) return;
         const motivos = motivosObrigatoriosSeq(s, { exigeServico: null, exigeCid: null });
         for (const m of motivos) {
-          out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
-            competencia: "", cnes, profissional: prof, procedimento: jc(s.codProc),
-            descricao: `Seq. ${i + 1}: ${m}` });
+          out.push({
+            categoria: "ficha-incompleta",
+            gravidade: "erro",
+            fichaId: f.id,
+            tipo: "BPA-I",
+            competencia: "",
+            cnes,
+            profissional: prof,
+            procedimento: jc(s.codProc),
+            descricao: `Seq. ${i + 1}: ${m}`,
+          });
         }
         // Data de atendimento fora do mês/ano da competência da folha (o BPA Magnético recusa).
         // Datas futuras/absurdas já caem em motivosObrigatoriosSeq; aqui pegamos as VÁLIDAS
@@ -157,13 +264,24 @@ async function errosFichasIncompletas(fichas: FichaCompleta[]): Promise<ErroItem
         if (atendimentoForaDaCompetencia(s.dataAtend, profMesArr, profAnoArr)) {
           const dd = jc(s.dataAtend);
           const atend = dd.length === 8 ? `${dd.slice(2, 4)}/${dd.slice(4, 8)}` : "—";
-          const folha = profMesArr.length && profAnoArr.length ? `${jc(profMesArr)}/${jc(profAnoArr)}` : "—";
-          out.push({ categoria: "ficha-incompleta", gravidade: "erro", fichaId: f.id, tipo: "BPA-I",
-            competencia: "", cnes, profissional: prof, procedimento: jc(s.codProc),
-            descricao: `Seq. ${i + 1}: Data de atendimento em ${atend} está fora da competência da folha (${folha}) — o BPA Magnético recusa; corrija a data ou a competência.` });
+          const folha =
+            profMesArr.length && profAnoArr.length ? `${jc(profMesArr)}/${jc(profAnoArr)}` : "—";
+          out.push({
+            categoria: "ficha-incompleta",
+            gravidade: "erro",
+            fichaId: f.id,
+            tipo: "BPA-I",
+            competencia: "",
+            cnes,
+            profissional: prof,
+            procedimento: jc(s.codProc),
+            descricao: `Seq. ${i + 1}: Data de atendimento em ${atend} está fora da competência da folha (${folha}) — o BPA Magnético recusa; corrija a data ou a competência.`,
+          });
         }
       });
-    } catch { /* ficha com shape inesperado — ignora */ }
+    } catch {
+      /* ficha com shape inesperado — ignora */
+    }
   }
   return out;
 }
@@ -172,15 +290,30 @@ async function errosFichasIncompletas(fichas: FichaCompleta[]): Promise<ErroItem
 async function errosPacientesRevisao(): Promise<ErroItem[]> {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase.from("pacientes")
-      .select("id, nome, cns, cpf").eq("flag_revisao", true).is("excluido_em", null).limit(2000);
+    const { data, error } = await supabase
+      .from("pacientes")
+      .select("id, nome, cns, cpf")
+      .eq("flag_revisao", true)
+      .is("excluido_em", null)
+      .limit(2000);
     if (error || !data) return [];
-    return (data as { id: string; nome: string; cns: string | null; cpf: string | null }[]).map((p) => ({
-      categoria: "paciente-revisao" as const, gravidade: "aviso" as const, fichaId: null, tipo: "—",
-      competencia: "", cnes: "", profissional: "—", procedimento: "", pacienteId: p.id,
-      descricao: `Paciente ${p.nome}${p.cns ? ` (CNS ${p.cns})` : p.cpf ? ` (CPF ${p.cpf})` : ""} marcado para revisão — possível conflito de documento (nome/nascimento divergente).`,
-    }));
-  } catch { return []; }
+    return (data as { id: string; nome: string; cns: string | null; cpf: string | null }[]).map(
+      (p) => ({
+        categoria: "paciente-revisao" as const,
+        gravidade: "aviso" as const,
+        fichaId: null,
+        tipo: "—",
+        competencia: "",
+        cnes: "",
+        profissional: "—",
+        procedimento: "",
+        pacienteId: p.id,
+        descricao: `Paciente ${p.nome}${p.cns ? ` (CNS ${p.cns})` : p.cpf ? ` (CPF ${p.cpf})` : ""} marcado para revisão — possível conflito de documento (nome/nascimento divergente).`,
+      }),
+    );
+  } catch {
+    return [];
+  }
 }
 
 // Dá baixa na revisão de um paciente (zera flag_revisao). Usado no botão "Resolver"
@@ -190,7 +323,9 @@ export async function resolverRevisaoPaciente(id: string): Promise<boolean> {
   try {
     const { error } = await supabase.from("pacientes").update({ flag_revisao: false }).eq("id", id);
     return !error;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 // ---- D) Duplicidade de fichas (mesma chave + mesmo conteúdo) ----
@@ -201,7 +336,9 @@ function errosDuplicidade(fichas: FichaCompleta[]): ErroItem[] {
     try {
       const d = f.dados as Record<string, unknown>;
       const cnes = jc(d.cnes) || jc(d.nome);
-      let chave = "", assinatura = "", prof = "—";
+      let chave = "",
+        assinatura = "",
+        prof = "—";
       if (f.tipo === "BPA-I") {
         const comp = jc(d.profAno) + jc(d.profMes);
         assinatura = assinaturaBpaI(d.profCbo, d.seqs);
@@ -218,14 +355,24 @@ function errosDuplicidade(fichas: FichaCompleta[]): ErroItem[] {
       const arr = grupos.get(k) ?? [];
       arr.push({ id: f.id, cnes, prof, tipo: f.tipo });
       grupos.set(k, arr);
-    } catch { /* ignora */ }
+    } catch {
+      /* ignora */
+    }
   }
   for (const arr of grupos.values()) {
     if (arr.length < 2) continue;
     for (const it of arr) {
-      out.push({ categoria: "duplicidade", gravidade: "aviso", fichaId: it.id,
-        tipo: it.tipo, competencia: "", cnes: it.cnes, profissional: it.prof, procedimento: "",
-        descricao: `Ficha idêntica a outra(s) ${arr.length - 1} do mesmo profissional/competência (possível duplicidade). Grupo com ${arr.length} fichas.` });
+      out.push({
+        categoria: "duplicidade",
+        gravidade: "aviso",
+        fichaId: it.id,
+        tipo: it.tipo,
+        competencia: "",
+        cnes: it.cnes,
+        profissional: it.prof,
+        procedimento: "",
+        descricao: `Ficha idêntica a outra(s) ${arr.length - 1} do mesmo profissional/competência (possível duplicidade). Grupo com ${arr.length} fichas.`,
+      });
     }
   }
   return out;
@@ -240,24 +387,43 @@ async function errosTfdSemProfissional(cnesFiltro: Set<string> | null): Promise<
   try {
     // `tfd` tem 2 FKs para pacientes (paciente_id e acompanhante_id) → o embed precisa nomear
     // o FK, senão o PostgREST recusa por ambiguidade.
-    const { data, error } = await supabase.from("tfd")
+    const { data, error } = await supabase
+      .from("tfd")
       .select("id, cnes, competencia, prof_cns, prof_nome, pacientes!tfd_paciente_id_fkey(nome)");
     if (error || !data) return [];
     const out: ErroItem[] = [];
-    for (const t of data as { id: string; cnes: string | null; competencia: string; prof_cns: string | null; prof_nome: string | null; pacientes: { nome: string } | { nome: string }[] | null }[]) {
+    for (const t of data as {
+      id: string;
+      cnes: string | null;
+      competencia: string;
+      prof_cns: string | null;
+      prof_nome: string | null;
+      pacientes: { nome: string } | { nome: string }[] | null;
+    }[]) {
       if (cnesFiltro && !cnesFiltro.has(t.cnes ?? "")) continue;
       const cnsOk = /^[0-9]{15}$/.test((t.prof_cns ?? "").replace(/\D/g, ""));
       if (cnsOk && (t.prof_nome ?? "").trim()) continue;
       const pac = Array.isArray(t.pacientes) ? t.pacientes[0] : t.pacientes;
-      const comp = (t.competencia ?? "").length === 6 ? `${t.competencia.slice(4, 6)}/${t.competencia.slice(0, 4)}` : (t.competencia ?? "—");
+      const comp =
+        (t.competencia ?? "").length === 6
+          ? `${t.competencia.slice(4, 6)}/${t.competencia.slice(0, 4)}`
+          : (t.competencia ?? "—");
       out.push({
-        categoria: "tfd-sem-profissional", gravidade: "erro", fichaId: t.id, tipo: "TFD",
-        competencia: t.competencia ?? "", cnes: t.cnes ?? "", profissional: "—", procedimento: "",
+        categoria: "tfd-sem-profissional",
+        gravidade: "erro",
+        fichaId: t.id,
+        tipo: "TFD",
+        competencia: t.competencia ?? "",
+        cnes: t.cnes ?? "",
+        profissional: "—",
+        procedimento: "",
         descricao: `TFD de ${pac?.nome ?? "paciente"} (competência ${comp}) sem profissional responsável (nome/CNS) — não será faturado no fechamento.`,
       });
     }
     return out;
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 // ---- F) Município/UF do paciente inválido. O SIA RECUSA O LOTE INTEIRO se achar uma UF que
@@ -272,17 +438,25 @@ function errosMunicipioUf(fichas: FichaCompleta[], ufEsperada: string): ErroItem
       const d = f.dados as RaasState;
       if (!folhaEntraNoArquivo(d)) continue; // sem ação válida não vai pro .AAS
       // Origem obrigatória (01–06): vazia sai "00" e o SIA recusa com "ORIGEM DO USUARIO INVALIDO".
-      const prob = problemaMunicipioUf(d.municipioIbge, d.coduf, ufEsperada) ?? problemaOrigemRaas(d.origemPaciente);
+      const prob =
+        problemaMunicipioUf(d.municipioIbge, d.coduf, ufEsperada) ??
+        problemaOrigemRaas(d.origemPaciente);
       if (!prob) continue;
       const nome = (d.nomePaciente ?? "").trim();
       out.push({
-        categoria: "municipio-uf", gravidade: "erro", fichaId: f.id, tipo: "RAAS",
+        categoria: "municipio-uf",
+        gravidade: "erro",
+        fichaId: f.id,
+        tipo: "RAAS",
         competencia: (d.competencia ?? "").replace(/\D/g, "").slice(0, 6),
         cnes: (d.cnes ?? "").replace(/\D/g, ""),
-        profissional: nome || "—", procedimento: "",
+        profissional: nome || "—",
+        procedimento: "",
         descricao: `Paciente "${nome || "(sem nome)"}": ${prob}`,
       });
-    } catch { /* shape inesperado — ignora */ }
+    } catch {
+      /* shape inesperado — ignora */
+    }
   }
   return out;
 }
@@ -292,86 +466,168 @@ function errosMunicipioUf(fichas: FichaCompleta[], ufEsperada: string): ErroItem
 //         totalmente vazia é ignorada. CBO ausente só conta se o procedimento EXIGE CBO no
 //         SIGTAP (vigilância sanitária não exige — ver procedimentoExigeCbo).
 export const CRIADAS_DESDE = "2026-11-01T00:00:00-03:00";
-interface FichaCriada { id: string; tipo: FichaCompleta["tipo"]; cnes: string | null; titulo: string | null; dados: unknown }
+interface FichaCriada {
+  id: string;
+  tipo: FichaCompleta["tipo"];
+  cnes: string | null;
+  titulo: string | null;
+  dados: unknown;
+}
 
 async function fichasCriadasDesde(iso: string): Promise<FichaCriada[]> {
   if (!supabase) return [];
   try {
-    return await buscarTodasPaginado<FichaCriada>((de, ate) => supabase!
-      .from("fichas")
-      .select("id, tipo, cnes, titulo, dados")
-      .gte("created_at", iso)
-      .is("excluida_em", null)
-      .is("substituida_por", null)
-      .in("tipo", ["BPA-I", "BPA-C", "RAAS"])
-      .order("id", { ascending: true })
-      .range(de, ate));
-  } catch { return []; }
+    return await buscarTodasPaginado<FichaCriada>((de, ate) =>
+      supabase!
+        .from("fichas")
+        .select("id, tipo, cnes, titulo, dados")
+        .gte("created_at", iso)
+        .is("excluida_em", null)
+        .is("substituida_por", null)
+        .in("tipo", ["BPA-I", "BPA-C", "RAAS"])
+        .order("id", { ascending: true })
+        .range(de, ate),
+    );
+  } catch {
+    return [];
+  }
 }
 
 const d0 = (v: unknown) => jc(v).replace(/\D/g, "");
 
 async function errosSemCboProcQtd(cnesFiltro: Set<string> | null): Promise<ErroItem[]> {
-  const fichas = (await fichasCriadasDesde(CRIADAS_DESDE)).filter((f) => !cnesFiltro || cnesFiltro.has(f.cnes ?? ""));
+  const fichas = (await fichasCriadasDesde(CRIADAS_DESDE)).filter(
+    (f) => !cnesFiltro || cnesFiltro.has(f.cnes ?? ""),
+  );
   // Linhas candidatas: { ficha, rótulo da linha, proc, cbo, qtd }
-  type Linha = { f: FichaCriada; rot: string; proc: string; cbo: string; qtd: string; prof: string };
+  type Linha = {
+    f: FichaCriada;
+    rot: string;
+    proc: string;
+    cbo: string;
+    qtd: string;
+    prof: string;
+  };
   const linhas: Linha[] = [];
   for (const f of fichas) {
     try {
       if (f.tipo === "BPA-I") {
-        const d = f.dados as { seqs?: SeqData[]; profCbo?: unknown; profNome?: string; profCns?: unknown };
+        const d = f.dados as {
+          seqs?: SeqData[];
+          profCbo?: unknown;
+          profNome?: string;
+          profCns?: unknown;
+        };
         const prof = (d.profNome ?? "").trim() || d0(d.profCns) || "—";
         (Array.isArray(d.seqs) ? d.seqs : []).forEach((sq, i) => {
-          const comecada = [sq.cnsPac, sq.codProc, sq.qtde, sq.dataAtend].some((x) => d0(x)) || (sq.nomePac ?? "").trim();
-          if (comecada) linhas.push({ f, rot: `Seq. ${i + 1}`, proc: d0(sq.codProc), cbo: d0(d.profCbo), qtd: d0(sq.qtde), prof });
+          const comecada =
+            [sq.cnsPac, sq.codProc, sq.qtde, sq.dataAtend].some((x) => d0(x)) ||
+            (sq.nomePac ?? "").trim();
+          if (comecada)
+            linhas.push({
+              f,
+              rot: `Seq. ${i + 1}`,
+              proc: d0(sq.codProc),
+              cbo: d0(d.profCbo),
+              qtd: d0(sq.qtde),
+              prof,
+            });
         });
       } else if (f.tipo === "BPA-C") {
-        const d = f.dados as { rows?: { procedimento?: unknown; cbo?: unknown; quantidade?: unknown; idade?: unknown }[]; profNome?: string };
+        const d = f.dados as {
+          rows?: { procedimento?: unknown; cbo?: unknown; quantidade?: unknown; idade?: unknown }[];
+          profNome?: string;
+        };
         const prof = (d.profNome ?? "").trim() || "—";
         (Array.isArray(d.rows) ? d.rows : []).forEach((r, i) => {
           if ([r.procedimento, r.cbo, r.quantidade, r.idade].some((x) => d0(x)))
-            linhas.push({ f, rot: `Linha ${i + 1}`, proc: d0(r.procedimento), cbo: d0(r.cbo), qtd: d0(r.quantidade), prof });
+            linhas.push({
+              f,
+              rot: `Linha ${i + 1}`,
+              proc: d0(r.procedimento),
+              cbo: d0(r.cbo),
+              qtd: d0(r.quantidade),
+              prof,
+            });
         });
       } else if (f.tipo === "RAAS") {
         const d = f.dados as RaasState;
         const prof = (d.nomePaciente ?? "").trim() || "—";
         (Array.isArray(d.acoes) ? d.acoes : []).forEach((a, i) => {
-          if ([a.procedimento, a.cbo, a.cnsExecutante, a.dataExec, a.quantidade].some((x) => String(x ?? "").trim()))
-            linhas.push({ f, rot: `Ação ${i + 1}`, proc: d0(a.procedimento), cbo: d0(a.cbo), qtd: d0(a.quantidade), prof });
+          if (
+            [a.procedimento, a.cbo, a.cnsExecutante, a.dataExec, a.quantidade].some((x) =>
+              String(x ?? "").trim(),
+            )
+          )
+            linhas.push({
+              f,
+              rot: `Ação ${i + 1}`,
+              proc: d0(a.procedimento),
+              cbo: d0(a.cbo),
+              qtd: d0(a.quantidade),
+              prof,
+            });
         });
       }
-    } catch { /* shape inesperado — ignora */ }
+    } catch {
+      /* shape inesperado — ignora */
+    }
   }
   // Quais procedimentos exigem CBO (uma consulta por código distinto).
   const exige = new Map<string, boolean | null>();
-  await Promise.all([...new Set(linhas.map((l) => l.proc).filter((p) => p.length === 10))]
-    .map(async (p) => exige.set(p, await procedimentoExigeCbo(p))));
+  await Promise.all(
+    [...new Set(linhas.map((l) => l.proc).filter((p) => p.length === 10))].map(async (p) =>
+      exige.set(p, await procedimentoExigeCbo(p)),
+    ),
+  );
   const out: ErroItem[] = [];
   for (const l of linhas) {
     const faltam: string[] = [];
-    if (l.proc.length !== 10) faltam.push(l.proc ? `procedimento incompleto (${l.proc.length}/10)` : "procedimento");
-    if (l.cbo.length === 0) { if (l.proc.length !== 10 || exige.get(l.proc) !== false) faltam.push("CBO"); }
-    else if (l.cbo.length !== 6) faltam.push(`CBO incompleto (${l.cbo.length}/6)`);
+    if (l.proc.length !== 10)
+      faltam.push(l.proc ? `procedimento incompleto (${l.proc.length}/10)` : "procedimento");
+    if (l.cbo.length === 0) {
+      if (l.proc.length !== 10 || exige.get(l.proc) !== false) faltam.push("CBO");
+    } else if (l.cbo.length !== 6) faltam.push(`CBO incompleto (${l.cbo.length}/6)`);
     if (!(Number(l.qtd) > 0)) faltam.push("quantidade");
     if (!faltam.length) continue;
-    out.push({ categoria: "sem-cbo-proc-qtd", gravidade: "erro", fichaId: l.f.id, tipo: l.f.tipo,
-      competencia: "", cnes: l.f.cnes ?? "", profissional: l.prof, procedimento: l.proc,
-      descricao: `${l.f.titulo ? `"${l.f.titulo}" — ` : ""}${l.rot}: falta ${faltam.join(", ")}.` });
+    out.push({
+      categoria: "sem-cbo-proc-qtd",
+      gravidade: "erro",
+      fichaId: l.f.id,
+      tipo: l.f.tipo,
+      competencia: "",
+      cnes: l.f.cnes ?? "",
+      profissional: l.prof,
+      procedimento: l.proc,
+      descricao: `${l.f.titulo ? `"${l.f.titulo}" — ` : ""}${l.rot}: falta ${faltam.join(", ")}.`,
+    });
   }
   return out;
 }
 
-export interface OpcoesErros { de: string; ate: string; categorias: Set<CategoriaErro>; cnes?: string[] }
+export interface OpcoesErros {
+  de: string;
+  ate: string;
+  categorias: Set<CategoriaErro>;
+  cnes?: string[];
+}
 
 // Meses AAAAMM no intervalo [de, ate] (inclusive). Ex.: 202607..202608 -> ["202607","202608"].
 export function mesesNoIntervalo(de: string, ate: string): string[] {
-  if (!/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate) || ate < de) return /^\d{6}$/.test(de) ? [de] : [];
+  if (!/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate) || ate < de)
+    return /^\d{6}$/.test(de) ? [de] : [];
   const out: string[] = [];
-  let a = Number(de.slice(0, 4)), m = Number(de.slice(4, 6));
-  const fa = Number(ate.slice(0, 4)), fm = Number(ate.slice(4, 6));
+  let a = Number(de.slice(0, 4)),
+    m = Number(de.slice(4, 6));
+  const fa = Number(ate.slice(0, 4)),
+    fm = Number(ate.slice(4, 6));
   while (a < fa || (a === fa && m <= fm)) {
     out.push(`${a}${String(m).padStart(2, "0")}`);
-    m++; if (m > 12) { m = 1; a++; }
+    m++;
+    if (m > 12) {
+      m = 1;
+      a++;
+    }
     if (out.length > 60) break; // trava de segurança
   }
   return out;
@@ -379,21 +635,33 @@ export function mesesNoIntervalo(de: string, ate: string): string[] {
 
 // Coleta os erros das categorias pedidas para o PERÍODO [de, ate]. As categorias que usam
 // produção compartilham a mesma carga.
-export async function coletarErros({ de, ate, categorias, cnes }: OpcoesErros): Promise<ErroItem[]> {
+export async function coletarErros({
+  de,
+  ate,
+  categorias,
+  cnes,
+}: OpcoesErros): Promise<ErroItem[]> {
   const res: ErroItem[] = [];
   const meses = mesesNoIntervalo(de, ate);
   const cnesSet = cnes && cnes.length ? new Set(cnes) : null; // filtro de unidade (null = todas)
   // Cargas compartilhadas: produção p/ o crivo SIGTAP (período); fichas p/ incompletas+duplicidade
   // (todos os meses do período).
   const [rowsRaw, fichasRaw] = await Promise.all([
-    categorias.has("producao-sigtap") ? carregarProducaoDashboardPeriodo(de, ate) : Promise.resolve([] as ProducaoBpaRow[]),
-    (categorias.has("ficha-incompleta") || categorias.has("duplicidade") || categorias.has("municipio-uf"))
+    // Mês a mês (cópia guardada nos meses fechados) — mesmas linhas, sem sobrecarregar o banco.
+    categorias.has("producao-sigtap")
+      ? carregarProducaoPeriodoRapido(de, ate, competenciaPadrao())
+      : Promise.resolve([] as ProducaoBpaRow[]),
+    categorias.has("ficha-incompleta") ||
+    categorias.has("duplicidade") ||
+    categorias.has("municipio-uf")
       ? Promise.all(meses.map((m) => fichasDoMes(m))).then((a) => a.flat())
       : Promise.resolve([] as FichaCompleta[]),
   ]);
   // Aplica o filtro de unidade (quando houver).
   const rows = cnesSet ? rowsRaw.filter((r) => cnesSet.has(r.cnes ?? "")) : rowsRaw;
-  const fichas = cnesSet ? fichasRaw.filter((f) => cnesSet.has(jc((f.dados as { cnes?: unknown }).cnes))) : fichasRaw;
+  const fichas = cnesSet
+    ? fichasRaw.filter((f) => cnesSet.has(jc((f.dados as { cnes?: unknown }).cnes)))
+    : fichasRaw;
   // UF do órgão (2 díg.) p/ a checagem de município: o SIA recusa UF de outro estado.
   const ufEsperada = ufDeMunicipio(loadConfig().municipioIbge);
   const tarefas: Promise<ErroItem[]>[] = [];
@@ -402,7 +670,8 @@ export async function coletarErros({ de, ate, categorias, cnes }: OpcoesErros): 
   if (categorias.has("paciente-revisao")) tarefas.push(errosPacientesRevisao());
   if (categorias.has("duplicidade")) tarefas.push(Promise.resolve(errosDuplicidade(fichas)));
   if (categorias.has("tfd-sem-profissional")) tarefas.push(errosTfdSemProfissional(cnesSet));
-  if (categorias.has("municipio-uf")) tarefas.push(Promise.resolve(errosMunicipioUf(fichas, ufEsperada)));
+  if (categorias.has("municipio-uf"))
+    tarefas.push(Promise.resolve(errosMunicipioUf(fichas, ufEsperada)));
   if (categorias.has("sem-cbo-proc-qtd")) tarefas.push(errosSemCboProcQtd(cnesSet));
   for (const bloco of await Promise.all(tarefas)) res.push(...bloco);
   return res;

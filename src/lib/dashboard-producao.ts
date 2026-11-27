@@ -73,6 +73,40 @@ export async function carregarProducaoDashboardGuardada(
   return falhou ? null : linhas;
 }
 
+// Produção de um PERÍODO, mês a mês EM SEQUÊNCIA: meses anteriores ao movimento vêm da cópia
+// guardada (rápida; só recalcula se algo do mês mudou), o mês corrente ao vivo pela view. Mesmas
+// linhas de carregarProducaoDashboardPeriodo, sem disparar dezenas de consultas pesadas juntas.
+export async function carregarProducaoPeriodoRapido(
+  de: string,
+  ate: string,
+  mesAtual: string,
+): Promise<ProducaoBpaRow[]> {
+  if (!/^\d{6}$/.test(de) || !/^\d{6}$/.test(ate)) return [];
+  const [ini, fim] = de <= ate ? [de, ate] : [ate, de];
+  const meses: string[] = [];
+  for (
+    let a = Number(ini.slice(0, 4)), m = Number(ini.slice(4, 6));
+    `${a}${String(m).padStart(2, "0")}` <= fim;
+  ) {
+    meses.push(`${a}${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) {
+      m = 1;
+      a++;
+    }
+    if (meses.length > 36) break;
+  }
+  const out: ProducaoBpaRow[] = [];
+  for (const m of meses) {
+    const r =
+      m < mesAtual
+        ? ((await carregarProducaoDashboardGuardada(m)) ?? (await carregarProducaoDashboard(m)))
+        : await carregarProducaoDashboard(m);
+    out.push(...r);
+  }
+  return out;
+}
+
 // Produção de um PERÍODO de meses de produção [de, ate] (AAAAMM, inclusive). Se de==ate,
 // equivale a um mês só. Para períodos grandes a produção passa fácil de dezenas de milhares
 // de linhas: em vez de paginar em SÉRIE (dezenas de round-trips), conta o total e busca todas
