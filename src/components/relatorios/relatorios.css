@@ -1,0 +1,12 @@
+/* Central de Relatórios v2: impressão direta pelo navegador (Ctrl+P) do Montar e dos Cadastros. */
+@media print {
+  @page { size: auto; margin: 12mm; }
+  aside, nav, header.app-topo, .no-print, [data-sidebar], [data-slot="sidebar"] { display: none !important; }
+  .rel-print-area { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  .rel-print-area table { width: 100% !important; border-collapse: collapse; font-size: 10pt; }
+  .rel-print-area thead { display: table-header-group; }
+  .rel-print-area tr, .rel-print-area li { break-inside: avoid; page-break-inside: avoid; }
+  .rel-print-area .rel-scroll { overflow: visible !important; max-height: none !important; }
+  .rel-print-area .rel-sticky { position: static !important; }
+  body, .dv2 { background: #fff !important; }
+}

@@ -1,6 +1,9 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { FileBarChart } from "lucide-react";
+import { FileBarChart, SlidersHorizontal } from "lucide-react";
+import { usePermissoes } from "@/lib/permissoes";
+import "@/components/dashboard/dashboard.css";
+import "@/components/relatorios/relatorios.css";
 import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
 import { carregarLogoOrg, carregarCorOrg } from "@/lib/org-logo";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
@@ -38,10 +41,16 @@ function RelatoriosLayout() {
         if (/^\d{6}$/.test(d.compAte ?? "")) setCompAte(d.compAte!);
         if (Array.isArray(d.cnes)) setCnesSel(new Set(d.cnes));
       }
-    } catch { /* ignora */ }
+    } catch {
+      /* ignora */
+    }
   }, []);
   useEffect(() => {
-    try { localStorage.setItem(CHAVE_FILTROS, JSON.stringify({ compDe, compAte, cnes: [...cnesSel] })); } catch { /* ignora */ }
+    try {
+      localStorage.setItem(CHAVE_FILTROS, JSON.stringify({ compDe, compAte, cnes: [...cnesSel] }));
+    } catch {
+      /* ignora */
+    }
   }, [compDe, compAte, cnesSel]);
 
   useEffect(() => {
@@ -50,12 +59,18 @@ function RelatoriosLayout() {
     carregarVinculosUsuario().then(async (v) => {
       const unicos = [...new Set(v.map((x) => x.cnes).filter(Boolean))];
       setPodeTfd(unicos.some((c) => CNES_TFD.includes(c)));
-      const nomes = await Promise.all(unicos.map(async (c) => ({ cnes: c, nome: (await buscarEstabelecimento(c)) || c })));
+      const nomes = await Promise.all(
+        unicos.map(async (c) => ({ cnes: c, nome: (await buscarEstabelecimento(c)) || c })),
+      );
       setCnesOpcoes(nomes);
     });
   }, []);
 
-  const periodoLabel = compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
+  const { pode } = usePermissoes();
+  const caminho = useRouterState({ select: (s) => s.location.pathname });
+  const naCentral = caminho === "/relatorios" || caminho === "/relatorios/";
+  const periodoLabel =
+    compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`;
   const periodoArq = compDe === compAte ? compDe : `${compDe}-${compAte}`;
   const nomeUnidade = useMemo(() => {
     const map = new Map(cnesOpcoes.map((u) => [u.cnes, u.nome]));
@@ -63,22 +78,56 @@ function RelatoriosLayout() {
   }, [cnesOpcoes]);
 
   const ctx: RelatoriosCtxValue = {
-    compDe, compAte, setCompDe, setCompAte, cnesSel, setCnesSel, cnesOpcoes,
-    logo, cor, podeTfd, nomeUsuario: user?.nome ?? null, periodoLabel, periodoArq, nomeUnidade,
+    compDe,
+    compAte,
+    setCompDe,
+    setCompAte,
+    cnesSel,
+    setCnesSel,
+    cnesOpcoes,
+    logo,
+    cor,
+    podeTfd,
+    nomeUsuario: user?.nome ?? null,
+    periodoLabel,
+    periodoArq,
+    nomeUnidade,
   };
 
   return (
-    <div className="min-h-screen bg-muted/20">
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <header className="mb-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><FileBarChart className="size-5" /></span>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Relatórios</h1>
-              <p className="text-sm text-muted-foreground">Central de relatórios — escolha um relatório e gere na página dedicada.</p>
+    <div className="dv2 min-h-screen">
+      <div className="rel-print-area mx-auto max-w-[1200px] px-4 pb-14 pt-7 sm:px-8">
+        <header className="no-print mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-[#EAF1FD] text-[#1D4FB0]">
+              <FileBarChart className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="m-0 text-[26px] font-bold tracking-[-0.02em] text-[#172033] sm:text-[30px]">
+                Relatórios
+              </h1>
+              <p className="text-[13.5px] text-[#5B6B82]">
+                Escolha o período e a unidade, veja o que pede atenção e gere qualquer relatório.
+              </p>
             </div>
           </div>
-          {logo && <img src={logo} alt="Timbre" className="hidden h-12 w-auto object-contain sm:block" />}
+          <div className="flex items-center gap-3">
+            {logo && (
+              <img
+                src={logo}
+                alt="Timbre da prefeitura"
+                className="hidden h-11 w-auto object-contain md:block"
+              />
+            )}
+            {naCentral && pode("emitir_rel_producao") && (
+              <Link
+                to="/relatorios/montar"
+                className="btn inline-flex h-11 items-center gap-2 rounded-xl bg-[#15213A] px-4 text-sm font-semibold text-white hover:bg-[#1F2E4D]"
+              >
+                <SlidersHorizontal className="size-4" /> Montar relatório
+              </Link>
+            )}
+          </div>
         </header>
 
         <RelatoriosCtx.Provider value={ctx}>
