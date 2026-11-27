@@ -37,6 +37,7 @@ import {
   listarModelos,
   excluirModelo,
   renomearModelo,
+  modelosNaConta,
   type ModeloRelatorio,
 } from "@/lib/relatorios/modelos";
 import {
@@ -248,8 +249,6 @@ function Destaques() {
     setFpo({ st: "carregando" });
     setCad({ st: "carregando" });
     setTend({ st: "carregando" });
-    // Um de cada vez (do mais leve ao mais pesado): cada card aparece quando o seu termina e o
-    // banco não recebe várias consultas pesadas ao mesmo tempo.
     const tarefas: [boolean, () => Promise<void>][] = [
       [
         pode("emitir_rel_producao"),
@@ -282,25 +281,25 @@ function Destaques() {
       [
         pode("emitir_rel_consistencia"),
         () =>
-          destaqueErros(compDe, compAte, cnesLista).then((v) => {
+          destaqueErros(compAte, compAte, cnesLista).then((v) => {
             if (vivo()) setErros({ st: "ok", v });
           }),
       ],
     ];
     const falhas = [setTend, setFpo, setCad, setInat, setErros] as ((e: { st: "erro" }) => void)[];
-    (async () => {
-      for (let i = 0; i < tarefas.length; i++) {
-        if (!vivo()) return;
-        const [permitido, fn] = tarefas[i];
-        if (!permitido) continue;
+    // Todos ao mesmo tempo (cada um já é leve): cada cartão aparece assim que o seu termina.
+    void Promise.all(
+      tarefas.map(async ([permitido, fn], i) => {
+        if (!permitido) return;
         try {
           await fn();
         } catch {
           if (vivo()) falhas[i]({ st: "erro" });
         }
-      }
+      }),
+    ).then(() => {
       if (vivo()) setHora(new Date());
-    })();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compDe, compAte, cnesLista.join(","), cnesOpcoes.length]);
 
@@ -320,10 +319,10 @@ function Destaques() {
         texto={
           v ? (
             v.total === 0 ? (
-              "Nenhum erro de consistência encontrado no período."
+              `Nenhum erro de consistência em ${mesLabel(compAte)}.`
             ) : (
               <>
-                com erro de consistência
+                com erro de consistência em {mesLabel(compAte)}
                 {v.principais.length ? `: ${v.principais.join("; ")}.` : "."}
               </>
             )
@@ -475,8 +474,10 @@ function MeusModelos() {
   const [menu, setMenu] = useState<string | null>(null);
   const [excluir, setExcluir] = useState<ModeloRelatorio | null>(null);
   const [renomear, setRenomear] = useState<{ m: ModeloRelatorio; nome: string } | null>(null);
+  const [naConta, setNaConta] = useState(false);
   const recarregar = () => {
     listarModelos(user?.id).then(setModelos);
+    modelosNaConta().then(setNaConta);
   };
   useEffect(recarregar, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const periodoCurto =
@@ -565,7 +566,9 @@ function MeusModelos() {
                 </>
               )}
               <span className="text-[12.5px] text-[#5B6B82]">{desc(m)}</span>
-              <span className="text-[12px] text-[#5B6B82]">Só você · neste navegador</span>
+              <span className="text-[12px] text-[#5B6B82]">
+                {naConta ? "Só você · salvo na sua conta" : "Só você · neste navegador"}
+              </span>
               <button
                 type="button"
                 onClick={() =>
@@ -601,8 +604,12 @@ function MeusModelos() {
               className="bg-rose-600 hover:bg-rose-700"
               onClick={async () => {
                 if (excluir) {
-                  await excluirModelo(user?.id, excluir.id);
-                  toast.success("Modelo excluído.");
+                  try {
+                    await excluirModelo(user?.id, excluir.id);
+                    toast.success("Modelo excluído.");
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  }
                   recarregar();
                 }
                 setExcluir(null);
@@ -645,8 +652,12 @@ function MeusModelos() {
             <AlertDialogAction
               onClick={async () => {
                 if (renomear) {
-                  await renomearModelo(user?.id, renomear.m.id, renomear.nome);
-                  toast.success("Modelo renomeado.");
+                  try {
+                    await renomearModelo(user?.id, renomear.m.id, renomear.nome);
+                    toast.success("Modelo renomeado.");
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  }
                   recarregar();
                 }
                 setRenomear(null);

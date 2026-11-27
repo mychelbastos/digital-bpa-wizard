@@ -75,9 +75,128 @@ async function emLotes<T>(
   tam: number,
   fn: (lote: string[]) => PromiseLike<T[]>,
 ): Promise<T[]> {
+  const lotes: string[][] = [];
+  for (let i = 0; i < valores.length; i += tam) lotes.push(valores.slice(i, i + tam));
   const out: T[] = [];
-  for (let i = 0; i < valores.length; i += tam) out.push(...(await fn(valores.slice(i, i + tam))));
+  for (let i = 0; i < lotes.length; i += 4)
+    // até 4 lotes ao mesmo tempo
+    for (const r of await Promise.all(lotes.slice(i, i + 4).map(fn))) out.push(...r);
   return out;
+}
+
+type Ref = { pid?: string; cns?: string; cpf?: string };
+type FichaMeta = {
+  id: string;
+  cnes: string | null;
+  mes_producao: string | null;
+  updated_at: string;
+};
+
+function mesesEntre(de: string, ate: string): string[] {
+  const out: string[] = [];
+  let y = Number(de.slice(0, 4)),
+    m = Number(de.slice(4, 6));
+  while (`${y}${String(m).padStart(2, "0")}` <= ate && out.length < 60) {
+    out.push(`${y}${String(m).padStart(2, "0")}`);
+    if (++m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+  return out;
+}
+
+// Quem é o paciente de cada atendimento. Caminho rápido: RPC `relatorio_refs_pacientes` (o banco
+// devolve só id/CNS/CPF). Se a RPC ainda não existir, lê as fichas mês a mês (em paralelo).
+async function carregarRefs(de: string, ate: string, cnesSel: Set<string>) {
+  const refsPorFicha = new Map<string, Ref[]>();
+  const metas = new Map<string, FichaMeta>();
+  type RefRow = {
+    ficha_id: string;
+    cnes: string | null;
+    mes_producao: string | null;
+    updated_at: string;
+    paciente_id: string | null;
+    cns: string | null;
+    cpf: string | null;
+  };
+  let falhou = false;
+  const viaRpc = await buscarTodasPaginado<RefRow>(async (lo, hi) => {
+    const r = await supabase!
+      .rpc(
+        "relatorio_refs_pacientes" as never,
+        { _de: de, _ate: ate, _cnes: cnesSel.size ? [...cnesSel] : null } as never,
+      )
+      .range(lo, hi);
+    if (r.error) falhou = true;
+    return { data: (r.data as unknown as RefRow[] | null) ?? null, error: r.error };
+  });
+  if (!falhou) {
+    for (const r of viaRpc) {
+      if (!metas.has(r.ficha_id))
+        metas.set(r.ficha_id, {
+          id: r.ficha_id,
+          cnes: r.cnes,
+          mes_producao: r.mes_producao,
+          updated_at: r.updated_at,
+        });
+      const arr = refsPorFicha.get(r.ficha_id) ?? [];
+      arr.push({
+        pid: r.paciente_id || undefined,
+        cns: dig(r.cns) || undefined,
+        cpf: dig(r.cpf) || undefined,
+      });
+      refsPorFicha.set(r.ficha_id, arr);
+    }
+    return { fichas: [...metas.values()], refsPorFicha };
+  }
+  const porMes = async (mes: string) =>
+    buscarTodasPaginado<FichaLeve>((lo, hi) => {
+      let q = supabase!
+        .from("fichas")
+        .select(
+          "id, tipo, cnes, mes_producao, updated_at, seqs:dados->seqs, pid:dados->pacienteId, cnsr:dados->cnsPaciente, cpfr:dados->cpfPaciente",
+        )
+        .in("tipo", ["BPA-I", "RAAS"])
+        .eq("mes_producao", mes)
+        .is("excluida_em", null)
+        .is("substituida_por", null)
+        .order("id", { ascending: true })
+        .range(lo, hi);
+      if (cnesSel.size) q = q.in("cnes", [...cnesSel]);
+      return q as unknown as PromiseLike<{ data: FichaLeve[] | null; error: unknown }>;
+    });
+  const meses = mesesEntre(de, ate);
+  const fichas: FichaLeve[] = [];
+  for (let i = 0; i < meses.length; i += 3)
+    // 3 meses ao mesmo tempo
+    for (const a of await Promise.all(meses.slice(i, i + 3).map(porMes))) fichas.push(...a);
+  for (const f of fichas) {
+    const refs: Ref[] = [];
+    if (f.tipo === "RAAS")
+      refs.push({
+        pid: f.pid || undefined,
+        cns: dig(f.cnsr) || undefined,
+        cpf: dig(f.cpfr) || undefined,
+      });
+    else
+      for (const sq of f.seqs ?? []) {
+        if (!dig(sq.codProc)) continue;
+        refs.push({
+          pid: sq.pacienteId || undefined,
+          cns: dig(sq.cnsPac) || undefined,
+          cpf: dig(sq.cpfPac) || undefined,
+        });
+      }
+    refsPorFicha.set(f.id, refs);
+    metas.set(f.id, {
+      id: f.id,
+      cnes: f.cnes,
+      mes_producao: f.mes_producao,
+      updated_at: f.updated_at,
+    });
+  }
+  return { fichas: [...metas.values()], refsPorFicha };
 }
 
 export async function carregarCadastrosIncompletos(
@@ -92,45 +211,7 @@ export async function carregarCadastrosIncompletos(
     fichasAfetadas: 0,
   };
   if (!supabase) return vazio;
-  const fichas = await buscarTodasPaginado<FichaLeve>((lo, hi) => {
-    let q = supabase!
-      .from("fichas")
-      .select(
-        "id, tipo, cnes, mes_producao, updated_at, seqs:dados->seqs, pid:dados->pacienteId, cnsr:dados->cnsPaciente, cpfr:dados->cpfPaciente",
-      )
-      .in("tipo", ["BPA-I", "RAAS"])
-      .gte("mes_producao", de)
-      .lte("mes_producao", ate)
-      .is("excluida_em", null)
-      .is("substituida_por", null)
-      .order("id", { ascending: true })
-      .range(lo, hi);
-    if (cnesSel.size) q = q.in("cnes", [...cnesSel]);
-    return q as unknown as PromiseLike<{ data: FichaLeve[] | null; error: unknown }>;
-  });
-
-  // Referências por ficha: id do cadastro OU documento.
-  type Ref = { pid?: string; cns?: string; cpf?: string };
-  const refsPorFicha = new Map<string, Ref[]>();
-  for (const f of fichas) {
-    const refs: Ref[] = [];
-    if (f.tipo === "RAAS")
-      refs.push({
-        pid: f.pid || undefined,
-        cns: dig(f.cnsr) || undefined,
-        cpf: dig(f.cpfr) || undefined,
-      });
-    else
-      for (const s of f.seqs ?? []) {
-        if (!dig(s.codProc)) continue;
-        refs.push({
-          pid: s.pacienteId || undefined,
-          cns: dig(s.cnsPac) || undefined,
-          cpf: dig(s.cpfPac) || undefined,
-        });
-      }
-    refsPorFicha.set(f.id, refs);
-  }
+  const { fichas, refsPorFicha } = await carregarRefs(de, ate, cnesSel);
   const todas = [...refsPorFicha.values()].flat();
   const ids = [...new Set(todas.map((r) => r.pid).filter((x): x is string => !!x))];
   const cnss = [

@@ -1247,8 +1247,13 @@ function MontarRelatorio() {
           compDe === compAte ? mesLabel(compDe) : `${mesLabel(compDe)} a ${mesLabel(compAte)}`
         }
         onSalvar={async (nome, fixar) => {
-          await salvarModelo(user?.id, nome, configAtual(fixar));
-          toast.success("Modelo salvo. Ele aparece em “Meus modelos” na Central.");
+          try {
+            await salvarModelo(user?.id, nome, configAtual(fixar));
+            toast.success("Modelo salvo. Ele aparece em “Meus modelos” na Central.");
+          } catch (e) {
+            toast.error((e as Error).message);
+            throw e;
+          }
         }}
       />
     </div>
@@ -1423,6 +1428,8 @@ function SalvarModeloDialog({
               try {
                 await onSalvar(nome, fixar);
                 onAberto(false);
+              } catch {
+                /* o aviso de erro já apareceu; o diálogo fica aberto */
               } finally {
                 setSalvando(false);
               }
