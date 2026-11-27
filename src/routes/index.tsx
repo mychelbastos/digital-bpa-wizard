@@ -10,6 +10,7 @@ import {
   carregarDescricoesCid,
   carregarDescricoesCbo,
   carregarProducaoDashboard,
+  carregarProducaoDashboardGuardada,
   carregarMesSerie,
   carregarSerieAgregada,
   carregarNomeOrganizacao,
@@ -94,7 +95,13 @@ function Home() {
     try {
       const [vincs, producao] = await Promise.all([
         carregarVinculosUsuario(),
-        carregarProducaoDashboard(competencia),
+        // Mês ANTERIOR ao de faturamento: cópia guardada (só recalcula se algo do mês mudou).
+        // Mês atual: ao vivo pela view. Se a cópia falhar, cai na view.
+        competencia < competenciaPadrao()
+          ? carregarProducaoDashboardGuardada(competencia).then(
+              (r) => r ?? carregarProducaoDashboard(competencia),
+            )
+          : carregarProducaoDashboard(competencia),
       ]);
       if (cargaRef.current !== token) return; // carga obsoleta — ignora
       setVinculos(vincs);
@@ -330,8 +337,13 @@ function Home() {
   useEffect(() => {
     let vivo = true;
     setFpoCarregando(true);
+    // Espera a carga principal e REAPROVEITA as linhas do mês (não consulta a view de novo).
+    if (loading)
+      return () => {
+        vivo = false;
+      };
     (async () => {
-      const r = await carregarResumoFpo(cnesEscopo, competencia);
+      const r = await carregarResumoFpo(cnesEscopo, competencia, rows);
       if (!vivo) return;
       setResumoFpo(r);
       setFpoCarregando(false);
@@ -352,7 +364,8 @@ function Home() {
     return () => {
       vivo = false;
     };
-  }, [cnesEscopo, competencia]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cnesEscopo, competencia, loading]);
   const nomeCnes = useMemo(() => {
     const m = new Map(unidades.map((u) => [u.key, u.name]));
     return (c: string) => m.get(c) || nomesEstabFpo[c] || c;

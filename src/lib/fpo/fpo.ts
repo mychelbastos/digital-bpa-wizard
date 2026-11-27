@@ -243,14 +243,22 @@ export interface FpoResumoUnidade {
 // Resumo FPO × produção por unidade, para um conjunto de CNES e a competência (mês de
 // apresentação). Usa o mesmo modelo de vigência (teto = última competência ≤ X). Retorna só
 // as unidades que têm FPO vigente. Nunca lança.
-export async function carregarResumoFpo(cnesList: string[], competencia: string): Promise<FpoResumoUnidade[]> {
+// `producaoPronta`: linhas da produção do mês que o chamador JÁ carregou (ex.: a dashboard) —
+// evita consultar a view de novo (é a consulta mais pesada do banco). Sem ela, consulta.
+export async function carregarResumoFpo(
+  cnesList: string[],
+  competencia: string,
+  producaoPronta?: { cnes: string | null; procedimento: string; quantidade: number }[],
+): Promise<FpoResumoUnidade[]> {
   const cnes = [...new Set(cnesList.filter(Boolean))];
   if (!supabase || cnes.length === 0 || !competencia) return [];
   const [{ data: tetos }, prod] = await Promise.all([
     supabase.from("fpo_teto").select("cnes, procedimento, competencia, qtd_orcada, valor_unitario")
       .in("cnes", cnes).lte("competencia", competencia),
     // Pagina: junho passa de 1.000 linhas somando todas as unidades (teto do PostgREST).
-    buscarTodasPaginado<{ cnes: string; procedimento: string; quantidade: number }>((de, ate) =>
+    producaoPronta
+      ? Promise.resolve(producaoPronta.filter((r) => r.cnes && cnes.includes(r.cnes)) as { cnes: string; procedimento: string; quantidade: number }[])
+      : buscarTodasPaginado<{ cnes: string; procedimento: string; quantidade: number }>((de, ate) =>
       supabase!.from("producao_dashboard").select("cnes, procedimento, quantidade")
         .in("cnes", cnes).eq("mes_producao", competencia).order("id", { ascending: true }).range(de, ate)),
   ]);

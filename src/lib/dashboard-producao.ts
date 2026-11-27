@@ -55,6 +55,24 @@ export async function carregarProducaoDashboard(mesProducao?: string): Promise<P
   }
 }
 
+// Produção de um mês ANTERIOR pela cópia guardada no banco (RPC dashboard_producao_mes):
+// mesmas linhas e mesma regra de visibilidade da view, mas o mês só é recalculado quando alguma
+// ficha dele muda — mês fechado sai na hora. Devolve null se a RPC falhar (o chamador usa a view).
+export async function carregarProducaoDashboardGuardada(
+  mes: string,
+): Promise<ProducaoBpaRow[] | null> {
+  if (!supabase || !/^\d{6}$/.test(mes)) return [];
+  let falhou = false;
+  const linhas = await buscarTodasPaginado<ProducaoBpaRow>(async (de, ate) => {
+    const r = await supabase!
+      .rpc("dashboard_producao_mes" as never, { _mes: mes } as never)
+      .range(de, ate);
+    if (r.error) falhou = true;
+    return { data: (r.data as unknown as ProducaoBpaRow[] | null) ?? null, error: r.error };
+  });
+  return falhou ? null : linhas;
+}
+
 // Produção de um PERÍODO de meses de produção [de, ate] (AAAAMM, inclusive). Se de==ate,
 // equivale a um mês só. Para períodos grandes a produção passa fácil de dezenas de milhares
 // de linhas: em vez de paginar em SÉRIE (dezenas de round-trips), conta o total e busca todas
