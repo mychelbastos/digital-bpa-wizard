@@ -17,7 +17,7 @@ import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
-import { carregarVinculosUsuario } from "@/lib/dashboard-producao";
+import { carregarVinculosUsuario, carregarDescricoesCbo } from "@/lib/dashboard-producao";
 import { anoAte4Digitos } from "@/lib/validacao-data";
 import {
   emptyRaasState, emptyAcao, totalAcoes, ufDeMunicipio,
@@ -582,6 +582,26 @@ function RaasPage() {
   };
 
   // ----- ações (linha 16) -----
+  // Nome da ocupação de cada CBO das ações (tabela SIGTAP), mostrado no hover do campo.
+  // "" = consultado e não achado.
+  const [nomesCbo, setNomesCbo] = useState<Record<string, string>>({});
+  const chaveCbos = state.acoes.map((a) => a.cbo).filter((c) => /^\d{6}$/.test(c)).join(",");
+  useEffect(() => {
+    const faltam = [...new Set(chaveCbos.split(",").filter((c) => c && !(c in nomesCbo)))];
+    if (faltam.length === 0) return;
+    carregarDescricoesCbo(faltam).then((m) => {
+      setNomesCbo((prev) => {
+        const n = { ...prev };
+        for (const c of faltam) n[c] = m[c] ?? "";
+        return n;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveCbos]);
+  const dicaCbo = (cbo: string): string | undefined => {
+    if (!/^\d{6}$/.test(cbo) || !(cbo in nomesCbo)) return undefined;
+    return nomesCbo[cbo] ? `${cbo} — ${nomesCbo[cbo]}` : `${cbo} — CBO não encontrado na tabela SIGTAP`;
+  };
   const updateAcao = (i: number, patch: Partial<RaasAcao>) => {
     setState((prev) => {
       const next = [...prev.acoes];
@@ -935,7 +955,7 @@ function RaasPage() {
                       onPatch={(patch) => updateAcao(i, patch)} />
                   </div>
                   <Campo label="CBO executante">
-                    <Txt inputMode="numeric" maxLength={6} esperaLen={6} value={a.cbo}
+                    <Txt inputMode="numeric" maxLength={6} esperaLen={6} value={a.cbo} title={dicaCbo(a.cbo)}
                       onChange={(e) => updateAcao(i, { cbo: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
                   </Campo>
                   <Campo label="CNS executante">
