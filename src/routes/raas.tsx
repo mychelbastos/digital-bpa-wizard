@@ -200,7 +200,7 @@ function ProcedimentoInput({ codigo, nome, onPick }: {
         <input
           value={aberto ? termo : rotulo}
           onChange={(e) => { setTermo(e.target.value); setAberto(true); }}
-          onFocus={() => { setTermo(""); setAberto(true); }}
+          onFocus={(e) => { setTermo(codigo); setAberto(true); const el = e.currentTarget; setTimeout(() => el.select(), 0); }}
           onBlur={() => setTimeout(() => setAberto(false), 150)}
           placeholder="Código ou nome do procedimento"
           className={`${inputCls} w-full`}
@@ -250,7 +250,7 @@ function CidInput({ codigo, onPick, placeholder }: {
         <input
           value={aberto ? termo : rotulo}
           onChange={(e) => { setTermo(e.target.value); setAberto(true); }}
-          onFocus={() => { setTermo(""); setAberto(true); }}
+          onFocus={(e) => { setTermo(codigo); setAberto(true); const el = e.currentTarget; setTimeout(() => el.select(), 0); }}
           onBlur={() => setTimeout(() => setAberto(false), 150)}
           placeholder={placeholder ?? "Código ou nome do CID"}
           className={`${inputCls} w-full`}
@@ -312,7 +312,7 @@ function ProfExecutanteInput({ cnes, nome, onPatch }: {
         <input
           value={aberto ? termo : nome}
           onChange={(e) => { setTermo(e.target.value.toUpperCase()); setAberto(true); }}
-          onFocus={() => { setTermo(""); setAberto(true); }}
+          onFocus={(e) => { setTermo(nome); setAberto(true); const el = e.currentTarget; setTimeout(() => el.select(), 0); }}
           onBlur={() => setTimeout(() => setAberto(false), 150)}
           placeholder={semCnes ? "Informe o CNES do estabelecimento acima" : "Nome do profissional"}
           disabled={semCnes}
@@ -629,14 +629,15 @@ function RaasPage() {
   };
 
   // Serviço/Classificação por procedimento (SIGTAP): ao escolher o procedimento, preenche
-  // automático quando há uma só combinação; oferece a escolha quando há mais de uma (não
-  // temos os serviços habilitados do CNES p/ filtrar). Opções por índice de ação.
+  // automático quando há uma só combinação NA UNIDADE (SIGTAP × serviços do CNES); oferece a
+  // escolha quando há mais de uma. Opções por índice de ação.
   const [servClassOpcoes, setServClassOpcoes] = useState<Record<number, ServClassOpcao[]>>({});
   const aoEscolherProcedimento = (i: number, codigo: string, nome: string) => {
     updateAcao(i, { procedimento: codigo, procedimentoNome: nome, servico: "", classificacao: "" });
     setServClassOpcoes((p) => { const n = { ...p }; delete n[i]; return n; });
     const comp = /^\d{6}$/.test(state.competencia) ? state.competencia : null;
-    buscarServClassDoProcedimento(codigo, comp).then((combos) => {
+    // Passa o CNES da unidade: cruza o SIGTAP com os serviços cadastrados nela (só 1 → automático).
+    buscarServClassDoProcedimento(codigo, comp, cnesEstab).then((combos) => {
       if (combos.length === 1) updateAcao(i, { servico: combos[0].servico, classificacao: combos[0].classificacao });
       else if (combos.length > 1) setServClassOpcoes((p) => ({ ...p, [i]: combos }));
     });
