@@ -1,0 +1,49 @@
+/* Dashboard v2 — fonte Geist só aqui + animações (tokens em styles.css). */
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+@import "@fontsource/geist-mono/500.css";
+
+.dv2 {
+  font-family: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  color: #172033;
+  background: #f3f6fa;
+}
+.dv2 .mono { font-family: "Geist Mono", ui-monospace, monospace; }
+
+@keyframes dv2-reveal {
+  from { opacity: 0; transform: translateY(var(--distance-reveal)); filter: blur(var(--blur-reveal)); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes dv2-swap {
+  from { opacity: 0; transform: translateY(var(--distance-swap)); filter: blur(var(--blur-swap)); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes dv2-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes dv2-tip {
+  from { opacity: 0; transform: translateX(-50%) scale(var(--scale-press)); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+.dv2 .rv { animation: dv2-reveal var(--duration-slow) var(--ease-smooth-out) both; }
+.dv2 .sw { display: inline-block; animation: dv2-swap var(--duration-fast) ease-in-out both; }
+.dv2 .sk { background: #e8edf3; border-radius: 8px; animation: dv2-pulse 1.4s linear infinite; }
+.dv2 .sk-dark { background: rgba(255, 255, 255, 0.1); border-radius: 8px; animation: dv2-pulse 1.4s linear infinite; }
+.dv2 .card {
+  transition: transform var(--duration-base) var(--ease-smooth-out), box-shadow var(--duration-base) var(--ease-smooth-out);
+}
+.dv2 .card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -12px rgba(21, 33, 58, 0.22); }
+.dv2 .btn { transition: transform var(--duration-fast) var(--ease-smooth-out), background-color var(--duration-fast) ease-out; }
+.dv2 .btn:hover { transform: translateY(-1px); }
+.dv2 .btn:active { transform: translateY(0) scale(var(--scale-press)); }
+.dv2 .more .chev { transition: transform var(--duration-base) var(--ease-smooth-out); }
+.dv2 .more:hover .chev { transform: translateX(3px); }
+.dv2 .row-l { transition: background-color var(--duration-fast) ease-out; }
+.dv2 .row-l:hover { background: #f6f8fb; }
+.dv2 .tip { animation: dv2-tip var(--duration-fast) var(--ease-out) both; transition: left var(--duration-base) var(--ease-smooth-out), bottom var(--duration-base) var(--ease-smooth-out); }
+.dv2 :focus-visible { outline: 2px solid #2563d9; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dv2 *, .dv2 *::before, .dv2 *::after { animation: none !important; transition: none !important; }
+}
