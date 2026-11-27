@@ -172,8 +172,13 @@ function Home() {
     const faltam = mesesAnteriores.filter((m) => !cacheMes.has(m));
     if (faltam.length) setSerieAnt(null);
     try {
-      const novos = await Promise.all(faltam.map((m) => carregarMesSerie(m)));
-      faltam.forEach((m, i) => cacheMes.set(m, novos[i]));
+      // Um mês DEPOIS do outro (não em paralelo): a view recalcula as fichas a cada consulta e
+      // o plano do banco tem pouca CPU — consultas simultâneas fazem fila e travam a página toda.
+      for (const m of faltam) {
+        const r = await carregarMesSerie(m);
+        if (serieRef.current !== token) return;
+        cacheMes.set(m, r);
+      }
       if (serieRef.current !== token) return;
       setSerieAnt(mesesAnteriores.flatMap((m) => cacheMes.get(m) ?? []));
     } catch {
