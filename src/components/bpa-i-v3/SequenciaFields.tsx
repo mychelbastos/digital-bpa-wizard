@@ -410,7 +410,9 @@ export function SequenciaFields({ si, seqTop, s, profMes, profAno, hydrated, onU
           style={{ top: `calc(${seqTop + R.procRow2 + L.DIGIT_H}% + 1px)`, left: `${R.servico[0].left}%`, minWidth: "240px", maxWidth: "48%" }}
           value={servClassOpcoes.findIndex((o) => o.servico === servico && o.classificacao === classProc)}
           onChange={(e) => { const o = servClassOpcoes[Number(e.target.value)]; if (o) { u("servico", o.servico.split("")); u("classProc", o.classificacao.split("")); } }}
-          title="Este procedimento tem mais de um Serviço/Classificação — escolha o da unidade"
+          title={servClassOpcoes[0]?.foraDoCnes
+            ? "Atenção: esta unidade não tem no CNES nenhum Serviço/Classificação deste procedimento — o SIA pode recusar."
+            : "Este procedimento tem mais de um Serviço/Classificação — escolha o da unidade"}
         >
           <option value={-1}>Serviço/Classificação — escolha…</option>
           {servClassOpcoes.map((o, k) => <option key={k} value={k}>{o.label}</option>)}

@@ -995,7 +995,9 @@ function RaasPage() {
                   {(servClassOpcoes[i]?.length ?? 0) > 1 && (
                     <div className="md:col-span-3">
                       <div className="mb-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                        Este procedimento tem mais de um Serviço/Classificação — escolha o da unidade:
+                        {servClassOpcoes[i][0]?.foraDoCnes
+                          ? "Atenção: esta unidade não tem no CNES nenhum Serviço/Classificação deste procedimento — o SIA pode recusar. Confira o procedimento ou o cadastro da unidade:"
+                          : "Este procedimento tem mais de um Serviço/Classificação — escolha o da unidade:"}
                       </div>
                       <select
                         value={servClassOpcoes[i].findIndex((o) => o.servico === a.servico && o.classificacao === a.classificacao)}

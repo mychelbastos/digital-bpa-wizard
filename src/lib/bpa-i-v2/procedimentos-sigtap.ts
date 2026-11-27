@@ -181,6 +181,9 @@ export interface ServClassOpcao {
   servico: string;        // 3 díg.
   classificacao: string;  // 3 díg.
   label: string;          // "servico nome · classificacao nome" (para o seletor)
+  // true = a unidade TEM serviços no CNES, mas nenhum serve p/ este procedimento (o SIA pode
+  // recusar). A tela avisa; continua deixando escolher (nunca bloqueia a digitação).
+  foraDoCnes?: boolean;
 }
 
 // Combinações de Serviço/Classificação de um procedimento no SIGTAP (com nomes p/ exibir),
@@ -232,6 +235,7 @@ export async function buscarServClassDoProcedimento(procedimento: string, compet
       if (doCnes.size > 0) {
         const filtrado = resultado.filter((o) => doCnes.has(`${o.servico}|${o.classificacao}`));
         if (filtrado.length > 0) return filtrado;
+        return resultado.map((o) => ({ ...o, foraDoCnes: true }));
       }
     }
     return resultado;

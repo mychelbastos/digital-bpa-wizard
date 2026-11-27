@@ -117,6 +117,53 @@ Deno.serve(async (req) => {
     if (body.servicos === true && body.cnes) {
       const cnes = String(body.cnes);
       if (!/^[0-9]{7}$/.test(cnes)) return json({ erro: "CNES inválido (7 dígitos)" }, 400);
+
+      // Grava o retrato (substitui o anterior). Só é chamado com dados VÁLIDOS da fonte —
+      // se a fonte falha, o cache antigo é mantido (nunca apaga por instabilidade).
+      const gravar = async (pares: { servico: string; classificacao: string }[], fonte: string) => {
+        const ts = new Date().toISOString();
+        if (pares.length) {
+          const rows = pares.map((p) => ({ cnes, servico: p.servico, classificacao: p.classificacao, ambiente: AMBIENTE, atualizado_em: ts }));
+          const { error } = await supabase.from("estabelecimento_servicos").upsert(rows, { onConflict: "cnes,servico,classificacao" });
+          if (error) return json({ erro: `upsert: ${error.message}`, total: pares.length }, 500);
+        }
+        await supabase.from("estabelecimento_servicos").delete().eq("cnes", cnes).neq("atualizado_em", ts);
+        return json({ fonte, total: pares.length });
+      };
+
+      // FONTE 1 (principal, 27/11/2026): site público do CNES (cnes.datasus.gov.br) — o mesmo
+      // que gera a "Ficha Completa do Estabelecimento". Id da unidade = IBGE(6) + CNES(7); o
+      // IBGE vem da organização dona do estabelecimento. O serviço SOAP de Estabelecimentos do
+      // DATASUS (fonte 2, abaixo) estava respondendo "Forced circuit exception".
+      try {
+        const { data: est } = await supabase.from("estabelecimentos")
+          .select("organizacoes(municipio_ibge)").eq("cnes", cnes).maybeSingle();
+        const org = (est as { organizacoes?: { municipio_ibge?: string | null } | { municipio_ibge?: string | null }[] } | null)?.organizacoes;
+        const ibge6 = String((Array.isArray(org) ? org[0] : org)?.municipio_ibge ?? "").replace(/\D/g, "").slice(0, 6);
+        if (/^\d{6}$/.test(ibge6)) {
+          const id = ibge6 + cnes;
+          const resp = await fetch(`https://cnes.datasus.gov.br/services/estabelecimentos/servicos-classificacao/${id}`, {
+            headers: { Accept: "application/json", Referer: `https://cnes.datasus.gov.br/pages/estabelecimentos/ficha/index.jsp?coUnidade=${id}` },
+          });
+          if (resp.ok) {
+            const lista = await resp.json();
+            if (Array.isArray(lista)) {
+              const seen = new Set<string>();
+              const pares: { servico: string; classificacao: string }[] = [];
+              for (const it of lista as { coServico?: unknown; coClassificacao?: unknown }[]) {
+                const sv = String(it.coServico ?? "").replace(/\D/g, "").padStart(3, "0").slice(-3);
+                const cl = String(it.coClassificacao ?? "").replace(/\D/g, "").padStart(3, "0").slice(-3);
+                const k = `${sv}|${cl}`;
+                if (sv !== "000" && cl !== "000" && !seen.has(k)) { seen.add(k); pares.push({ servico: sv, classificacao: cl }); }
+              }
+              if (body.debug === true) return json({ status: "debug-site", id, total: pares.length, pares });
+              return await gravar(pares, "cnes-site");
+            }
+          }
+        }
+      } catch { /* cai para a fonte 2 */ }
+
+      // FONTE 2 (reserva): serviço SOAP de Estabelecimentos do DATASUS.
       const estabUrl = SOAP_URL.replace("ProfissionalSaudeService", "EstabelecimentoSaudeService");
       const env = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:est="http://servicos.saude.gov.br/cnes/v1r0/estabelecimentosaudeservice" xmlns:fil="http://servicos.saude.gov.br/wsdl/mensageria/v1r0/filtropesquisaestabelecimentosaude" xmlns:cod="http://servicos.saude.gov.br/schema/cnes/v1r0/codigocnes">
