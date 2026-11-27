@@ -35,6 +35,10 @@ export interface PessoaAdmin {
   vinculo_ids: string[];
   total_vinculos: number;
   perms: Record<string, number>;
+  // Do perfil da conta (auth metadata) — podem faltar em contas antigas.
+  nome?: string | null;
+  cns?: string | null;
+  cnes_base?: string | null; // unidade de cadastro
 }
 
 // Organização (Prefeitura) + cabeçalho do arquivo magnético + última gestão.

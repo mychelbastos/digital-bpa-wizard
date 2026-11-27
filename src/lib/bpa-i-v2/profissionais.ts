@@ -13,10 +13,13 @@ export interface CboVinculo {
 // Dispara a Edge Function p/ buscar os profissionais do estabelecimento na API do CNES
 // e gravar no cache (tabela `profissionais`). Chamada UMA vez, quando o CNES é preenchido.
 // Null-safe: se não configurado/erro, retorna 0 (não bloqueia o formulário).
-export async function sincronizarProfissionais(cnes: string): Promise<number> {
+// `forcar`: ignora o cache de 7 dias e reconsulta o SCNES agora (botão "Atualizar profissionais").
+export async function sincronizarProfissionais(cnes: string, forcar = false): Promise<number> {
   if (!supabase || !/^[0-9]{7}$/.test(cnes)) return 0;
   try {
-    const { data, error } = await supabase.functions.invoke("cnes-profissionais", { body: { cnes } });
+    const { data, error } = await supabase.functions.invoke("cnes-profissionais", {
+      body: forcar ? { cnes, forcar: true } : { cnes },
+    });
     if (error) return 0;
     return (data as { total?: number } | null)?.total ?? 0;
   } catch {
