@@ -113,8 +113,18 @@ export async function carregarProducaoDashboardPeriodo(
 // Série mensal p/ o gráfico "Últimos 6 meses": só as colunas que o gráfico e os filtros usam.
 export const COLS_SERIE =
   "id,tipo,mes_producao,cnes,profissional_cns,profissional_nome,cbo,procedimento,quantidade";
-export function carregarSerieMensal(de: string, ate: string): Promise<ProducaoBpaRow[]> {
-  return carregarProducaoDashboardPeriodo(de, ate, COLS_SERIE);
+// UM mês por vez (filtro de igualdade): no banco, cada página do mês sai em ~0,1–0,25 s,
+// contra ~1 s por página quando se filtra o PERÍODO (between) — medido em 27/11/2026.
+export async function carregarMesSerie(mes: string): Promise<ProducaoBpaRow[]> {
+  if (!supabase || !/^\d{6}$/.test(mes)) return [];
+  return buscarTodasPaginado<ProducaoBpaRow>((de, ate) =>
+    supabase!
+      .from("producao_dashboard")
+      .select(COLS_SERIE as typeof COLS)
+      .eq("mes_producao", mes)
+      .order("id", { ascending: true })
+      .range(de, ate),
+  );
 }
 
 // Nome da organização do usuário (linha acima do título da dashboard). Só quando a pessoa

@@ -10,7 +10,7 @@ import {
   carregarDescricoesCid,
   carregarDescricoesCbo,
   carregarProducaoDashboard,
-  carregarSerieMensal,
+  carregarMesSerie,
   carregarNomeOrganizacao,
   type VinculoResumo,
   type ProducaoBpaRow,
@@ -53,7 +53,7 @@ export const Route = createFileRoute("/")({
 });
 
 // Cache em memória da série de 6 meses, por período (não recarrega ao trocar filtros).
-const cacheSerie = new Map<string, ProducaoBpaRow[]>();
+const cacheMes = new Map<string, ProducaoBpaRow[]>(); // meses ANTERIORES (o atual vem da carga principal)
 
 function Home() {
   const [rows, setRows] = useState<ProducaoBpaRow[]>([]);
@@ -80,7 +80,6 @@ function Home() {
   // ex.: RAAS importado, onde `estabelecimentoNome` vem vazio). Resolve pela tabela `estabelecimentos`.
   const [nomesEstabCad, setNomesEstabCad] = useState<Record<string, string>>({});
   // Série dos últimos 6 meses (gráfico) — carregada DEPOIS da carga principal.
-  const [serie, setSerie] = useState<ProducaoBpaRow[] | null>(null);
   const [serieErro, setSerieErro] = useState(false);
   const maxComp = competenciaPadrao();
 
@@ -156,23 +155,27 @@ function Home() {
     setProcedimento("todos");
   }, [cnes]);
 
-  // Série de 6 meses: só depois da carga principal (não atrasa os números do topo). Cache por período.
+  // Série de 6 meses: só depois da carga principal (não atrasa os números do topo). O mês
+  // atual reaproveita `rows`; os 5 anteriores vêm UM MÊS POR VEZ, em paralelo (bem mais rápido
+  // no banco que o período inteiro) e ficam em cache (trocar filtro/mês não rebusca).
   const deSerie = somarMes(competencia, -5);
-  const chaveSerie = `${deSerie}-${competencia}`;
+  const mesesAnteriores = useMemo(
+    () => Array.from({ length: 5 }, (_, i) => somarMes(deSerie, i)),
+    [deSerie],
+  );
+  const [serieAnt, setSerieAnt] = useState<ProducaoBpaRow[] | null>(null);
   const serieRef = useRef(0);
   const carregarSerie = async (forcar = false) => {
     const token = ++serieRef.current;
     setSerieErro(false);
-    if (!forcar && cacheSerie.has(chaveSerie)) {
-      setSerie(cacheSerie.get(chaveSerie)!);
-      return;
-    }
-    setSerie(null);
+    if (forcar) mesesAnteriores.forEach((m) => cacheMes.delete(m));
+    const faltam = mesesAnteriores.filter((m) => !cacheMes.has(m));
+    if (faltam.length) setSerieAnt(null);
     try {
-      const r = await carregarSerieMensal(deSerie, competencia);
+      const novos = await Promise.all(faltam.map((m) => carregarMesSerie(m)));
+      faltam.forEach((m, i) => cacheMes.set(m, novos[i]));
       if (serieRef.current !== token) return;
-      cacheSerie.set(chaveSerie, r);
-      setSerie(r);
+      setSerieAnt(mesesAnteriores.flatMap((m) => cacheMes.get(m) ?? []));
     } catch {
       if (serieRef.current === token) setSerieErro(true);
     }
@@ -181,9 +184,13 @@ function Home() {
     if (loading) return;
     void carregarSerie();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chaveSerie, loading]);
+  }, [deSerie, loading]);
+  const serie = useMemo(
+    () => (serieAnt === null ? null : [...serieAnt, ...rows]),
+    [serieAnt, rows],
+  );
   const atualizar = () => {
-    cacheSerie.delete(chaveSerie);
+    mesesAnteriores.forEach((m) => cacheMes.delete(m));
     void carregar();
   };
 
