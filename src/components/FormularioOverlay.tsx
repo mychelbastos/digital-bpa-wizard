@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject, type KeyboardEvent as RKeyboardEvent } from "react";
+import { SalvarComMenu } from "@/components/SalvarComMenu";
 import { FileDown, Eraser, Ruler, Pencil, Copy, RotateCcw, X, Trash2, UserRound, Undo2, FileText, type LucideIcon } from "lucide-react";
 import { FormIdentity } from "@/components/PageHeader";
 import { toast } from "sonner";
@@ -21,7 +22,6 @@ import { salvarFicha, carregarFicha, type FichaMetadados } from "@/lib/bpa-i-v2/
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
-import { Save } from "lucide-react";
 
 const normTxt = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 // Uma opção do autocomplete: rótulo + sublegenda + ação de aplicar (preenche os campos).
@@ -473,10 +473,12 @@ export function FormularioOverlay({ titulo, descricao, icone, storageKey, campos
                 {calibravel && <button onClick={() => setContornos((c) => !c)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${contornos ? "border-sky-400 bg-sky-50 text-sky-700" : "border-border bg-card text-foreground hover:bg-muted"}`}><Ruler className="size-4" /> Contornos</button>}
                 {nuvem && user && (
                   <>
-                    <button onClick={salvarNuvemClique} disabled={salvando} className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-60"><Save className="size-4" /> {salvando ? "Salvando…" : `Salvar${fichaIdRef.current ? "" : " ficha"}`}</button>
-                    {fichaIdRef.current && (
-                      <button onClick={() => { setSalvarComoNovo(true); setSalvarOpen(true); }} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">Salvar como…</button>
-                    )}
+                    <SalvarComMenu
+                      onSalvar={salvarNuvemClique}
+                      onSalvarComo={() => { setSalvarComoNovo(true); setSalvarOpen(true); }}
+                      salvando={salvando}
+                      jaSalva={Boolean(fichaIdRef.current)}
+                    />
                     <button onClick={() => setNovaConfirm(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">Nova ficha</button>
                   </>
                 )}

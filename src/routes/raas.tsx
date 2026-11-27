@@ -15,6 +15,7 @@ import { TravaEdicaoFicha } from "@/components/TravaEdicaoFicha";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { SalvarFichaModal } from "@/components/bpa-i-v2/SalvarFichaModal";
 import { ConfirmModal } from "@/components/bpa-i-v2/ConfirmModal";
+import { SalvarComMenu } from "@/components/SalvarComMenu";
 import { MinhasFichas } from "@/components/bpa-i-v2/MinhasFichas";
 import { useAuthUser } from "@/lib/bpa-i-v2/auth";
 import { carregarVinculosUsuario, carregarDescricoesCbo } from "@/lib/dashboard-producao";
@@ -727,16 +728,12 @@ function RaasPage() {
             </button>
             {user && (
               <>
-                <button onClick={salvarClique} disabled={salvando}
-                  className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60">
-                  {salvando ? "Salvando…" : `💾 Salvar${fichaTituloRef.current ? "" : " ficha"}`}
-                </button>
-                {fichaIdRef.current && (
-                  <button onClick={() => { if (acoesBloqueiam()) return; setSalvarComoNovo(true); setSalvarOpen(true); }}
-                    className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
-                    Salvar como…
-                  </button>
-                )}
+                <SalvarComMenu
+                  onSalvar={salvarClique}
+                  onSalvarComo={() => { if (acoesBloqueiam()) return; setSalvarComoNovo(true); setSalvarOpen(true); }}
+                  salvando={salvando}
+                  jaSalva={Boolean(fichaTituloRef.current)}
+                />
                 <button onClick={() => setNovaFichaOpen(true)} className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
                   ➕ Nova ficha
                 </button>
