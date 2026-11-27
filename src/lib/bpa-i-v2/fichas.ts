@@ -58,6 +58,30 @@ export interface FichaMetadados {
   mesProducao?: string;
 }
 
+// Folha única (27/11/2026): o BANCO garante o nº da folha (BPA-I `profFolha`, BPA-C `folha`) ao
+// salvar — se o número já existia p/ o mesmo profissional+competência, vira o próximo livre e o
+// título "… folha N" acompanha. Quando isso acontece, guardamos aqui o que o banco gravou; a
+// tela lê com `ajusteFolhaSalva(id)` logo após salvar e atualiza o número/nome exibidos.
+export interface AjusteFolha { titulo: string; folha: string[]; antes: string; depois: string }
+const ajustesFolha = new Map<string, AjusteFolha>();
+export function ajusteFolhaSalva(id: string | null): AjusteFolha | null {
+  if (!id) return null;
+  const a = ajustesFolha.get(id) ?? null;
+  ajustesFolha.delete(id);
+  return a;
+}
+const digFolha = (v: unknown) => (Array.isArray(v) ? v.join("") : String(v ?? "")).replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+function registrarAjuste(id: string, enviado: { titulo: string; dados: unknown }, gravado: { titulo?: string; fi?: unknown; fc?: unknown } | null) {
+  if (!gravado) return;
+  const d = (enviado.dados ?? {}) as { profFolha?: unknown; folha?: unknown };
+  const campoGravado = gravado.fi !== undefined && gravado.fi !== null ? gravado.fi : gravado.fc;
+  const campoEnviado = d.profFolha !== undefined ? d.profFolha : d.folha;
+  const antes = digFolha(campoEnviado), depois = digFolha(campoGravado);
+  if ((depois && antes !== depois) || (gravado.titulo && gravado.titulo !== enviado.titulo)) {
+    ajustesFolha.set(id, { titulo: gravado.titulo ?? enviado.titulo, folha: Array.isArray(campoGravado) ? (campoGravado as string[]) : [], antes, depois });
+  }
+}
+
 // Cria (id null) ou atualiza uma ficha. Retorna o id (ou null em falha).
 export async function salvarFicha(
   id: string | null,
@@ -81,12 +105,15 @@ export async function salvarFicha(
   try {
     if (id) {
       // Update NÃO mexe em mes_producao: o mês de produção é fixado na criação da ficha.
-      const { error } = await supabase
+      const { data: upd, error } = await supabase
         .from("fichas")
         .update({ ...payload, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (!error) avisarFichaSalva(id);
-      return error ? null : id;
+        .eq("id", id)
+        .select("titulo, fi:dados->profFolha, fc:dados->folha");
+      if (error) return null;
+      registrarAjuste(id, { titulo, dados }, (Array.isArray(upd) ? upd[0] : null) as { titulo?: string; fi?: unknown; fc?: unknown } | null);
+      avisarFichaSalva(id);
+      return id;
     }
     const mesProd = meta.mesProducao ?? movimentoFaturamento();
     // Backstop: a competência da folha (realização) NÃO pode ser POSTERIOR ao mês de
@@ -96,11 +123,13 @@ export async function salvarFicha(
     const { data, error } = await supabase
       .from("fichas")
       .insert({ ...payload, mes_producao: mesProd })
-      .select("id")
+      .select("id, titulo, fi:dados->profFolha, fc:dados->folha")
       .single();
     if (error || !data) return null;
-    avisarFichaSalva((data as { id: string }).id);
-    return (data as { id: string }).id;
+    const novoId = (data as { id: string }).id;
+    registrarAjuste(novoId, { titulo, dados }, data as { titulo?: string; fi?: unknown; fc?: unknown });
+    avisarFichaSalva(novoId);
+    return novoId;
   } catch {
     return null;
   }

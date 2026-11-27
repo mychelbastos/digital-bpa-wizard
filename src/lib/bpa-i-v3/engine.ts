@@ -17,7 +17,7 @@ import { orgDoCnes } from "@/lib/tfd/tfd";
 import { buscarEstabelecimento } from "@/lib/bpa-i-v2/estabelecimentos";
 import { sincronizarProfissionais, buscarCbosVinculo, buscarNomePorCns, type CboVinculo } from "@/lib/bpa-i-v2/profissionais";
 import { proximaFolhaBpaI, assinaturaBpaI, acharDuplicataBpaI, acharDuplicatasOutraFolhaBpaI, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
-import { salvarFicha, carregarFicha } from "@/lib/bpa-i-v2/fichas";
+import { salvarFicha, carregarFicha, ajusteFolhaSalva } from "@/lib/bpa-i-v2/fichas";
 import { movimentoFaturamento } from "@/lib/faturamento";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { statusDaFicha, retificarFicha, registrarLeituraFicha, type FichaStatus } from "@/lib/producoes";
@@ -442,8 +442,19 @@ export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; f
       profissionalNome: estadoSalvar.profNome,
       origemUi,
     });
-    if (id) persistFicha(id, titulo);
+    if (id) aplicarSalvo(id, titulo);
     return id;
+  };
+
+  // Depois de salvar: o banco pode ter trocado o nº da folha (já existia p/ o profissional no
+  // mês). Atualiza o número e o nome na tela e avisa.
+  const aplicarSalvo = (id: string, titulo: string) => {
+    const aj = ajusteFolhaSalva(id);
+    persistFicha(id, aj?.titulo ?? titulo);
+    if (!aj) return;
+    if (aj.folha.length) setState((p) => ({ ...p, profFolha: aj.folha }));
+    if (aj.antes && aj.depois && aj.antes !== aj.depois)
+      toast.info(`A folha ${aj.antes} já existia para este profissional neste mês — esta ficha ficou como folha ${aj.depois}.`);
   };
 
   const garantirFichaExportada = async (): Promise<string | null> => {
@@ -455,7 +466,7 @@ export function useBpaIEngine(opts?: { origemUi?: string; storageKey?: string; f
       profissionalNome: state.profNome,
       origemUi,
     });
-    if (id) persistFicha(id, titulo);
+    if (id) aplicarSalvo(id, titulo);
     return id;
   };
 

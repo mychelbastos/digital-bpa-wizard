@@ -13,7 +13,7 @@ import { sincronizarProfissionais, buscarProfissionais, buscarCbosVinculo, type 
 import { cells } from "@/lib/bpa-i-v3/engine";
 import { loadConfig, sincronizarConfigDaOrg } from "@/lib/bpa-i-v2/config";
 import { ufSiglaDeIbge } from "@/lib/bpa-i-v2/municipios-ibge";
-import { salvarFicha, carregarFicha, competenciaPosteriorAoMovimento } from "@/lib/bpa-i-v2/fichas";
+import { salvarFicha, carregarFicha, competenciaPosteriorAoMovimento, ajusteFolhaSalva } from "@/lib/bpa-i-v2/fichas";
 import { movimentoFaturamento } from "@/lib/faturamento";
 import { montarTituloFicha } from "@/lib/bpa-i-v2/titulo-ficha";
 import { proximaFolhaBpaC, assinaturaBpaC, acharDuplicataBpaC, type FichaDuplicada } from "@/lib/bpa-i-v2/folha-duplicidade";
@@ -473,6 +473,16 @@ function BpaCV3() {
       localStorage.setItem(FICHA_TITULO_KEY, titulo);
     } catch { /* noop */ }
   };
+  // Depois de salvar: o banco pode ter trocado o nº da folha (já existia p/ o profissional no
+  // mês). Atualiza o número e o nome na tela e avisa.
+  const aplicarSalvo = (id: string, titulo: string) => {
+    const aj = ajusteFolhaSalva(id);
+    persistFicha(id, aj?.titulo ?? titulo);
+    if (!aj) return;
+    if (aj.folha.length) setState((p) => ({ ...p, folha: aj.folha }));
+    if (aj.antes && aj.depois && aj.antes !== aj.depois)
+      toast.info(`A folha ${aj.antes} já existia para este profissional neste mês — esta ficha ficou como folha ${aj.depois}.`);
+  };
   const limparFichaPersistida = () => {
     fichaIdRef.current = null;
     fichaTituloRef.current = null;
@@ -548,7 +558,7 @@ function BpaCV3() {
     setState(stateOrd);
     const id = await salvarFicha(idAlvo, titulo, competencia(), stateOrd, metaFicha());
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
-    persistFicha(id, titulo);
+    aplicarSalvo(id, titulo);
     setSalvarOpen(false);
     setSalvarComoNovo(false);
     setTravado(true); // salvou → protege
@@ -573,7 +583,7 @@ function BpaCV3() {
     const id = await salvarFicha(fichaIdRef.current, fichaTituloRef.current!, competencia(), stateOrd, metaFicha());
     setSalvandoDireto(false);
     if (!id) { toast.error("Não foi possível salvar. Verifique sua conexão e tente novamente."); return; }
-    persistFicha(id, fichaTituloRef.current!);
+    aplicarSalvo(id, fichaTituloRef.current!);
     setTravado(true); // salvou → protege
     toast.success("Alterações salvas na nuvem.");
   };
@@ -666,7 +676,7 @@ function BpaCV3() {
       toast.warning("PDF gerado, mas não consegui salvar a ficha na nuvem.");
       return;
     }
-    persistFicha(id, titulo);
+    aplicarSalvo(id, titulo);
   };
 
   // Total calculado em tempo real a partir das quantidades das 20 linhas.
